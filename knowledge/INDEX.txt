@@ -1,0 +1,23 @@
+Runko knowledge base index (plain text on purpose: the loader treats every .md except README.md as a knowledge document).
+Tokens = body after HTML comments are stripped, ~4 chars/token, same estimate as the loader.
+
+vdot.md            high    ~ 2962 tok  load_when: plan_generation, pace_question
+                   Daniels-Gilbert formulas + full VDOT 30-85 tables (race times, E/M/T/I/R paces), intensity limits, update/adjustment rules.
+methodology.md     high    ~ 2076 tok  load_when: plan_generation, pace_question, workout_question
+                   Intensity zones, 80/20, progressive overload, 10% rule + single-run spike evidence, recovery, periodization phases, plan rules.
+workout-types.md   high    ~ 2381 tok  load_when: plan_generation, workout_question
+                   One ## section per engine type (easy, long, tempo, interval, repetition, cross, rest, race) with variants, paces, frequency, phase, plain-language line.
+injuries.md        high    ~ 2460 tok  load_when: injury_mention
+                   Safety rules, pain scale, red flags, six common injuries, return-to-run protocol.
+nutrition.md       medium  ~ 1626 tok  load_when: nutrition_question
+                   Safety rules, carbs/protein per kg, fuelling by run duration, hydration, carb loading, caffeine.
+beginners.md       medium  ~ 1368 tok  load_when: onboarding, plan_generation, pace_question
+                   Screening, 9-week walk-run plan, realistic timelines, talk test, common mistakes.
+race-prep.md       medium  ~ 1661 tok  load_when: plan_generation, pace_question, workout_question
+                   Taper by distance, race week/morning routine, pacing by distance, heat adjustments, race-day mistakes, post-race recovery.
+faq.md             low     ~ 2471 tok  load_when: chat, motivation
+                   40 runner questions as ## headings with short answers.
+slovenia.md        low     ~ 1808 tok  load_when: plan_generation, chat
+                   Slovenian races (2026 dates), seasonal anchors, climate, outdoor risks, EN-SL terminology.
+
+Total (9 files): ~18,813 tokens. tone.md is not part of this set.

@@ -1,0 +1,68 @@
+# ---------------------------------------------------------------
+# SECRETS — never commit these.
+# .env holds the Supabase and Groq API keys. Vite inlines them into
+# the bundle at build time, so anything built from it is secret too.
+# ---------------------------------------------------------------
+.env
+.env.*
+!.env.example
+
+*.pem
+*.key
+secrets.json
+
+# ---------------------------------------------------------------
+# Dependencies
+# ---------------------------------------------------------------
+node_modules/
+.pnp
+.pnp.js
+
+# ---------------------------------------------------------------
+# Build output — contains the inlined API keys, see above
+# ---------------------------------------------------------------
+dist/
+dist-ssr/
+build/
+.vite/
+*.tsbuildinfo
+
+# ---------------------------------------------------------------
+# Logs and caches
+# ---------------------------------------------------------------
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.eslintcache
+.cache/
+.temp/
+.tmp/
+coverage/
+
+# ---------------------------------------------------------------
+# Editors and OS
+# ---------------------------------------------------------------
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---------------------------------------------------------------
+# Local tool state
+# ---------------------------------------------------------------
+# Machine-specific Claude Code state. launch.json hardcodes an absolute
+# cwd, so it cannot work on another machine; a shared
+# .claude/settings.json would still be committed if one is ever added.
+.claude/settings.local.json
+.claude/launch.json
+
+# Local-only overrides of any kind
+*.local

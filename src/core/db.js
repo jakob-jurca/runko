@@ -1,0 +1,249 @@
+/**
+ * db.js — thin data-access layer over Supabase.
+ * Every table read/write goes through here so pages stay declarative.
+ */
+import { supabase } from './supabase'
+
+// ---------- users (profile) ----------
+
+export async function getProfile(userId) {
+  const { data, error } = await supabase.from('users').select('*').eq('id', userId).maybeSingle()
+  if (error) throw error
+  return data
+}
+
+const FK_VIOLATION = '23503' // Postgres foreign_key_violation
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+/**
+ * Returns the id of a CONFIRMED auth user. Unlike getSession() — which just
+ * reads the cached token from localStorage — getUser() validates the JWT with
+ * the auth server, so a stale session (e.g. the auth user was deleted, or a
+ * fresh signup isn't fully settled yet) is caught here instead of blowing up
+ * as a users_id_fkey violation. Falls back to one token refresh before
+ * giving up.
+ */
+export async function getConfirmedUserId() {
+  const { data, error } = await supabase.auth.getUser()
+  if (!error && data?.user) return data.user.id
+
+  const { data: refreshed, error: refreshErr } = await supabase.auth.refreshSession()
+  if (!refreshErr && refreshed?.user) return refreshed.user.id
+
+  throw new Error(
+    'Your login session is no longer valid. Please sign out, sign back in, and try again.'
+  )
+}
+
+/**
+ * Insert-or-update the profile row. trial_end is set by a DB default on insert.
+ *
+ * The row id always comes from a server-confirmed auth user (never from a
+ * cached session the caller happens to hold), and a users_id_fkey violation —
+ * a just-created auth user not visible to the insert yet — is retried with a
+ * growing delay before surfacing a readable error.
+ */
+export async function saveProfile(profile, { retries = 3 } = {}) {
+  const row = { ...profile, id: await getConfirmedUserId() }
+
+  for (let attempt = 0; ; attempt++) {
+    const { data, error } = await supabase.from('users').upsert(row).select().single()
+    if (!error) return data
+    if (error.code !== FK_VIOLATION) throw error
+
+    if (attempt >= retries) {
+      throw new Error(
+        'Could not link your profile to your account (the sign-up hasn’t fully settled). ' +
+          'Please sign out, sign back in, and finish onboarding again.'
+      )
+    }
+    await sleep(1000 * (attempt + 1)) // 1s, 2s, 3s
+    // Re-confirm (and possibly refresh) the auth user before the next try.
+    row.id = await getConfirmedUserId()
+  }
+}
+
+/** Patch a few columns on the profile row, leaving the rest untouched. */
+export async function updateProfile(userId, patch) {
+  const { data, error } = await supabase
+    .from('users')
+    .update(patch)
+    .eq('id', userId)
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+/**
+ * Stamp users.last_plan_created_at — this starts the clock on the
+ * once-a-month plan rebuild limit (see core/plan.js).
+ */
+export async function markPlanCreated(userId) {
+  return updateProfile(userId, { last_plan_created_at: new Date().toISOString() })
+}
+
+// ---------- training_plans ----------
+
+/** All plan weeks, ascending. The full plan is one row per week. */
+export async function getPlans(userId) {
+  const { data, error } = await supabase
+    .from('training_plans')
+    .select('*')
+    .eq('user_id', userId)
+    .order('week_number', { ascending: true })
+  if (error) throw error
+  return data ?? []
+}
+
+/**
+ * Which week of the plan is the runner in right now?
+ * Week 1 is the calendar week the plan was created in (created_at of the
+ * first row); clamped to the last generated week so a lapsed plan still
+ * shows something sensible.
+ */
+export function currentWeekNumber(plans) {
+  if (!plans?.length) return 1
+  const first = plans[0]
+  const lastWeek = plans[plans.length - 1].week_number
+  if (!first.created_at) return lastWeek
+  const start = new Date(startOfWeekISO(new Date(first.created_at)))
+  const now = new Date(startOfWeekISO())
+  const elapsed = Math.round((now - start) / (7 * 86_400_000))
+  return Math.min(Math.max(first.week_number + elapsed, 1), lastWeek)
+}
+
+/** The plan row for the week the runner is currently in. */
+export async function getCurrentPlan(userId) {
+  const plans = await getPlans(userId)
+  if (!plans.length) return null
+  const week = currentWeekNumber(plans)
+  return plans.find((p) => p.week_number === week) ?? plans[plans.length - 1]
+}
+
+/**
+ * Remove every training_plans row for a user.
+ *
+ * Creating a plan must do this FIRST. savePlan upserts on
+ * (user_id, week_number), so rebuilding a 20-week plan as a 10-week one used
+ * to overwrite weeks 1-10 and leave weeks 11-20 of the old plan behind — the
+ * dashboard and plan overview then read a chimera of both. Deleting also
+ * resets created_at, which is what currentWeekNumber() counts from; without
+ * it a fresh plan would think the runner was already mid-block.
+ */
+export async function deletePlans(userId) {
+  const { error } = await supabase.from('training_plans').delete().eq('user_id', userId)
+  if (error) throw error
+}
+
+export async function savePlan(userId, weekNumber, planJson) {
+  const { data, error } = await supabase
+    .from('training_plans')
+    .upsert(
+      { user_id: userId, week_number: weekNumber, plan_json: planJson },
+      { onConflict: 'user_id,week_number' }
+    )
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+// ---------- workouts ----------
+
+export async function getWorkouts(userId, { since, limit = 50 } = {}) {
+  let q = supabase
+    .from('workouts')
+    .select('*')
+    .eq('user_id', userId)
+    .order('date', { ascending: false })
+    .limit(limit)
+  if (since) q = q.gte('date', since)
+  const { data, error } = await q
+  if (error) throw error
+  return data ?? []
+}
+
+export async function addWorkout(workout) {
+  const { data, error } = await supabase.from('workouts').insert(workout).select().single()
+  if (error) throw error
+  return data
+}
+
+// ---------- chat_messages ----------
+
+/**
+ * The most RECENT `limit` messages, returned oldest-first for rendering.
+ *
+ * Ordering descending and reversing matters: ordering ascending with a limit
+ * returns the OLDEST messages, so a long-running conversation would show
+ * ancient history and never the last thing anyone said.
+ *
+ * @param {string} userId
+ * @param {object} [opts]
+ * @param {number} [opts.limit] - how many to fetch (default 50)
+ * @param {string} [opts.before] - created_at cursor; fetch older than this
+ * @returns {Promise<Array>} oldest-first
+ */
+export async function getChatMessages(userId, { limit = 50, before = null } = {}) {
+  let q = supabase
+    .from('chat_messages')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (before) q = q.lt('created_at', before)
+
+  const { data, error } = await q
+  if (error) throw error
+  return (data ?? []).reverse()
+}
+
+/**
+ * Wipe the runner's chat history.
+ *
+ * Deliberately scoped to chat_messages only — coach_memory is a separate
+ * table and survives, which is what the confirmation dialog promises.
+ */
+export async function deleteChatMessages(userId) {
+  const { error } = await supabase.from('chat_messages').delete().eq('user_id', userId)
+  if (error) throw error
+}
+
+export async function addChatMessage(userId, role, content) {
+  const { data, error } = await supabase
+    .from('chat_messages')
+    .insert({ user_id: userId, role, content })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+// ---------- helpers ----------
+
+/** ISO date (yyyy-mm-dd) of the Monday of the current week. */
+export function startOfWeekISO(d = new Date()) {
+  const date = new Date(d)
+  const day = (date.getDay() + 6) % 7 // Mon=0 … Sun=6
+  date.setDate(date.getDate() - day)
+  return date.toISOString().slice(0, 10)
+}
+
+/** ISO date `days` days after `iso`. */
+export function addDaysISO(iso, days) {
+  const d = new Date(iso + 'T00:00:00Z')
+  d.setUTCDate(d.getUTCDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
+/**
+ * Calendar Monday a given plan week starts on. Week 1 = the Monday of the
+ * week the plan was created in, each following week 7 days later.
+ */
+export function weekStartISO(plans, weekNumber) {
+  if (!plans?.length) return startOfWeekISO()
+  const first = plans[0]
+  const base = startOfWeekISO(first.created_at ? new Date(first.created_at) : new Date())
+  return addDaysISO(base, (weekNumber - first.week_number) * 7)
+}
