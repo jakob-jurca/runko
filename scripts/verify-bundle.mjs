@@ -63,12 +63,22 @@ for (const { key, value } of envSecrets()) {
 }
 
 // --- 2. no provider key shapes, whatever their source -----------------------
+// These are judged by shape alone, so every one of them must be a pattern no
+// legitimate public value can take. The anon key is deliberately absent: it
+// is a JWT, and JWTs are judged by their role claim in check 3 below.
 const KEY_SHAPES = [
   [/\bgsk_[A-Za-z0-9]{20,}/, 'Groq API key'],
   [/\bsk-[A-Za-z0-9]{20,}/, 'OpenAI-style API key'],
+  // sbp_ is a Supabase personal access token: full control of the account's
+  // projects, and the credential the CLI logs in with.
+  [/\bsbp_[A-Za-z0-9]{20,}/, 'Supabase personal access token'],
+  // Supabase's newer key format. sb_publishable_ is the anon key's successor
+  // and belongs in the bundle; sb_secret_ is the service key's and never does.
+  [/\bsb_secret_[A-Za-z0-9_-]{10,}/, 'Supabase secret key'],
   [/\bservice_role\b/, 'Supabase service-role reference'],
   [/\bSUPABASE_SERVICE_ROLE_KEY\b/, 'service-role key name'],
   [/\bxox[baprs]-[A-Za-z0-9-]{10,}/, 'Slack token'],
+  [/\bgh[pousr]_[A-Za-z0-9]{20,}/, 'GitHub token'],
   [/-----BEGIN [A-Z ]*PRIVATE KEY-----/, 'private key'],
 ]
 for (const { file, body } of text) {
@@ -78,14 +88,56 @@ for (const { file, body } of text) {
   }
 }
 
-// --- 3. any JWT that is not the anon key ------------------------------------
-const allowedJwt = fs.existsSync('.env')
-  ? (fs.readFileSync('.env', 'utf8').match(/VITE_SUPABASE_ANON_KEY=(\S+)/)?.[1] ?? '')
-  : ''
+// --- 3. JWTs: judge them by their role claim, not by matching .env ----------
+//
+// The anon key is MEANT to be in the bundle. It identifies the project to
+// PostgREST, carries no authority of its own, and is exactly what the RLS
+// policies are there to constrain — tests/rls-live.test.mjs proves an
+// anonymous client holding it reads nothing.
+//
+// This used to be checked by string-matching the key against .env. That
+// worked locally and failed the build on Vercel, where there is no .env file
+// (the values come from the platform's environment), so the allow-list was
+// empty and the anon key was reported as an unexpected JWT. Worse than the
+// false positive: the check only ever recognised ONE specific key, so a
+// service-role key from anywhere else would have been reported in the same
+// undifferentiated way as the harmless one.
+//
+// A JWT says what it is. Supabase signs both keys with a `role` claim, so
+// decode it and judge the claim: 'anon' is fine, 'service_role' is the
+// emergency, and anything else is unexpected and worth a human look.
+/** The payload of a JWT, or null if it is not decodable. */
+function jwtPayload(jwt) {
+  try {
+    const [, payload] = jwt.split('.')
+    const b64 = payload.replace(/-/g, '+').replace(/_/g, '/')
+    return JSON.parse(Buffer.from(b64, 'base64').toString('utf8'))
+  } catch {
+    return null
+  }
+}
+
 for (const { file, body } of text) {
   for (const jwt of body.match(/eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g) ?? []) {
-    if (allowedJwt && jwt === allowedJwt) continue // the public anon key
-    note('unexpected JWT in the bundle', file, jwt.slice(0, 16) + '…')
+    const claims = jwtPayload(jwt)
+    const role = claims?.role
+
+    if (role === 'anon') continue // public by design, constrained by RLS
+
+    if (role === 'service_role') {
+      note(
+        'SERVICE-ROLE KEY IN THE BUNDLE — it bypasses every RLS policy',
+        file,
+        'rotate it now, then move whatever needed it into an Edge Function'
+      )
+      continue
+    }
+
+    note(
+      claims ? `unexpected JWT (role: ${role ?? 'none'}) in the bundle` : 'unexpected JWT in the bundle',
+      file,
+      jwt.slice(0, 16) + '…'
+    )
   }
 }
 
