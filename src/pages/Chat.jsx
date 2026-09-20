@@ -13,12 +13,9 @@ import { getMemories, saveExtractedMemories } from '../core/memory'
 import { hasPremium } from '../core/subscription'
 import Paywall from '../components/Paywall'
 import { FullScreenSpinner } from '../components/Spinner'
+import { t } from '../core/strings'
 
-const SUGGESTIONS = [
-  'How should I pace my long run?',
-  'My legs feel heavy today — should I still run?',
-  'What should I eat before a morning run?',
-]
+const SUGGESTIONS = t.chat.suggestions
 
 /** How many messages the SCREEN holds initially, and per "load earlier". */
 const PAGE_SIZE = 50
@@ -108,7 +105,7 @@ export default function Chat() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, thinking])
 
-  if (!premium) return <Paywall feature="The AI coach chat" />
+  if (!premium) return <Paywall feature={t.paywall.featureChat} />
   if (loading) return <FullScreenSpinner />
 
   /** Prepend the previous page, keeping the reading position steady. */
@@ -211,15 +208,15 @@ export default function Chat() {
           🏃
         </div>
         <div className="min-w-0 flex-1">
-          <h1 className="font-bold">Coach Runko</h1>
-          <p className="text-xs text-emerald-400">● online</p>
+          <h1 className="font-bold">{t.chat.title}</h1>
+          <p className="text-xs text-emerald-400">{t.chat.online}</p>
         </div>
         {messages.length > 0 && (
           <button
             onClick={() => setConfirmClear(true)}
             className="shrink-0 rounded-full border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-400 transition hover:border-rose-500/60 hover:text-rose-400"
           >
-            Clear conversation
+            {t.chat.clear}
           </button>
         )}
       </header>
@@ -232,7 +229,7 @@ export default function Chat() {
               disabled={loadingEarlier}
               className="rounded-full border border-zinc-800 px-4 py-1.5 text-xs text-zinc-400 transition hover:border-zinc-600 hover:text-zinc-200 disabled:opacity-50"
             >
-              {loadingEarlier ? 'Loading…' : 'Load earlier messages'}
+              {loadingEarlier ? t.chat.loading : t.chat.loadEarlier}
             </button>
           </div>
         )}
@@ -240,8 +237,7 @@ export default function Chat() {
         {messages.length === 0 && (
           <div className="animate-fade-up">
             <div className="max-w-[85%] rounded-2xl rounded-tl-sm bg-zinc-900 px-4 py-3 text-sm leading-relaxed">
-              Hey {profile.name?.split(' ')[0] || 'there'}! I’m your coach. Ask me anything about
-              training, pacing, recovery or race prep. 🔥
+              {t.chat.greeting(profile.name?.split(' ')[0])}
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
               {SUGGESTIONS.map((s) => (
@@ -301,7 +297,7 @@ export default function Chat() {
       >
         <input
           className="input flex-1"
-          placeholder="Ask your coach…"
+          placeholder={t.chat.placeholder}
           value={input}
           onChange={(e) => setInput(e.target.value)}
         />
@@ -309,7 +305,7 @@ export default function Chat() {
           type="submit"
           disabled={!input.trim() || thinking}
           className="btn-primary !px-4"
-          aria-label="Send"
+          aria-label={t.chat.send}
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
             <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14m0 0l-6-6m6 6l-6 6" />
@@ -330,17 +326,16 @@ export default function Chat() {
         >
           <div className="card w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
             <h2 id="clear-chat-title" className="text-lg font-bold">
-              Clear this conversation?
+              {t.chat.clearTitle}
             </h2>
             <p className="mt-2 text-sm leading-relaxed text-zinc-400">
-              This deletes every message between you and your coach. It cannot be undone.
+              {t.chat.clearBody}
             </p>
             <p className="mt-3 rounded-xl bg-zinc-950/60 p-3 text-sm leading-relaxed text-zinc-300">
               <span className="font-semibold text-primary">
-                What your coach remembers about you is kept.
+                {t.chat.clearKeepsMemoryStrong}
               </span>{' '}
-              Your injuries, schedule and preferences stay exactly as they are — you can review
-              or delete those any time in Settings.
+              {t.chat.clearKeepsMemory}
             </p>
             <div className="mt-5 flex gap-2">
               <button
@@ -348,14 +343,14 @@ export default function Chat() {
                 disabled={clearing}
                 className="btn-ghost flex-1 text-sm"
               >
-                Cancel
+                {t.common.cancel}
               </button>
               <button
                 onClick={clearConversation}
                 disabled={clearing}
                 className="flex-1 rounded-xl bg-rose-500/90 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-500 disabled:opacity-60"
               >
-                {clearing ? 'Clearing…' : 'Clear conversation'}
+                {clearing ? t.chat.clearing : t.chat.clearConfirm}
               </button>
             </div>
           </div>

@@ -237,7 +237,7 @@ export function detectSituations(text) {
  */
 export const KNOWLEDGE_BUDGETS = {
   chat: 1200,
-  plan_generation: 2500,
+  plan_generation: 700, // shares one request with a large structured prompt
   onboarding: 800,
   default: 1000,
 }

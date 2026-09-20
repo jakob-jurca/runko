@@ -1,19 +1,21 @@
 /**
- * ai.js — every call to the AI provider (Groq) lives here.
+ * ai.js — every call to the AI provider lives here.
  *
  * AI INTEGRATION POINT (central):
- * All of Runko's "coach intelligence" flows through callAi(), a plain fetch
- * to the Groq chat-completions API (OpenAI-compatible). The rest of the app
- * never talks to the provider directly — it uses the purpose-built helpers
- * below (askCoach, describePlanSkeleton, adaptWeeklyPlan, coachReaction,
- * motivationalMessage, coachIntakeFollowUp). Swapping models or providers
- * only requires touching this file.
+ * All of Runko's "coach intelligence" flows through callAi(), which posts to
+ * our own Supabase Edge Function (supabase/functions/ai-proxy). The rest of
+ * the app never talks to a provider directly — it uses the purpose-built
+ * helpers below (askCoach, describePlanSkeleton, adaptWeeklyPlan,
+ * coachReaction, motivationalMessage, coachIntakeFollowUp).
  *
- * NOTE: calling the API straight from the browser exposes the API key to the
- * client. Fine for an MVP/demo; for production move these calls behind a
- * Supabase Edge Function and keep the key server-side.
+ * SECURITY: the browser holds no AI credential. The Groq key is a Supabase
+ * secret readable only by the Edge Function, which additionally requires a
+ * valid auth JWT and rate-limits per user. Swapping models or providers
+ * means touching this file and the function — nothing else.
  */
-import { IS_DEV, GROQ_API_KEY } from './env'
+import { IS_DEV, SUPABASE_URL } from './env'
+import { supabase } from './supabase'
+import { t } from './strings'
 import {
   COACH_PERSONA,
   buildCoachSystemPrompt,
@@ -24,7 +26,15 @@ import {
 import { buildKnowledgeBlock, KNOWLEDGE_BUDGETS } from './knowledge'
 import { buildExtractionPrompt, parseExtractedMemories } from './memory'
 
-const API_URL = 'https://api.groq.com/openai/v1/chat/completions'
+/**
+ * Every AI call goes through our own Edge Function, never to Groq directly.
+ *
+ * The Groq key used to be VITE_GROQ_API_KEY, which Vite inlines into the
+ * browser bundle — readable by anyone with devtools. It now lives as a
+ * Supabase secret that only supabase/functions/ai-proxy can read. The proxy
+ * also requires a signed-in user and rate-limits per user.
+ */
+const API_URL = `${SUPABASE_URL}/functions/v1/ai-proxy`
 // Groq models, tried in order — a 404 (retired slug) falls through to the next.
 // NOTE: llama-3.3-70b-versatile currently 404s on this account's key (Groq has
 // retired the slug; it is not in GET /openai/v1/models). It stays first so the
@@ -32,10 +42,23 @@ const API_URL = 'https://api.groq.com/openai/v1/chat/completions'
 // actually serves requests today.
 const MODELS = ['llama-3.3-70b-versatile', 'openai/gpt-oss-120b', 'openai/gpt-oss-20b']
 
-const FRIENDLY_QUOTA =
-  'Your coach is catching his breath — the AI service hit its request limit. Give it a minute and try again. 🙏'
-const FRIENDLY_GENERIC =
-  'Your coach couldn’t be reached right now. Check your connection and try again in a moment.'
+/**
+ * Groq's free tier caps tokens-per-minute PER REQUEST, and the figure it
+ * checks is prompt + max_tokens together. Asking for a big completion on top
+ * of a big prompt returns 413 "Request too large" before any work happens —
+ * which is how a 15-week plan silently fell back to generic text.
+ *
+ * So the output budget is trimmed to fit the ceiling instead of being sent
+ * blind. Raise this if the account moves off the free tier.
+ */
+const TPM_LIMIT = 8000
+const TPM_SAFETY_MARGIN = 400
+
+/** ~4 characters per token, matching core/knowledge.js. */
+const estimateTokens = (text) => Math.ceil((text || '').length / 4)
+
+const FRIENDLY_QUOTA = t.errors.aiQuota
+const FRIENDLY_GENERIC = t.errors.aiGeneric
 
 /** Human-readable message for any error thrown from this module. */
 export function friendlyAiMessage(err) {
@@ -45,16 +68,33 @@ export function friendlyAiMessage(err) {
 // COACH_PERSONA now lives in ./coach-prompt.js (imported above) so that the
 // personality, the reply rules and the context builder sit together.
 
+/**
+ * Every prompt that produces text a RUNNER reads must pin the language.
+ * Instructions stay English (models follow them best that way); only the
+ * output is Slovenian. Missing this is why the post-run reaction came back
+ * as "Nice work, 11km at about 6:45/km".
+ *
+ * askCoach is the deliberate exception — it mirrors whatever the runner
+ * wrote, so it must not be forced.
+ */
+const IN_SLOVENIAN =
+  '\n\nWrite your output in SLOVENIAN — natural, idiomatic Slovenian, not a' +
+  ' translation of English phrasing. Never reply in English.'
+
 const DEBUG = IS_DEV
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
-// Dev-time sanity check: is the key actually being read from .env?
 if (DEBUG) {
-  const k = GROQ_API_KEY
-  console.log(
-    '[ai] VITE_GROQ_API_KEY:',
-    k ? `${k.slice(0, 12)}… (length ${k.length})` : '❌ MISSING — add it to .env and restart `npm run dev`'
-  )
+  console.log('[ai] proxying AI calls through', API_URL)
+}
+
+/**
+ * The caller's Supabase access token. The proxy rejects anything without a
+ * valid one, so there is no anonymous path to the AI.
+ */
+async function authToken() {
+  const { data } = await supabase.auth.getSession()
+  return data?.session?.access_token ?? null
 }
 
 /**
@@ -71,11 +111,11 @@ if (DEBUG) {
  * @param {number} [opts.maxTokens] - output token cap (plans need more room)
  * @returns {Promise<string>} model text output
  */
-async function callAi({ system, messages, json = false, maxTokens = 1024 }) {
-  const key = GROQ_API_KEY
-  if (!key) {
-    const err = new Error('Missing VITE_GROQ_API_KEY — add it to your .env file.')
-    err.friendly = FRIENDLY_GENERIC
+async function callAi({ system, messages, json = false, maxTokens = 1024, kind = null }) {
+  const token = await authToken()
+  if (!token) {
+    const err = new Error('No Supabase session — the AI proxy requires a signed-in user.')
+    err.friendly = t.errors.aiSignedOut
     throw err
   }
 
@@ -83,6 +123,20 @@ async function callAi({ system, messages, json = false, maxTokens = 1024 }) {
     ...(system ? [{ role: 'system', content: system }] : []),
     ...messages.map((m) => ({ role: m.role, content: m.content })),
   ]
+
+  // Trim the completion budget so prompt + output stays inside the per-request
+  // ceiling. Without this the call is rejected outright rather than truncated.
+  const promptTokens = apiMessages.reduce((n, m) => n + estimateTokens(m.content), 0)
+  const headroom = TPM_LIMIT - promptTokens - TPM_SAFETY_MARGIN
+  if (headroom < maxTokens) {
+    if (DEBUG) {
+      console.log(
+        `[ai] prompt ~${promptTokens} tokens; trimming max_tokens ${maxTokens} → ` +
+          `${Math.max(512, headroom)} to stay under the ${TPM_LIMIT} TPM ceiling.`
+      )
+    }
+    maxTokens = Math.max(512, headroom)
+  }
 
   let lastErr = null
 
@@ -108,10 +162,10 @@ async function callAi({ system, messages, json = false, maxTokens = 1024 }) {
         res = await fetch(API_URL, {
           method: 'POST',
           headers: {
-            Authorization: 'Bearer ' + key,
+            Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify(body),
+          body: JSON.stringify({ ...body, kind }),
         })
         raw = await res.text()
       } catch (networkErr) {
@@ -142,11 +196,40 @@ async function callAi({ system, messages, json = false, maxTokens = 1024 }) {
       }
 
       const detail = data?.error?.message || raw?.slice(0, 200) || ''
-      lastErr = new Error(`Groq API error ${status} (${model}): ${detail}`)
+      const code = data?.error?.code
+
+      // A refusal aimed at the CALLER is final — another model or a smaller
+      // budget cannot help.
+      //
+      // A 401 arrives in one of two shapes. Our proxy answers
+      // { error: { code: 'unauthenticated' } } with a message written for a
+      // runner. But Supabase's own gateway rejects an expired or malformed
+      // JWT *before* the function runs, and answers in its own shape —
+      // { code: 'UNAUTHORIZED_NO_AUTH_HEADER', message: '...' } — with an
+      // English message meant for developers. Keying only on our code meant
+      // an expired session showed "could not reach the coach", sending the
+      // runner to check their connection when the fix is to sign in again.
+      // 402 not_premium is equally final: the trial has ended, and no model
+      // or budget changes that. Its message is the paywall's, written for a
+      // runner, so it is shown as-is.
+      const unauthenticated = status === 401 || code === 'unauthenticated'
+      if (unauthenticated || code === 'rate_limited' || code === 'not_premium') {
+        const stop = new Error(`ai-proxy ${code || status}: ${detail}`)
+        stop.friendly = unauthenticated
+          ? // only our own message is fit to show; the gateway's is not
+            (code === 'unauthenticated' && detail) || t.errors.aiSignedOut
+          : detail || (code === 'not_premium' ? t.errors.aiNotPremium : FRIENDLY_QUOTA)
+        throw stop
+      }
+
+      lastErr = new Error(`AI error ${status} (${model}): ${detail}`)
       lastErr.friendly = status === 429 ? FRIENDLY_QUOTA : FRIENDLY_GENERIC
 
-      if (status === 400 && budget > 4096) {
-        budget = 4096 // model rejected the output budget — shrink and retry
+      // 413 = prompt + max_tokens over the per-request ceiling; 400 can also
+      // be an output-budget rejection. Halve and retry before giving up.
+      if ((status === 400 || status === 413) && budget > 1024) {
+        budget = Math.max(1024, Math.floor(budget / 2))
+        if (DEBUG) console.log(`[ai] ${status} — retrying ${model} with max_tokens ${budget}`)
         continue
       }
       if (status === 429 && !retried429) {
@@ -159,7 +242,7 @@ async function callAi({ system, messages, json = false, maxTokens = 1024 }) {
         await sleep(Math.min(Math.ceil(retryAfter), 10) * 1000)
         continue
       }
-      if (status === 404 || status === 429 || status >= 500) break // next model
+      if (status === 404 || status === 413 || status === 429 || status >= 500) break // next model
       throw lastErr // other 4xx (bad key, malformed request) won't improve
     }
   }
@@ -168,7 +251,8 @@ async function callAi({ system, messages, json = false, maxTokens = 1024 }) {
 
 /** Builds the context block the coach sees before every conversation. */
 export function buildCoachContext(profile, plan, workouts = [], { totalWeeks } = {}) {
-  const today = new Date().toISOString().slice(0, 10)
+  const now = new Date()
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
   const lines = [
     `Today's date: ${today}`,
     `Runner profile:`,
@@ -264,7 +348,8 @@ export async function extractMemories({ userMessage, coachReply, existing = [] }
     const text = await callAi({
       system:
         'You extract durable, training-relevant facts about a runner for a coaching' +
-        ' assistant. You are conservative: most exchanges yield nothing. You output JSON only.',
+        ' assistant. You are conservative: most exchanges yield nothing. You output JSON only.' +
+        IN_SLOVENIAN,
       messages: [
         { role: 'user', content: buildExtractionPrompt({ userMessage, coachReply, existing }) },
       ],
@@ -357,7 +442,7 @@ training plan (things like injuries, weekly time available, preferred running
 days, past race times). Ask ONE short question per message and AT MOST 3
 questions in the whole conversation. When you have enough — or after the 3rd
 answer — reply with 2-3 warm sentences confirming how you'll shape their plan
-and end that final message with the exact token ${INTAKE_READY_TOKEN}`
+and end that final message with the exact token ${INTAKE_READY_TOKEN}${IN_SLOVENIAN}`
 
   return callAi({
     system,
@@ -420,7 +505,9 @@ export async function adaptWeeklyPlan(profile, { weekNumber, basePlan, recentWor
   }[trigger]
 
   const text = await callAi({
-    system: 'You are an expert running coach who adapts training plans based on athlete feedback.',
+    system:
+      'You are an expert running coach who adapts training plans based on athlete feedback.' +
+      IN_SLOVENIAN,
     messages: [
       {
         role: 'user',
@@ -447,7 +534,7 @@ ${WEEK_SCHEMA_PROMPT}`,
  */
 export async function coachReaction(profile, plan, workout) {
   return callAi({
-    system: COACH_PERSONA,
+    system: COACH_PERSONA + IN_SLOVENIAN,
     messages: [
       {
         role: 'user',
@@ -468,7 +555,7 @@ React in 1-2 short sentences as my coach — acknowledge the run and give one fo
  */
 export async function motivationalMessage(profile, plan, workouts) {
   return callAi({
-    system: COACH_PERSONA,
+    system: COACH_PERSONA + IN_SLOVENIAN,
     messages: [
       {
         role: 'user',
@@ -490,6 +577,249 @@ Write ONE short motivational message (max 25 words) for my dashboard today. Pers
  */
 export const DISTANCE_TOLERANCE_KM = 0.5
 export const DISTANCE_TOLERANCE_PCT = 0.05
+
+/**
+ * COST CONTROL: text is generated per distinct workout SHAPE, not per day.
+ *
+ * A 16-week plan has ~112 days but only a dozen or so genuinely different
+ * sessions — a build-phase tempo, a recovery-week easy run, a sharpen-phase
+ * interval session, and so on. Writing prose for each day would mean ~450
+ * strings in one response, which neither fits the output budget nor says
+ * anything new on day 80 that it did not say on day 12.
+ *
+ * So one short set of text per shape, generated in a SINGLE call at plan
+ * creation and stored on every matching day. The distances, paces, segments
+ * and heart rates that make each day specific already come from the
+ * skeleton and are rendered from data — the prose only has to explain the
+ * kind of session and why it belongs in this phase.
+ */
+export function shapeKey(day, week) {
+  // Deliberately NOT keyed on is_recovery: a recovery-week easy run is the
+  // same session as any other easy run, and asking for separate prose for
+  // each doubled the output for no new information. The week's own note
+  // says it is a recovery week, and mergeDescriptions adds a line to "why".
+  return `${day.type}|${week.phase}`
+}
+
+/** The distinct shapes in a plan, each with one representative example. */
+export function planShapes(skeleton) {
+  const shapes = new Map()
+  for (const week of skeleton.weeks) {
+    for (const day of week.days) {
+      // Rest days need no AI text — the built-in line says all there is to
+      // say, and asking for one per phase wasted a quarter of the response.
+      if (day.type === 'rest') continue
+      const key = shapeKey(day, week)
+      if (shapes.has(key)) {
+        const s = shapes.get(key)
+        s.occurrences++
+        s.min_km = Math.min(s.min_km, day.distance_km)
+        s.max_km = Math.max(s.max_km, day.distance_km)
+        continue
+      }
+      shapes.set(key, {
+        key,
+        type: day.type,
+        phase: week.phase,
+        is_recovery: week.is_recovery,
+        occurrences: 1,
+        min_km: day.distance_km,
+        max_km: day.distance_km,
+        first_week: week.week_number,
+        // One compact line, not nested JSON — this block is repeated for
+        // every shape and was the bulk of the prompt.
+        example: (day.segments || []).length
+          ? day.segments
+              .map((g) => `${g.label} ${g.reps ? g.reps.summary : `${g.distance_km}km @ ${g.pace}`}`)
+              .join(' | ')
+          : `${day.distance_km}km @ ${day.pace}`,
+      })
+    }
+  }
+  return [...shapes.values()]
+}
+
+/** Compact view of the skeleton for the prompt — weeks without the prose. */
+function skeletonForPrompt(skeleton) {
+  return skeleton.weeks.map((w) => ({
+    week: w.week_number,
+    phase: w.phase,
+    recovery: w.is_recovery,
+    volume_km: w.target_volume_km,
+    // Deliberately NOT the per-day detail: the model only writes a one-line
+    // note per week, and the sessions are described once per shape below.
+    sessions: [...new Set(w.days.filter((d) => d.type !== 'rest').map((d) => d.type))].join('+'),
+  }))
+}
+
+/**
+ * Merge the AI's prose onto the calculated skeleton, and VALIDATE.
+ *
+ * The skeleton is authoritative. If the model changed a distance beyond
+ * tolerance or altered a pace, the calculated value wins and we log a warning
+ * — silently accepting drift would let the AI quietly undo the periodization.
+ *
+ * Exported for testing without an API call.
+ *
+ * @param {object} skeleton
+ * @param {object} ai - { weeks?, workouts?, intro? } as returned by the model
+ * @returns {{weeks: Array, warnings: string[], intro: string}}
+ */
+export function mergeDescriptions(skeleton, ai = {}) {
+  const warnings = []
+  const aiWeeks = Array.isArray(ai?.weeks) ? ai.weeks : []
+  const aiWorkouts = Array.isArray(ai?.workouts) ? ai.workouts : []
+
+  const byWeek = new Map(aiWeeks.map((w) => [Number(w.week_number), w]))
+  const byShape = new Map(aiWorkouts.filter((w) => w?.key).map((w) => [String(w.key), w]))
+
+  const weeks = skeleton.weeks.map((week) => {
+    const aiWeek = byWeek.get(week.week_number)
+
+    const days = week.days.map((day) => {
+      const shape = byShape.get(shapeKey(day, week))
+
+      // Numbers are the skeleton's business. Check, warn, discard.
+      if (shape?.distance_km !== undefined && shape?.distance_km !== null) {
+        const proposed = Number(shape.distance_km)
+        const allowed = Math.max(DISTANCE_TOLERANCE_KM, day.distance_km * DISTANCE_TOLERANCE_PCT)
+        if (Number.isFinite(proposed) && Math.abs(proposed - day.distance_km) > allowed) {
+          warnings.push(
+            `week ${week.week_number} ${day.day}: AI proposed ${proposed} km, ` +
+              `keeping the calculated ${day.distance_km} km`
+          )
+        }
+      }
+      if (shape?.pace && String(shape.pace).trim() !== day.pace) {
+        warnings.push(
+          `week ${week.week_number} ${day.day}: AI proposed pace "${shape.pace}", ` +
+            `keeping the calculated "${day.pace}"`
+        )
+      }
+
+      return {
+        ...day, // calculated values always win
+        title: cleanText(shape?.title, 40) || day.title,
+        purpose: cleanText(shape?.purpose, 90) || defaultPurpose(day),
+        // "Kako izvesti" and "Zakaj ta trening" on the card.
+        how: cleanText(shape?.how, 300) || defaultHow(day),
+        why: withRecoveryNote(cleanText(shape?.why, 300) || defaultWhy(day, week), week),
+      }
+    })
+
+    return {
+      ...week,
+      focus: cleanText(aiWeek?.note, 200) || defaultWeekFocus(week),
+      days,
+    }
+  })
+
+  return { weeks, warnings, intro: cleanText(ai?.intro, 600) || defaultIntro(skeleton) }
+}
+
+/** Recovery weeks get one standard extra line, rather than their own prose. */
+function withRecoveryNote(why, week) {
+  if (!week?.is_recovery) return why
+  const note = 'Ta teden je namenoma lažji, da telo absorbira prejšnje tri.'
+  return why.includes('lažji') ? why : `${why} ${note}`
+}
+
+function cleanText(s, max = 300) {
+  if (typeof s !== 'string') return ''
+  // Strip any markdown the model reached for; these render as plain text.
+  return s.replace(/[*_`#]/g, '').replace(/\s+/g, ' ').trim().slice(0, max)
+}
+
+// ---------------------------------------------------------------------------
+// Fallbacks — a complete, readable plan even with no AI at all
+// ---------------------------------------------------------------------------
+
+const TYPE_SL = {
+  easy: 'lahkoten tek',
+  long: 'dolgi tek',
+  tempo: 'tempo tek',
+  interval: 'intervali',
+  repetition: 'ponovitve',
+  cross: 'nadomestna vadba',
+  race: 'tekma',
+  rest: 'počitek',
+}
+
+function defaultHow(day) {
+  if (day.type === 'rest') return 'Počitek. Danes brez teka — telo dela svoje.'
+  if (!day.segments?.length) {
+    return `Preteci ${day.distance_km} km pri ${day.pace}. Tempo naj bo enakomeren od začetka do konca.`
+  }
+  const parts = day.segments.map((g) =>
+    g.reps
+      ? `${g.label.toLowerCase()}: ${g.reps.summary}`
+      : `${g.label.toLowerCase()}: ${g.distance_km} km pri ${g.pace}`
+  )
+  return `${parts.join('; ')}.`
+}
+
+function defaultWhy(day, week) {
+  const base = {
+    rest: 'Počitek je del treninga — takrat se telo dejansko prilagodi.',
+    easy: 'Lahkotni kilometri gradijo aerobno osnovo brez utrujenosti.',
+    long: 'Dolgi tek širi vzdržljivost in te pripravlja na ciljno razdaljo.',
+    tempo: 'Tempo dviguje laktatni prag, da hitrejši tempo postane vzdržen.',
+    interval: 'Intervali dvigujejo VO2 max in tekaško ekonomičnost.',
+    repetition: 'Kratke ponovitve izboljšajo hitrost in tehniko teka.',
+    race: 'Dan tekme — vse od tu naprej je izvedba.',
+  }[day.type] || 'Gradi splošno tekaško pripravljenost.'
+  return base
+}
+
+function defaultPurpose(day) {
+  return {
+    rest: 'telo se prilagodi na trening',
+    easy: 'gradi aerobno osnovo',
+    long: 'razširi vzdržljivost',
+    tempo: 'dviguje laktatni prag',
+    interval: 'izboljša VO2 max',
+    repetition: 'izboljša hitrost',
+    race: 'ciljna tekma',
+    cross: 'ohranja kondicijo brez obremenitve nog',
+  }[day.type] || 'gradi aerobno osnovo'
+}
+
+function defaultWeekFocus(week) {
+  if (week.is_recovery) return `Regeneracijski teden — ${week.target_volume_km} km, brez trdih treningov.`
+  const phase = {
+    base: 'Osnova',
+    build: 'Nadgradnja',
+    sharpen: 'Ostrenje',
+    taper: 'Razbremenitev',
+  }[week.phase] || 'Trening'
+  return `${phase} — ${week.target_volume_km} km.`
+}
+
+/** A usable intro when the AI gives none — states the goal and the shape. */
+function defaultIntro(skeleton) {
+  const d = skeleton.target_distance_km
+  const weeks = skeleton.total_weeks
+  const goal = d
+    ? skeleton.event_date
+      ? `${d} km dne ${skeleton.event_date}`
+      : `${d} km`
+    : 'splošno kondicijo'
+  const parts = [`${weeks}-tedenski načrt za ${goal}.`]
+  parts.push(
+    `Obseg raste postopoma do ${skeleton.peak_volume_km} km na teden, vsak 4. teden je lažji.`
+  )
+  const g = skeleton.goal_assessment
+  if (g && !g.realistic) {
+    parts.push(
+      `Tvoj ciljni čas je za zdaj še izven dosega — načrt te pelje proti ${formatDurationMin(g.planning_time_min)}, kar je odličen napredek.`
+    )
+  }
+  return parts.join(' ')
+}
+
+// ---------------------------------------------------------------------------
+// The single AI call
+// ---------------------------------------------------------------------------
 
 /** "21.1 km on 2026-11-15" / "30 km, no date — training block". */
 function goalLine(skeleton) {
@@ -533,178 +863,31 @@ function paceLabel(minPerKm) {
   return sec === 60 ? `${m + 1}:00` : `${m}:${String(sec).padStart(2, '0')}`
 }
 
-/** Compact view of the skeleton for the prompt — small enough to fit many weeks. */
-function skeletonForPrompt(skeleton) {
-  return skeleton.weeks.map((w) => ({
-    week: w.week_number,
-    phase: w.phase,
-    recovery: w.is_recovery,
-    volume_km: w.target_volume_km,
-    days: w.days.map((d) => ({
-      day: d.day,
-      type: d.type,
-      km: d.distance_km,
-      pace: d.pace,
-      intensity: d.intensity,
-      ...(d.hard_km ? { hard_km: d.hard_km } : {}),
-    })),
-  }))
-}
-
-/**
- * Merge the AI's prose onto the calculated skeleton, and VALIDATE.
- *
- * The skeleton is authoritative. If the model changed a distance beyond
- * tolerance or altered a pace, the calculated value wins and we log a warning
- * — silently accepting drift would let the AI quietly undo the periodization.
- *
- * Exported for testing without an API call.
- *
- * @returns {{weeks: Array, warnings: string[], intro: string}}
- */
-export function mergeDescriptions(skeleton, aiWeeks, aiIntro = '') {
-  const warnings = []
-  const byWeek = new Map(
-    (Array.isArray(aiWeeks) ? aiWeeks : []).map((w) => [Number(w.week_number), w])
-  )
-
-  const weeks = skeleton.weeks.map((week) => {
-    const ai = byWeek.get(week.week_number)
-    const aiDays = new Map(
-      (Array.isArray(ai?.days) ? ai.days : []).map((d) => [String(d.day), d])
-    )
-
-    const days = week.days.map((day) => {
-      const got = aiDays.get(day.day)
-
-      if (got) {
-        // Numbers are the skeleton's business. Check, warn, discard.
-        if (got.distance_km !== undefined && got.distance_km !== null) {
-          const proposed = Number(got.distance_km)
-          const allowed = Math.max(
-            DISTANCE_TOLERANCE_KM,
-            day.distance_km * DISTANCE_TOLERANCE_PCT
-          )
-          if (Number.isFinite(proposed) && Math.abs(proposed - day.distance_km) > allowed) {
-            warnings.push(
-              `week ${week.week_number} ${day.day}: AI proposed ${proposed} km, ` +
-                `keeping the calculated ${day.distance_km} km`
-            )
-          }
-        }
-        if (got.pace && String(got.pace).trim() !== day.pace) {
-          warnings.push(
-            `week ${week.week_number} ${day.day}: AI proposed pace "${got.pace}", ` +
-              `keeping the calculated "${day.pace}"`
-          )
-        }
-      }
-
-      return {
-        ...day, // calculated values always win
-        title: cleanText(got?.title).slice(0, 40) || day.title,
-        description: cleanText(got?.description) || defaultDescription(day),
-        purpose: cleanText(got?.purpose) || defaultPurpose(day),
-      }
-    })
-
-    return {
-      ...week,
-      focus: cleanText(ai?.note) || defaultWeekFocus(week),
-      days,
-    }
-  })
-
-  return { weeks, warnings, intro: cleanText(aiIntro, 600) || defaultIntro(skeleton) }
-}
-
-function cleanText(s, max = 300) {
-  if (typeof s !== 'string') return ''
-  // Strip any markdown the model reached for; these render as plain text.
-  return s.replace(/[*_`#]/g, '').replace(/\s+/g, ' ').trim().slice(0, max)
-}
-
-/** A usable intro when the AI gives none — states the goal and the shape. */
-function defaultIntro(skeleton) {
-  const d = skeleton.target_distance_km
-  const weeks = skeleton.total_weeks
-  const goal = d
-    ? skeleton.event_date
-      ? `${d} km dne ${skeleton.event_date}`
-      : `${d} km`
-    : 'splošno kondicijo'
-  const parts = [`${weeks}-tedenski načrt za ${goal}.`]
-  parts.push(
-    `Obseg raste postopoma do ${skeleton.peak_volume_km} km na teden, vsak 4. teden je lažji.`
-  )
-  const g = skeleton.goal_assessment
-  if (g && !g.realistic) {
-    parts.push(
-      `Tvoj ciljni čas je za zdaj še izven dosega — načrt te pelje proti ${formatDurationMin(g.planning_time_min)}, kar je odličen napredek.`
-    )
-  }
-  return parts.join(' ')
-}
-
-/** Readable fallbacks so a plan is never blank, even with no AI at all. */
-function defaultDescription(day) {
-  if (day.type === 'rest') return 'Počitek. Nič teka danes.'
-  const km = day.distance_km
-  switch (day.type) {
-    case 'long':
-      return `Dolgi tek, ${km} km pri ${day.pace}. Umirjeno od začetka do konca.`
-    case 'tempo':
-      return `Ogrej se, nato ${day.hard_km || km} km pri ${day.pace}, na koncu umiri.`
-    case 'interval':
-      return `Ogrevanje, nato intervali v skupni dolžini ${day.hard_km || km} km pri ${day.pace}.`
-    default:
-      return `Lahkoten tek, ${km} km pri ${day.pace}. Pogovorni tempo.`
-  }
-}
-
-function defaultPurpose(day) {
-  return {
-    rest: 'telo se prilagodi na trening',
-    easy: 'gradi aerobno osnovo',
-    long: 'razširi vzdržljivost',
-    tempo: 'dviguje laktatni prag',
-    interval: 'izboljša VO2 max',
-    cross: 'ohranja kondicijo brez obremenitve nog',
-  }[day.type] || 'gradi aerobno osnovo'
-}
-
-function defaultWeekFocus(week) {
-  if (week.is_recovery) return `Regeneracijski teden — ${week.target_volume_km} km, brez trdih treningov.`
-  const phase = {
-    base: 'Osnova',
-    build: 'Nadgradnja',
-    sharpen: 'Ostrenje',
-    taper: 'Razbremenitev',
-  }[week.phase] || 'Trening'
-  return `${phase} — ${week.target_volume_km} km.`
-}
-
 /**
  * AI INTEGRATION POINT — describe a calculated plan skeleton.
  *
- * The model receives the finished structure and writes ONLY prose: each
- * workout's description and purpose, and a short note per week. It never
- * decides distances, paces or which day a session lands on.
+ * ONE call per plan, ever. It writes only prose: a plan intro, a note per
+ * week, and a title / purpose / how / why per distinct workout shape. It
+ * never decides distances, paces, heart rates or which day a session lands
+ * on — all of that is calculated and already stored.
+ *
+ * Rendering a workout card calls nothing.
  *
  * Retries once on malformed JSON; if it still fails, the caller gets the
- * skeleton with the built-in default descriptions, which is a complete and
+ * skeleton with the built-in Slovenian fallbacks, which is a complete and
  * correct plan — just less personal.
  *
- * @param {object} skeleton - from core/periodization.js
- * @param {object} opts
- * @param {object} opts.profile
- * @param {Array} [opts.memories]
- * @param {string} [opts.language] - 'sl' (default) or 'en'
- * @returns {Promise<{weeks: Array, warnings: string[], described: boolean}>}
+ * @returns {Promise<{weeks: Array, warnings: string[], intro: string, described: boolean}>}
  */
 export async function describePlanSkeleton(skeleton, { profile = {}, memories = [], language = 'sl' } = {}) {
   const constraints = skeleton.constraints || {}
   const languageName = language === 'sl' ? 'Slovenian' : 'English'
+  const shapes = planShapes(skeleton)
+
+  const knowledge = buildKnowledgeBlock({
+    situations: ['plan_generation'],
+    budgetTokens: KNOWLEDGE_BUDGETS.plan_generation,
+  })
 
   const prompt = `You are writing the words for a training plan that has ALREADY been calculated.
 
@@ -713,46 +896,55 @@ THE RUNNER
 - Level: ${profile.fitness_level || 'beginner'}
 - Goal: ${goalLine(skeleton)}
 - Estimated VDOT: ${skeleton.vdot} (${skeleton.vdot_source === 'runs' ? 'from their logged runs' : 'estimated from their self-assessed level'})
-- Their training paces per km: ${Object.entries(skeleton.paces)
-    .map(([k, v]) => `${k} ${v.label}`)
-    .join(', ')}
+- Training paces per km: ${Object.entries(skeleton.paces).map(([k, v]) => `${k} ${v.label}`).join(', ')}
+${skeleton.hr_max ? `- Max HR ${skeleton.hr_max} bpm (Tanaka, from age ${profile.age}); zones are already calculated per workout.` : '- No age given, so no heart-rate targets.'}
 
 WHAT YOU KNOW ABOUT THEM
 ${constraints.notes?.length ? constraints.notes.map((n) => `- ${n}`).join('\n') : '- Nothing yet.'}
 ${constraints.noBackToBack ? '- The schedule ALREADY avoids back-to-back running days for them.' : ''}
-${constraints.timeOfDay ? `- They run in the ${constraints.timeOfDay}; mention it naturally where it helps.` : ''}
+${constraints.timeOfDay ? `- They run in the ${constraints.timeOfDay}.` : ''}
 
 ${goalAssessmentBlock(skeleton)}
-THE CALCULATED PLAN (${skeleton.total_weeks} weeks)
+THE PLAN, WEEK BY WEEK
 ${JSON.stringify(skeletonForPrompt(skeleton))}
 
-YOUR JOB
-First write "intro": 2-3 sentences opening the plan. Say what it is building
-toward and how it will feel. ${skeleton.goal_assessment?.message ? 'You MUST address the goal-time note above honestly in this intro — plainly, in one sentence, without discouraging them.' : ''}
+THE DISTINCT SESSION TYPES IN IT
+${shapes.map((s) => `${s.key}  (${s.min_km}-${s.max_km} km, e.g. ${s.example})`).join('\n')}
 
-Then for every day of every week, write:
-- "title": a 1-3 word name for the session (e.g. "Lahkoten tek", "Dolgi tek").
-- "description": how to actually run that session, 1-2 short sentences. Include
-  the distance and target pace naturally. For tempo and interval days describe
-  the warm-up, the hard part, and the cool-down.
-- "purpose": ONE short phrase for why this session exists (e.g. "gradi aerobno osnovo").
-And for every week a "note": one sentence on what that week is building toward.
+YOUR JOB — three things, all in ${languageName}.
+
+1. "intro": 2-3 sentences opening the plan. What it builds toward and how it
+   will feel.${skeleton.goal_assessment?.message ? ' You MUST address the goal-time note above honestly here, in one sentence, without discouraging them.' : ''}
+
+2. "weeks": one short "note" per week (one sentence, what that week is for).
+
+3. "workouts": EXACTLY ${shapes.length} entries, one for each key in the
+   session-type list above. Copy each "key" verbatim. Do not skip any.
+   - "title": 1-3 words naming the session.
+   - "purpose": one short phrase (max 8 words).
+   - "how": how to run it. MAX 2 short sentences, under 200 characters. For
+     segmented sessions walk through warm-up, main part, cool-down. Speak to
+     the runner directly.
+   - "why": what it develops and how it serves this phase and the goal. MAX 2
+     short sentences, under 200 characters.
 
 RULES
-- Write in ${languageName}, in the voice of Coach Runko: warm, direct, concrete,
-  never preachy. Natural idiomatic ${languageName}, not a translation.
-- DO NOT change any distance, pace, day or workout type. They are fixed. Describe
-  what is there.
-- Rest days get a description too — short.
-- No markdown, no bullet points, no headings inside these strings.
-
+- Coach Runko's voice: warm, direct, concrete, never preachy. Natural
+  idiomatic ${languageName}, not a translation.
+- DO NOT restate the numbers. The card already shows distance, time, pace and
+  heart rate next to your text. Explain the session, do not recite it.
+- DO NOT change any distance, pace, day or workout type.
+- Keep it SHORT — this is a strict budget, not a style note. The card already
+  shows every number; your text only adds the reasoning.
+- No markdown, no bullets, no headings inside these strings.
+${knowledge ? `\n${knowledge}\n` : ''}
 Respond with JSON only:
-{"intro":"...","weeks":[{"week_number":1,"note":"...","days":[{"day":"Monday","title":"...","description":"...","purpose":"..."}]}]}
-Include all ${skeleton.total_weeks} weeks and all 7 days of each.`
+{"intro":"...","weeks":[{"week_number":1,"note":"..."}],"workouts":[{"key":"<exact key>","title":"...","purpose":"...","how":"...","why":"..."}]}
+Include all ${skeleton.total_weeks} weeks and all ${shapes.length} session keys.`
 
   const system =
     'You write training-plan copy for a running coach app. You never alter the' +
-    ' numbers you are given — you only describe them. You output JSON only.'
+    ' numbers you are given — you only explain them. You output JSON only.'
 
   let text
   try {
@@ -760,14 +952,14 @@ Include all ${skeleton.total_weeks} weeks and all 7 days of each.`
       system,
       messages: [{ role: 'user', content: prompt }],
       json: true,
-      maxTokens: 8000,
+      maxTokens: 5000,
     })
   } catch (err) {
     if (DEBUG) console.warn('[plan] description call failed:', err.message)
-    return { ...mergeDescriptions(skeleton, []), described: false }
+    return { ...mergeDescriptions(skeleton, {}), described: false }
   }
 
-  let described = parseDescribedWeeks(text)
+  let described = parseDescribed(text)
   if (!described) {
     if (DEBUG) console.warn('[plan] description JSON malformed — retrying once, stricter.')
     try {
@@ -779,15 +971,15 @@ Include all ${skeleton.total_weeks} weeks and all 7 days of each.`
             content: `${prompt}
 
 YOUR PREVIOUS ATTEMPT WAS NOT VALID JSON IN THE REQUIRED SHAPE.
-Output a single JSON object with one key "weeks". Every entry needs
-"week_number", "note" and a "days" array of 7 objects, each with "day",
-"title", "description" and "purpose". No other keys, no prose, no markdown fences.`,
+Output a single JSON object with exactly the keys "intro", "weeks" and
+"workouts". Every "workouts" entry needs "key" (copied exactly from the list),
+"title", "purpose", "how" and "why". No other keys, no prose, no fences.`,
           },
         ],
         json: true,
-        maxTokens: 8000,
+        maxTokens: 6000,
       })
-      described = parseDescribedWeeks(retry)
+      described = parseDescribed(retry)
     } catch (err) {
       if (DEBUG) console.warn('[plan] stricter retry also failed:', err.message)
     }
@@ -796,13 +988,13 @@ Output a single JSON object with one key "weeks". Every entry needs
   if (!described) {
     console.warn(
       '[plan] ⚠️ The AI could not describe the plan — falling back to built-in ' +
-        'descriptions. The plan STRUCTURE (paces, volume, phases) is still fully ' +
-        'personalized; only the wording is generic.'
+        'descriptions. The plan STRUCTURE (paces, volume, phases, heart rates) is ' +
+        'still fully personalized; only the wording is generic.'
     )
-    return { ...mergeDescriptions(skeleton, []), described: false }
+    return { ...mergeDescriptions(skeleton, {}), described: false }
   }
 
-  const merged = mergeDescriptions(skeleton, described.weeks, described.intro)
+  const merged = mergeDescriptions(skeleton, described)
   if (merged.warnings.length) {
     console.warn(
       `[plan] ⚠️ The AI tried to change ${merged.warnings.length} calculated value(s); ` +
@@ -810,27 +1002,29 @@ Output a single JSON object with one key "weeks". Every entry needs
     )
     for (const w of merged.warnings.slice(0, 10)) console.warn(`  - ${w}`)
   }
-  const describedDays = merged.weeks.reduce(
-    (n, w) => n + w.days.filter((d) => d.description).length, 0
-  )
   if (DEBUG) {
+    const covered = described.workouts?.length ?? 0
     console.log(
-      `[plan] described ${describedDays} day(s) across ${merged.weeks.length} week(s)` +
+      `[plan] one AI call described ${covered}/${shapes.length} session types ` +
+        `across ${merged.weeks.length} weeks` +
         `${merged.warnings.length ? `, ${merged.warnings.length} value(s) rejected` : ''}.`
     )
   }
   return { ...merged, described: true }
 }
 
-/** @returns {{weeks: Array, intro: string}|null} null if unusable. */
-function parseDescribedWeeks(text) {
+/** @returns {{weeks, workouts, intro}|null} null if the response is unusable. */
+function parseDescribed(text) {
   try {
     const parsed = JSON.parse(cleanJson(text))
-    const weeks = parsed?.weeks
-    if (!Array.isArray(weeks) || weeks.length === 0) return null
-    // At least one week must carry usable day text, or this was pointless.
-    const usable = weeks.some((w) => Array.isArray(w.days) && w.days.some((d) => d?.description))
-    return usable ? { weeks, intro: typeof parsed.intro === 'string' ? parsed.intro : '' } : null
+    const workouts = Array.isArray(parsed?.workouts) ? parsed.workouts : []
+    // At least one session must carry usable text, or this was pointless.
+    if (!workouts.some((w) => w?.key && (w.how || w.why))) return null
+    return {
+      intro: typeof parsed.intro === 'string' ? parsed.intro : '',
+      weeks: Array.isArray(parsed.weeks) ? parsed.weeks : [],
+      workouts,
+    }
   } catch {
     return null
   }

@@ -68,8 +68,8 @@ create table if not exists public.training_plans (
   unique (user_id, week_number)
 );
 
--- Logged runs. source supports future integrations:
--- 'manual' | 'strava' | 'garmin' | 'healthkit'
+-- Logged runs. `source` is kept for provenance ('manual' today); it costs
+-- nothing and leaves the door open if imports are ever built.
 create table if not exists public.workouts (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.users (id) on delete cascade,

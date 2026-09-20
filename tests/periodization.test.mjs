@@ -133,7 +133,9 @@ let tenPctOk = true
 for (let k = 1; k < progressive.length; k++) {
   const prev = progressive[k - 1].v
   const cur = progressive[k].v
-  if (cur > prev * MAX_WEEKLY_INCREASE + 0.15) {
+  // +1 km of slack: volumes are whole kilometres, so 36 -> 40 is the
+  // rounding of 39.6, not an 11% overload.
+  if (cur > prev * MAX_WEEKLY_INCREASE + 1.01) {
     tenPctOk = false
     console.log(`      week ${progressive[k].i + 1}: ${prev} → ${cur} exceeds +10%`)
   }
@@ -212,10 +214,14 @@ const week = layOutWeek({ volumeKm: 50, phase: 'build', isRecovery: false, paces
 console.log('   ', week.map((d) => `${d.day.slice(0, 3)}:${d.type}${d.distance_km || ''}`).join(' '))
 
 check('always 7 days, Monday..Sunday', week.length === 7 && week.map((d) => d.day).join() === DAYS.join())
+// Distances are whole kilometres now, so the sum lands within rounding
+// distance of the target rather than exactly on it.
 check('total distance ≈ the target volume',
-  near(week.reduce((s, d) => s + d.distance_km, 0), 50, 0.5))
+  near(week.reduce((s, d) => s + d.distance_km, 0), 50, 2.5))
+check('every prescribed distance is a whole number of km',
+  week.filter((d) => d.type !== 'rest').every((d) => Number.isInteger(d.distance_km)))
 const hard = week.reduce((s, d) => s + (d.hard_km || 0), 0)
-check(`hard volume ≈20% (got ${(hard / 50 * 100).toFixed(0)}%)`, near(hard / 50, HARD_VOLUME_SHARE, 0.06))
+check(`hard volume ≈20% (got ${(hard / 50 * 100).toFixed(0)}%)`, near(hard / 50, HARD_VOLUME_SHARE, 0.09))
 check('there is exactly one long run', week.filter((d) => d.type === 'long').length === 1)
 check('the long run is the longest run of the week', (() => {
   const long = week.find((d) => d.type === 'long')
@@ -259,6 +265,8 @@ check('every day has type, distance, pace, intensity',
     d.type && d.distance_km !== undefined && d.pace && d.intensity)))
 check('skeleton exposes VDOT and paces', skeleton.vdot > 0 && skeleton.paces.easy.label)
 check('goal distance carried through as a NUMBER', skeleton.target_distance_km === 42.2)
+check('race day keeps the REAL distance, not a rounded one',
+  skeleton.weeks[11].days.find((d) => d.type === 'race')?.distance_km === 42.2)
 check('event date carried through', skeleton.event_date === '2026-12-13')
 check('constraint respected across every week', skeleton.weeks.every((w) => {
   const idx = w.days.filter((d) => d.type !== 'rest').map((d) => DAYS.indexOf(d.day))

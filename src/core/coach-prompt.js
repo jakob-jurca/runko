@@ -324,8 +324,9 @@ export function buildRunnerContext({
 
 function toISO(d) {
   const x = new Date(d)
-  x.setMinutes(x.getMinutes() - x.getTimezoneOffset())
-  return x.toISOString().slice(0, 10)
+  const month = String(x.getMonth() + 1).padStart(2, '0')
+  const day = String(x.getDate()).padStart(2, '0')
+  return `${x.getFullYear()}-${month}-${day}`
 }
 
 function daysBetween(isoA, isoB) {

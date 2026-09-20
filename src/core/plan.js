@@ -22,8 +22,17 @@
  * see PLAN_LIMIT_ENABLED below to switch it back on without a migration.
  */
 import { describePlanSkeleton, mergeDescriptions, adaptWeeklyPlan } from './ai'
-import { buildPlanSkeleton } from './periodization'
 import {
+  buildPlanSkeleton,
+  enrichDays,
+  pacesFromVdot,
+  paceRange,
+  formatPace,
+  roundKm,
+} from './periodization'
+import {
+  todayISO,
+  getPlans,
   savePlan,
   deletePlans,
   startOfWeekISO,
@@ -118,6 +127,114 @@ export class PlanLimitError extends Error {
 }
 
 // ---------------------------------------------------------------------------
+// Hydration — bring plans stored before a field existed up to date, for free
+// ---------------------------------------------------------------------------
+
+/**
+ * Fill in everything a workout card needs that an older stored plan lacks.
+ *
+ * This is the actual reason heart rates and segments stopped appearing: the
+ * fields are generated at plan-build time, so a plan created before they
+ * existed simply does not have them, and no amount of fixing the component
+ * would put them back. Rather than forcing every runner to rebuild, the
+ * derived values are recomputed on read — they are pure arithmetic, so this
+ * costs nothing and never calls out.
+ *
+ * Also applies the whole-kilometre rounding to legacy plans, so old and new
+ * plans read the same.
+ *
+ * @param {object} planJson - one week's stored plan_json
+ * @param {object} profile - for age; HR is omitted when it is missing
+ * @returns {object} the same shape, with the derived fields present
+ */
+export function hydratePlanJson(planJson, profile = {}) {
+  const days = planJson?.days
+  if (!Array.isArray(days) || days.length === 0) return planJson
+
+  const needsWork = days.some(
+    (d) =>
+      d.segments === undefined ||
+      d.pace_range === undefined ||
+      (d.type !== 'rest' && (!d.hr || !Number.isInteger(d.distance_km)))
+  )
+  if (!needsWork) return planJson
+
+  // Paces are stored per week as { easy: { min_per_km, label } … }; older
+  // rows may only have the VDOT, which is enough to recompute them.
+  const paces = pacesFromStored(planJson.paces) || (planJson.vdot ? pacesFromVdot(planJson.vdot) : null)
+  if (!paces) return planJson // nothing to derive from; render what we have
+
+  const rounded = days.map((day) => {
+    if (day.type === 'rest') {
+      return { ...day, distance_km: 0, duration_min: 0, segments: [], is_segmented: false }
+    }
+    const distance = roundKm(day.distance_km)
+    const paceKey = day.pace_key || inferPaceKey(day.type)
+    const paceMin = paces[paceKey] ?? paces.easy
+    // Older rows may have no hard_km; a quality session is roughly half fast.
+    const hard =
+      day.hard_km ?? (['tempo', 'interval', 'repetition'].includes(day.type) ? distance * 0.5 : 0)
+
+    return {
+      ...day,
+      distance_km: distance,
+      hard_km: Math.min(hard, distance),
+      pace_key: paceKey,
+      pace: day.pace || `${formatPace(paceMin)}/km`,
+      pace_range: paceRange(paceMin, paceKey).label,
+      duration_min: Math.round(distance * paceMin),
+    }
+  })
+
+  const enriched = enrichDays(rounded, paces, profile.age)
+  return {
+    ...planJson,
+    days: enriched,
+    target_volume_km: Math.round(enriched.reduce((sum, d) => sum + d.distance_km, 0)),
+  }
+}
+
+/** { easy: { min_per_km } } → { easy: 6.2 } */
+function pacesFromStored(stored) {
+  if (!stored || typeof stored !== 'object') return null
+  const out = {}
+  for (const [key, value] of Object.entries(stored)) {
+    const n = typeof value === 'number' ? value : value?.min_per_km
+    if (Number.isFinite(n) && n > 0) out[key] = n
+  }
+  return out.easy ? out : null
+}
+
+/** Best guess at the pace key for a legacy day that has no pace_key. */
+function inferPaceKey(type) {
+  return (
+    {
+      easy: 'easy',
+      long: 'easy',
+      recovery: 'easy',
+      tempo: 'threshold',
+      interval: 'interval',
+      repetition: 'repetition',
+      race: 'goal',
+    }[type] || 'easy'
+  )
+}
+
+/** Hydrate a whole array of training_plans rows. */
+export function hydratePlans(rows, profile = {}) {
+  return (rows || []).map((row) => ({
+    ...row,
+    plan_json: hydratePlanJson(row.plan_json, profile),
+  }))
+}
+
+/** Read the runner's plan, already renderable. Use this, not getPlans. */
+export async function getHydratedPlans(profile) {
+  const rows = await getPlans(profile.id)
+  return hydratePlans(rows, profile)
+}
+
+// ---------------------------------------------------------------------------
 // Building the plan
 // ---------------------------------------------------------------------------
 
@@ -200,13 +317,18 @@ export async function createInitialPlan(profile, intake = null) {
   // --- 2. The AI writes the words ------------------------------------------
   let weeks
   let intro
-  if (hasPremium(profile)) {
+  // Recorded on the saved plan so the page can say the words are the
+  // built-in ones. A free user's plan is still fully calculated for them —
+  // only the prose is generic — and silently serving stock text as the
+  // coach's own made the free tier look like a failed premium one.
+  const aiDescribed = hasPremium(profile)
+  if (aiDescribed) {
     const result = await describePlanSkeleton(skeleton, { profile, memories, language: 'sl' })
     weeks = result.weeks
     intro = result.intro
   } else {
     if (DEBUG) console.log('[plan] no premium — calculated plan with built-in descriptions.')
-    const result = mergeDescriptions(skeleton, [])
+    const result = mergeDescriptions(skeleton, {})
     weeks = result.weeks
     intro = result.intro
   }
@@ -231,6 +353,7 @@ export async function createInitialPlan(profile, intake = null) {
         total_weeks: totalWeeks,
         target_distance_km: skeleton.target_distance_km,
         goal_assessment: skeleton.goal_assessment,
+        ai_described: aiDescribed,
         // The intro belongs to the plan, not a week — stored on week 1 only.
         ...(week_number === 1 ? { intro } : {}),
       })
@@ -248,8 +371,19 @@ export async function createInitialPlan(profile, intake = null) {
  * and the plan as a whole (vdot, paces, total_weeks). Without this, adapting
  * a week would strip the phase and the dashboard would lose its banner.
  */
-function mergeAdapted(original = {}, adapted = {}) {
-  const days = Array.isArray(adapted.days) && adapted.days.length === 7 ? adapted.days : original.days
+function mergeAdapted(original = {}, adapted = {}, profile = {}) {
+  const rawDays =
+    Array.isArray(adapted.days) && adapted.days.length === 7 ? adapted.days : original.days
+
+  // The adapted week comes back as bare days. Re-run the same enrichment the
+  // skeleton does, or the card loses its segments, heart rates and time
+  // window and renders half-empty for that week.
+  const paceMinPerKm = Object.fromEntries(
+    Object.entries(original.paces || {}).map(([k, v]) => [k, v?.min_per_km ?? v])
+  )
+  const days = Object.keys(paceMinPerKm).length
+    ? enrichDays(rawDays, paceMinPerKm, profile.age)
+    : rawDays
   return {
     ...original,
     ...adapted,
@@ -295,7 +429,7 @@ export async function maybeAdaptPlan(profile, plans, workout, recentWorkouts) {
       trigger: missed ? 'missed' : 'hard',
     })
     // adapted:true stops the weekly rollover from re-adapting this week.
-    return await savePlan(profile.id, nextWeek, mergeAdapted(base.plan_json, adapted))
+    return await savePlan(profile.id, nextWeek, mergeAdapted(base.plan_json, adapted, profile))
   } catch (err) {
     console.warn('Plan adaptation failed (keeping current plan):', err.message)
     return null
@@ -322,7 +456,7 @@ export async function adaptCurrentWeekIfNeeded(profile, plans, recentWorkouts) {
   prevMonday.setDate(prevMonday.getDate() - 7)
   const thisMonday = startOfWeekISO()
   const lastWeekLogs = (recentWorkouts || []).filter(
-    (w) => w.date >= prevMonday.toISOString().slice(0, 10) && w.date < thisMonday
+    (w) => w.date >= todayISO(prevMonday) && w.date < thisMonday
   )
   if (!lastWeekLogs.length) return null
 
@@ -333,7 +467,7 @@ export async function adaptCurrentWeekIfNeeded(profile, plans, recentWorkouts) {
       recentWorkouts: lastWeekLogs,
       trigger: 'weekly',
     })
-    return await savePlan(profile.id, week, mergeAdapted(current.plan_json, adapted))
+    return await savePlan(profile.id, week, mergeAdapted(current.plan_json, adapted, profile))
   } catch (err) {
     console.warn('Weekly plan adaptation failed (keeping planned week):', err.message)
     return null

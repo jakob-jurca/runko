@@ -1,16 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { getPlans, currentWeekNumber, weekStartISO } from '../core/db'
+import { currentWeekNumber, weekStartISO } from '../core/db'
 import { PHASE_INTENT, goalLabel } from '../core/periodization'
+import { getHydratedPlans } from '../core/plan'
 import { FullScreenSpinner } from '../components/Spinner'
+import { t } from '../core/strings'
 
 /** One colour per training phase, reused by the curve and the week list. */
 export const PHASE_STYLES = {
-  base: { label: 'Base', bar: 'bg-emerald-500', text: 'text-emerald-400', chip: 'bg-emerald-500/15 text-emerald-400' },
-  build: { label: 'Build', bar: 'bg-primary', text: 'text-primary', chip: 'bg-primary-faint text-primary' },
-  sharpen: { label: 'Sharpen', bar: 'bg-rose-500', text: 'text-rose-400', chip: 'bg-rose-500/15 text-rose-400' },
-  taper: { label: 'Taper', bar: 'bg-sky-500', text: 'text-sky-400', chip: 'bg-sky-500/15 text-sky-400' },
+  base: { label: t.plan.phases.base, bar: 'bg-emerald-500', text: 'text-emerald-400', chip: 'bg-emerald-500/15 text-emerald-400' },
+  build: { label: t.plan.phases.build, bar: 'bg-primary', text: 'text-primary', chip: 'bg-primary-faint text-primary' },
+  sharpen: { label: t.plan.phases.sharpen, bar: 'bg-rose-500', text: 'text-rose-400', chip: 'bg-rose-500/15 text-rose-400' },
+  taper: { label: t.plan.phases.taper, bar: 'bg-sky-500', text: 'text-sky-400', chip: 'bg-sky-500/15 text-sky-400' },
 }
 
 export const phaseStyle = (phase) => PHASE_STYLES[phase] || PHASE_STYLES.base
@@ -31,7 +33,7 @@ export default function Plan() {
 
   useEffect(() => {
     let cancelled = false
-    getPlans(profile.id)
+    getHydratedPlans(profile)
       .then((rows) => !cancelled && setPlans(rows))
       .catch((err) => console.error(err))
       .finally(() => !cancelled && setLoading(false))
@@ -69,17 +71,20 @@ export default function Plan() {
   const paces = plans[0]?.plan_json?.paces
   const intro = plans[0]?.plan_json?.intro
   const assessment = plans[0]?.plan_json?.goal_assessment
+  // Explicitly false only on plans built without premium. Plans saved before
+  // this flag existed leave it undefined, so they show no notice.
+  const genericWording = plans[0]?.plan_json?.ai_described === false
 
   if (loading) return <FullScreenSpinner />
 
   if (!weeks.length) {
     return (
       <main className="mx-auto max-w-2xl px-5 py-8">
-        <h1 className="text-2xl font-extrabold">Your plan</h1>
+        <h1 className="text-2xl font-extrabold">{t.plan.title}</h1>
         <div className="card mt-6 text-center">
-          <p className="text-zinc-400">No plan yet.</p>
+          <p className="text-zinc-400">{t.plan.noPlan}</p>
           <Link to="/onboarding?rebuild=1" className="btn-primary mt-4 inline-block">
-            Create my plan
+            {t.dashboard.createPlan}
           </Link>
         </div>
       </main>
@@ -97,13 +102,24 @@ export default function Plan() {
   return (
     <main className="mx-auto max-w-2xl px-5 py-8">
       <header className="animate-fade-up">
-        <h1 className="text-2xl font-extrabold tracking-tight">Your plan</h1>
+        <h1 className="text-2xl font-extrabold tracking-tight">{t.plan.title}</h1>
         <p className="mt-1 text-sm text-zinc-500">
-          {weeks.length} weeks · {totalKm} km total
+          {t.plan.summary(weeks.length, totalKm)}
           {vdot ? ` · VDOT ${vdot}` : ''}
         </p>
         <p className="mt-1 text-sm font-medium text-primary">{goalLabel(profile)}</p>
       </header>
+
+      {/* The maths is the same on every tier; only the prose is generic. Say
+          so, rather than letting a stock description read as the coach's. */}
+      {genericWording && (
+        <p className="mt-4 rounded-xl bg-zinc-950/60 p-3 text-xs leading-relaxed text-zinc-400 animate-fade-up">
+          {t.paywall.planLocked}{' '}
+          <Link to="/chat" className="text-primary underline">
+            {t.paywall.ended}
+          </Link>
+        </p>
+      )}
 
       {/* The coach's opening note — including an honest word when the target
           time is out of reach for this block. */}
@@ -123,11 +139,16 @@ export default function Plan() {
         </section>
       )}
 
+      {/* Ranges, not targets to hit exactly. */}
+      <p className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950/60 p-3 text-xs leading-relaxed text-zinc-400 animate-fade-up">
+        {t.plan.rangeNote}
+      </p>
+
       {/* training paces */}
       {paces && (
         <section className="card mt-6 animate-fade-up" style={{ animationDelay: '40ms' }}>
           <h2 className="mb-3 text-sm font-bold uppercase tracking-widest text-zinc-500">
-            Your training paces
+            {t.plan.yourPaces}
           </h2>
           <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
             {Object.entries(paces).map(([name, p]) => (
@@ -144,9 +165,9 @@ export default function Plan() {
       <section className="card mt-4 animate-fade-up" style={{ animationDelay: '80ms' }}>
         <div className="mb-1 flex items-baseline justify-between">
           <h2 className="text-sm font-bold uppercase tracking-widest text-zinc-500">
-            Weekly volume
+            {t.plan.weeklyVolume}
           </h2>
-          <span className="text-xs text-zinc-500">peak {peak} km</span>
+          <span className="text-xs text-zinc-500">{t.plan.peak(peak)}</span>
         </div>
 
         {/* phase band */}
@@ -161,7 +182,7 @@ export default function Plan() {
           ))}
         </div>
 
-        <div className="flex h-36 items-end gap-1" role="img" aria-label="Weekly volume by week">
+        <div className="flex h-36 items-end gap-1" role="img" aria-label={t.plan.weeklyVolume}>
           {weeks.map((w) => {
             const s = phaseStyle(w.phase)
             const isNow = w.number === currentWeek
@@ -170,7 +191,7 @@ export default function Plan() {
                 key={w.number}
                 onClick={() => setOpenWeek(openWeek === w.number ? null : w.number)}
                 className="group flex h-full min-w-0 flex-1 flex-col justify-end"
-                title={`Week ${w.number}: ${w.volume} km${w.isRecovery ? ' (recovery)' : ''}`}
+                title={t.plan.weekTooltip(w.number, w.volume, w.isRecovery)}
               >
                 <span
                   className={`mb-1 text-center text-[9px] font-medium ${
@@ -206,7 +227,7 @@ export default function Plan() {
           ))}
           <span className="flex items-center gap-1.5 text-[10px] text-zinc-500">
             <span className="h-2 w-2 rounded-full bg-zinc-500 opacity-40" />
-            Recovery week
+            {t.plan.recoveryWeekLegend}
           </span>
         </div>
       </section>
@@ -214,7 +235,7 @@ export default function Plan() {
       {/* week by week */}
       <section className="mt-6">
         <h2 className="mb-3 text-sm font-bold uppercase tracking-widest text-zinc-500">
-          Week by week
+          {t.plan.weekByWeek}
         </h2>
         <div className="space-y-2">
           {weeks.map((w) => {
@@ -235,7 +256,7 @@ export default function Plan() {
                     <div className={`text-lg font-extrabold ${isNow ? 'text-primary' : ''}`}>
                       {w.number}
                     </div>
-                    <div className="text-[9px] uppercase text-zinc-600">week</div>
+                    <div className="text-[9px] uppercase text-zinc-600">{t.common.week}</div>
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
@@ -244,10 +265,10 @@ export default function Plan() {
                       </span>
                       {w.isRecovery && (
                         <span className="rounded-full bg-zinc-700/40 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-zinc-400">
-                          Recovery
+                          {t.plan.recoveryShort}
                         </span>
                       )}
-                      {isNow && <span className="text-[10px] font-bold uppercase text-primary">current</span>}
+                      {isNow && <span className="text-[10px] font-bold uppercase text-primary">{t.common.current}</span>}
                     </div>
                     <p className="mt-1 truncate text-sm text-zinc-300">{w.focus || s.label}</p>
                     <p className="mt-0.5 text-xs text-zinc-600">
@@ -292,9 +313,8 @@ export default function Plan() {
       </section>
 
       <div className="mt-6 rounded-xl bg-zinc-950/60 p-4 text-xs leading-relaxed text-zinc-500">
-        <p className="mb-1 font-semibold text-zinc-400">How this plan was built</p>
-        Volume rises by at most 10% a week, every 4th week eases off to about 70% so the
-        training sinks in, and roughly 80% of your running is easy. Phases:{' '}
+        <p className="mb-1 font-semibold text-zinc-400">{t.plan.howBuilt}</p>
+        {t.plan.howBuiltBody}{' '}
         {Object.entries(PHASE_INTENT)
           .map(([p, intent]) => `${phaseStyle(p).label.toLowerCase()} is ${intent}`)
           .join('; ')}

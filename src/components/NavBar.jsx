@@ -1,9 +1,10 @@
 import { NavLink } from 'react-router-dom'
+import { t } from '../core/strings'
 
 const items = [
   {
     to: '/',
-    label: 'Home',
+    label: t.nav.home,
     icon: (
       <path
         strokeLinecap="round"
@@ -14,7 +15,7 @@ const items = [
   },
   {
     to: '/chat',
-    label: 'Coach',
+    label: t.nav.coach,
     icon: (
       <path
         strokeLinecap="round"
@@ -25,12 +26,12 @@ const items = [
   },
   {
     to: '/log',
-    label: 'Log Run',
+    label: t.nav.log,
     icon: <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m-7-7h14" />,
   },
   {
     to: '/settings',
-    label: 'Settings',
+    label: t.nav.settings,
     icon: (
       <>
         <path

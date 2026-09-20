@@ -1,19 +1,15 @@
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { addWorkout, getPlans, getWorkouts, currentWeekNumber } from '../core/db'
+import { addWorkout, getPlans, getWorkouts, currentWeekNumber, todayISO } from '../core/db'
 import { coachReaction } from '../core/ai'
 import { maybeAdaptPlan } from '../core/plan'
 import { hasPremium } from '../core/subscription'
 import Spinner from '../components/Spinner'
+import { t } from '../core/strings'
+import { validateLogDate, DEFAULT_EFFORT } from '../core/logging'
 
-const EFFORTS = [
-  { v: 1, label: 'Very easy', emoji: '😌' },
-  { v: 2, label: 'Easy', emoji: '🙂' },
-  { v: 3, label: 'Moderate', emoji: '😅' },
-  { v: 4, label: 'Hard', emoji: '🥵' },
-  { v: 5, label: 'All out', emoji: '💀' },
-]
+const EFFORTS = t.log.efforts
 
 /**
  * Manual workout logging. Quick-log from the dashboard pre-fills distance and
@@ -26,9 +22,12 @@ export default function Log() {
   const { profile } = useAuth()
   const [params] = useSearchParams()
 
+  // Opened from a workout card, these arrive already filled in.
   const [distance, setDistance] = useState(params.get('distance') || '')
   const [duration, setDuration] = useState(params.get('duration') || '')
-  const [effort, setEffort] = useState(3)
+  const [effort, setEffort] = useState(Number(params.get('effort')) || DEFAULT_EFFORT)
+  // Today by default, and never later than today — see validateLogDate.
+  const [date, setDate] = useState(params.get('date') || todayISO())
   const [notes, setNotes] = useState('')
   const [missed, setMissed] = useState(false)
 
@@ -40,16 +39,23 @@ export default function Log() {
 
   const submit = async (e) => {
     e.preventDefault()
+    // A run in the future has not happened. Refuse it with a reason rather
+    // than storing a row the dashboard will not show as done until that day.
+    const dateCheck = validateLogDate(date)
+    if (!dateCheck.ok) {
+      setError(dateCheck.reason === 'future' ? t.log.futureDate : t.log.invalidDate)
+      return
+    }
     setBusy(true)
     setError('')
     try {
       const workout = await addWorkout({
         user_id: profile.id,
-        date: new Date().toISOString().slice(0, 10),
+        date,
         distance: missed ? 0 : Number(distance),
         duration: missed ? 0 : Number(duration),
         effort: missed ? 1 : effort,
-        notes: missed ? `Missed planned workout${plannedDay ? ` (${plannedDay})` : ''}. ${notes}`.trim() : notes,
+        notes: missed ? `Izpuščen trening${plannedDay ? ` (${plannedDay})` : ''}. ${notes}`.trim() : notes,
         source: 'manual',
       })
 
@@ -61,10 +67,11 @@ export default function Log() {
 
       // AI INTEGRATION POINT — coach reaction + plan adaptation.
       let reaction = missed
-        ? 'Logged. One missed run never broke a runner — we adjust and move on.'
-        : 'Workout logged. Keep it up! 💪'
+        ? t.log.fallbackMissed
+        : t.log.fallbackReaction
       let adapted = null
-      if (hasPremium(profile)) {
+      const premium = hasPremium(profile)
+      if (premium) {
         const [reactionRes, adaptedRes] = await Promise.allSettled([
           coachReaction(profile, plan, { distance: workout.distance, duration: workout.duration, effort: workout.effort, notes }),
           maybeAdaptPlan(profile, plans, workout, recent),
@@ -72,7 +79,10 @@ export default function Log() {
         if (reactionRes.status === 'fulfilled') reaction = reactionRes.value.trim()
         if (adaptedRes.status === 'fulfilled') adapted = adaptedRes.value
       }
-      setDone({ reaction, adapted: Boolean(adapted) })
+      // `premium` travels with the result so the confirmation screen can say
+      // why the coach is quiet, instead of showing a canned line under his
+      // name as though he had replied.
+      setDone({ reaction, adapted: Boolean(adapted), premium })
     } catch (err) {
       setError(err.message)
     } finally {
@@ -88,21 +98,31 @@ export default function Log() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
           </svg>
         </div>
-        <h1 className="text-2xl font-extrabold">Run logged!</h1>
+        <h1 className="text-2xl font-extrabold">{t.log.doneTitle}</h1>
 
         <div className="card mt-6 text-left">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-primary">Coach Runko</p>
-          <p className="mt-2 leading-relaxed text-zinc-200">{done.reaction}</p>
+          {done.premium && (
+            <p className="text-[10px] font-bold uppercase tracking-widest text-primary">{t.chat.title}</p>
+          )}
+          <p className={`leading-relaxed text-zinc-200 ${done.premium ? 'mt-2' : ''}`}>{done.reaction}</p>
+          {!done.premium && (
+            <p className="mt-3 text-xs text-zinc-500">
+              {t.paywall.logLocked}{' '}
+              <Link to="/chat" className="text-primary underline">
+                {t.paywall.ended}
+              </Link>
+            </p>
+          )}
         </div>
 
         {done.adapted && (
           <p className="mt-4 text-sm text-primary">
-            📋 Your coach noticed and adjusted next week’s plan.
+            {t.log.adapted}
           </p>
         )}
 
         <Link to="/" className="btn-primary mt-8 w-full">
-          Back to dashboard
+          {t.log.backToDashboard}
         </Link>
       </main>
     )
@@ -110,18 +130,18 @@ export default function Log() {
 
   return (
     <main className="mx-auto max-w-md px-6 py-8">
-      <h1 className="text-2xl font-extrabold animate-fade-up">Log a run</h1>
+      <h1 className="text-2xl font-extrabold animate-fade-up">{t.log.title}</h1>
       {plannedDay && (
-        <p className="mt-1 text-sm text-zinc-400">
-          Logging your <span className="text-primary">{plannedDay}</span> workout
+        <p className="mt-1 text-sm text-zinc-400 animate-fade-up">
+          {t.log.fromPlan}: <span className="text-primary">{params.get('title') || plannedDay}</span>
         </p>
       )}
 
       <form onSubmit={submit} className="mt-8 space-y-6 animate-fade-up" style={{ animationDelay: '80ms' }}>
         <label className="card flex cursor-pointer items-center justify-between">
           <div>
-            <p className="font-semibold">I missed this workout</p>
-            <p className="text-sm text-zinc-500">Your coach will adapt, not judge.</p>
+            <p className="font-semibold">{t.log.missed}</p>
+            <p className="text-sm text-zinc-500">{t.log.subtitle}</p>
           </div>
           <input
             type="checkbox"
@@ -134,8 +154,18 @@ export default function Log() {
         {!missed && (
           <>
             <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2">
+                <label className="label">{t.log.date}</label>
+                <input
+                  type="date"
+                  className="input"
+                  value={date}
+                  max={todayISO()}
+                  onChange={(e) => setDate(e.target.value)}
+                />
+              </div>
               <div>
-                <label className="label">Distance (km)</label>
+                <label className="label">{t.log.distance}</label>
                 <input
                   type="number"
                   step="0.1"
@@ -148,7 +178,7 @@ export default function Log() {
                 />
               </div>
               <div>
-                <label className="label">Duration (min)</label>
+                <label className="label">{t.log.duration}</label>
                 <input
                   type="number"
                   min="1"
@@ -162,7 +192,7 @@ export default function Log() {
             </div>
 
             <div>
-              <label className="label">Perceived effort</label>
+              <label className="label">{t.log.effort}</label>
               <div className="grid grid-cols-5 gap-2">
                 {EFFORTS.map((ef) => (
                   <button
@@ -185,11 +215,11 @@ export default function Log() {
         )}
 
         <div>
-          <label className="label">Notes (optional)</label>
+          <label className="label">{t.log.notes}</label>
           <textarea
             rows={3}
             className="input resize-none"
-            placeholder="How did it feel?"
+            placeholder={t.log.notesPlaceholder}
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
           />
@@ -200,12 +230,12 @@ export default function Log() {
         <button type="submit" disabled={busy} className="btn-primary w-full">
           {busy ? (
             <>
-              <Spinner className="h-5 w-5 text-white" /> Saving…
+              <Spinner className="h-5 w-5 text-white" /> {t.log.saving}
             </>
           ) : missed ? (
-            'Log missed workout'
+            t.log.missed
           ) : (
-            'Save run'
+            t.log.submit
           )}
         </button>
       </form>

@@ -11,6 +11,10 @@
 *.key
 secrets.json
 
+# Credentials for the two reusable RLS-audit users (tests/rls-live.test.mjs).
+# Local throwaway accounts on your own project — never commit them.
+.rls-audit.json
+
 # ---------------------------------------------------------------
 # Dependencies
 # ---------------------------------------------------------------

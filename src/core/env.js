@@ -16,4 +16,7 @@ export const IS_DEV = import.meta.env.DEV
 
 export const SUPABASE_URL = clean(import.meta.env.VITE_SUPABASE_URL)
 export const SUPABASE_ANON_KEY = clean(import.meta.env.VITE_SUPABASE_ANON_KEY)
-export const GROQ_API_KEY = clean(import.meta.env.VITE_GROQ_API_KEY)
+// NOTE: there is deliberately NO AI key here. Vite inlines every
+// import.meta.env value into the browser bundle, so a Groq key in this file
+// would be readable by anyone. It lives as a Supabase secret and is used
+// only by supabase/functions/ai-proxy.

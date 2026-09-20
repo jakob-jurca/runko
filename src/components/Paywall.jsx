@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { PLANS, startCheckout } from '../core/subscription'
+import { t } from '../core/strings'
 
 /**
  * Shown when the free trial has expired and the user opens a premium feature
  * (AI coach chat, plan adaptation). Stripe-ready: the button calls
  * startCheckout(), the future Stripe redirect point.
  */
-export default function Paywall({ feature = 'This feature' }) {
+export default function Paywall({ feature = t.paywall.featureDefault }) {
   const plan = PLANS[0]
   const [notice, setNotice] = useState('')
 
@@ -27,11 +28,8 @@ export default function Paywall({ feature = 'This feature' }) {
         </svg>
       </div>
 
-      <h1 className="text-2xl font-extrabold">Your free trial has ended</h1>
-      <p className="mt-2 text-zinc-400">
-        {feature} is part of <span className="font-semibold text-primary">{plan.name}</span>. Keep
-        your AI coach in your corner.
-      </p>
+      <h1 className="text-2xl font-extrabold">{t.paywall.title}</h1>
+      <p className="mt-2 text-zinc-400">{t.paywall.body(feature, plan.name)}</p>
 
       <div className="card mt-8 w-full text-left">
         <div className="flex items-baseline justify-between">
@@ -49,13 +47,13 @@ export default function Paywall({ feature = 'This feature' }) {
           ))}
         </ul>
         <button onClick={handleCheckout} className="btn-primary mt-6 w-full">
-          Subscribe — coming soon
+          {t.paywall.subscribe}
         </button>
         {notice ? (
           <p className="mt-3 text-center text-xs text-primary animate-fade-in">{notice}</p>
         ) : (
           <p className="mt-3 text-center text-xs text-zinc-500">
-            You keep manual logging and your current plan on the free tier.
+            {t.paywall.freeNote}
           </p>
         )}
       </div>

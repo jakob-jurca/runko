@@ -1,17 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { saveProfile, addWorkout, addDaysISO } from '../core/db'
+import { saveProfile, addWorkout, addDaysISO, todayISO } from '../core/db'
 import { createInitialPlan } from '../core/plan'
 import { parseDuration, formatPace } from '../core/periodization'
 import { coachIntakeFollowUp, friendlyAiMessage, INTAKE_READY_TOKEN } from '../core/ai'
 import Spinner, { FullScreenSpinner } from '../components/Spinner'
+import { t } from '../core/strings'
 
-const LEVELS = [
-  { id: 'beginner', title: 'Beginner', desc: 'New to running or coming back after a long break' },
-  { id: 'intermediate', title: 'Intermediate', desc: 'Running regularly, comfortable with 5-10 km' },
-  { id: 'advanced', title: 'Advanced', desc: 'Structured training, racing experience' },
-]
+const LEVELS = t.onboarding.levels
 
 /**
  * Shortcuts for the common distances. These are NOT categories — each chip
@@ -20,29 +17,17 @@ const LEVELS = [
 const DISTANCE_CHIPS = [
   { km: 5, label: '5 km' },
   { km: 10, label: '10 km' },
-  { km: 21.1, label: 'Half · 21.1' },
-  { km: 42.2, label: 'Marathon · 42.2' },
+  { km: 21.1, label: 'Polmaraton · 21,1' },
+  { km: 42.2, label: 'Maraton · 42,2' },
 ]
 
-const EXPERIENCE_OPTIONS = [
-  { months: 2, label: 'Just started (under 3 months)' },
-  { months: 6, label: '3-12 months' },
-  { months: 24, label: '1-3 years' },
-  { months: 60, label: '3-10 years' },
-  { months: 144, label: 'More than 10 years' },
-]
+const EXPERIENCE_OPTIONS = t.onboarding.experienceOptions
 
 const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
-const EFFORTS = [
-  { v: 1, label: 'Very easy' },
-  { v: 2, label: 'Easy' },
-  { v: 3, label: 'Moderate' },
-  { v: 4, label: 'Hard' },
-  { v: 5, label: 'All out' },
-]
+const EFFORTS = t.log.efforts
 
-const todayISO = () => new Date().toISOString().slice(0, 10)
+
 
 /** Empty intake-run row; initial rows get spaced-out recent default dates. */
 const emptyRun = (daysAgo = 0) => ({
@@ -355,8 +340,8 @@ export default function Onboarding() {
     }
   }
 
-  if (building) return <FullScreenSpinner message="Runko is building your training plan…" />
-  if (skipping) return <FullScreenSpinner message="Saving what you've told us…" />
+  if (building) return <FullScreenSpinner message={t.onboarding.building} />
+  if (skipping) return <FullScreenSpinner message={t.onboarding.saving} />
 
   const updateRun = (i, patch) =>
     setRuns((rs) => rs.map((r, idx) => (idx === i ? { ...r, ...patch } : r)))
@@ -377,8 +362,8 @@ export default function Onboarding() {
 
       {step === 'path' && (
         <div className="animate-fade-up">
-          <h1 className="text-3xl font-extrabold">Welcome to Runko 👋</h1>
-          <p className="mt-2 text-zinc-400">How much time do you have right now?</p>
+          <h1 className="text-3xl font-extrabold">{t.onboarding.welcome}</h1>
+          <p className="mt-2 text-zinc-400">{t.onboarding.pathQuestion}</p>
           <div className="mt-8 space-y-3">
             <button
               onClick={() => {
@@ -390,13 +375,13 @@ export default function Onboarding() {
               }`}
             >
               <div className="flex items-center gap-2">
-                <h3 className="font-bold">Thorough setup</h3>
+                <h3 className="font-bold">{t.onboarding.thoroughTitle}</h3>
                 <span className="rounded-full bg-primary-faint px-2 py-0.5 text-[10px] font-bold uppercase text-primary">
-                  Recommended
+                  {t.onboarding.thoroughBadge}
                 </span>
               </div>
               <p className="mt-1 text-sm text-zinc-400">
-                ~5 min. Share your recent runs and chat with your coach — the plan fits you from day one.
+                {t.onboarding.thoroughDesc}
               </p>
             </button>
             <button
@@ -408,9 +393,9 @@ export default function Onboarding() {
                 path === 'quick' ? 'border-primary ring-1 ring-primary/40' : ''
               }`}
             >
-              <h3 className="font-bold">Quick setup</h3>
+              <h3 className="font-bold">{t.onboarding.quickTitle}</h3>
               <p className="mt-1 text-sm text-zinc-400">
-                ~1 min. Just the basics — you can always tell your coach more later.
+                {t.onboarding.quickDesc}
               </p>
             </button>
           </div>
@@ -419,11 +404,11 @@ export default function Onboarding() {
 
       {step === 'name' && (
         <div className="animate-fade-up">
-          <h1 className="text-3xl font-extrabold">First things first</h1>
-          <p className="mt-2 text-zinc-400">What should your coach call you?</p>
+          <h1 className="text-3xl font-extrabold">{t.onboarding.nameTitle}</h1>
+          <p className="mt-2 text-zinc-400">{t.onboarding.nameQuestion}</p>
           <input
             className="input mt-8"
-            placeholder="Your name"
+            placeholder={t.onboarding.namePlaceholder}
             value={name}
             autoFocus
             onChange={(e) => setName(e.target.value)}
@@ -437,11 +422,11 @@ export default function Onboarding() {
 
       {step === 'body' && (
         <div className="animate-fade-up">
-          <h1 className="text-3xl font-extrabold">About you, {name.split(' ')[0]}</h1>
-          <p className="mt-2 text-zinc-400">Helps your coach judge training load. </p>
+          <h1 className="text-3xl font-extrabold">{t.onboarding.bodyTitle(name.split(' ')[0])}</h1>
+          <p className="mt-2 text-zinc-400">{t.onboarding.bodySubtitle}</p>
           <div className="mt-8 grid grid-cols-2 gap-4">
             <div>
-              <label className="label">Age</label>
+              <label className="label">{t.onboarding.age}</label>
               <input
                 type="number"
                 min="10"
@@ -453,7 +438,7 @@ export default function Onboarding() {
               />
             </div>
             <div>
-              <label className="label">Weight (kg)</label>
+              <label className="label">{t.onboarding.weight}</label>
               <input
                 type="number"
                 min="30"
@@ -474,8 +459,8 @@ export default function Onboarding() {
 
       {step === 'level' && (
         <div className="animate-fade-up">
-          <h1 className="text-3xl font-extrabold">Where are you at?</h1>
-          <p className="mt-2 text-zinc-400">This shapes the intensity of your plan.</p>
+          <h1 className="text-3xl font-extrabold">{t.onboarding.levelTitle}</h1>
+          <p className="mt-2 text-zinc-400">{t.onboarding.levelSubtitle}</p>
           <div className="mt-8 space-y-3">
             {LEVELS.map((l) => (
               <button
@@ -498,14 +483,14 @@ export default function Onboarding() {
 
       {step === 'goal' && (
         <div className="animate-fade-up">
-          <h1 className="text-3xl font-extrabold">What are you training for?</h1>
+          <h1 className="text-3xl font-extrabold">{t.onboarding.goalTitle}</h1>
           <p className="mt-2 text-zinc-400">
-            Pick a distance — any distance. The chips are just shortcuts.
+            {t.onboarding.goalSubtitle}
           </p>
 
           {/* distance: chips are shortcuts for the number, not categories */}
           <div className="mt-8">
-            <label className="label">Target distance</label>
+            <label className="label">{t.onboarding.targetDistance}</label>
             <div className="mt-2 flex flex-wrap gap-2">
               {DISTANCE_CHIPS.map((c) => (
                 <button
@@ -529,7 +514,7 @@ export default function Onboarding() {
                 min="1"
                 max="200"
                 className="input flex-1"
-                placeholder="or type any distance, e.g. 15"
+                placeholder={t.onboarding.distancePlaceholder}
                 value={targetDistance}
                 onChange={(e) => setTargetDistance(e.target.value)}
               />
@@ -539,7 +524,7 @@ export default function Onboarding() {
 
           {/* date, or no date */}
           <div className="mt-6">
-            <label className="label">When?</label>
+            <label className="label">{t.onboarding.when}</label>
             <div className="mt-2 flex gap-2">
               <button
                 type="button"
@@ -548,7 +533,7 @@ export default function Onboarding() {
                   hasDate ? 'bg-primary text-white' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
                 }`}
               >
-                On a date
+                {t.onboarding.onADate}
               </button>
               <button
                 type="button"
@@ -560,7 +545,7 @@ export default function Onboarding() {
                   !hasDate ? 'bg-primary text-white' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
                 }`}
               >
-                No date, just training
+                {t.onboarding.noDate}
               </button>
             </div>
             {hasDate && (
@@ -576,10 +561,10 @@ export default function Onboarding() {
 
           {/* optional target time, with live pace */}
           <div className="mt-6">
-            <label className="label">Target time (optional)</label>
+            <label className="label">{t.onboarding.targetTime}</label>
             <input
               className="input mt-1"
-              placeholder="e.g. 1:45:00 — leave blank if you just want to finish"
+              placeholder={t.onboarding.targetTimePlaceholder}
               value={targetTime}
               onChange={(e) => setTargetTime(e.target.value)}
             />
@@ -587,13 +572,13 @@ export default function Onboarding() {
               <p className="mt-2 text-xs">
                 {requiredPace ? (
                   <span className="text-primary">
-                    That is {requiredPace}/km for {Number(targetDistance)} km.
+                    {t.onboarding.requiredPace(requiredPace, Number(targetDistance))}
                   </span>
                 ) : (
                   <span className="text-zinc-500">
                     {targetDistanceValid
-                      ? 'Try 1:45:00, 45:30 or 1h45.'
-                      : 'Pick a target distance first.'}
+                      ? t.onboarding.timeHint
+                      : t.onboarding.pickDistanceFirst}
                   </span>
                 )}
               </p>
@@ -612,19 +597,19 @@ export default function Onboarding() {
 
       {step === 'experience' && (
         <div className="animate-fade-up">
-          <h1 className="text-3xl font-extrabold">Where are you starting from?</h1>
+          <h1 className="text-3xl font-extrabold">{t.onboarding.experienceTitle}</h1>
           <p className="mt-2 text-zinc-400">
-            This sets your starting volume, so the first week fits you.
+            {t.onboarding.experienceSubtitle}
           </p>
           <div className="mt-8 space-y-5">
             <div>
-              <label className="label">How long have you been running?</label>
+              <label className="label">{t.onboarding.howLongRunning}</label>
               <select
                 className="input mt-1"
                 value={experienceMonths}
                 onChange={(e) => setExperienceMonths(e.target.value)}
               >
-                <option value="">Select…</option>
+                <option value="">{t.onboarding.select}</option>
                 {EXPERIENCE_OPTIONS.map((o) => (
                   <option key={o.months} value={o.months}>
                     {o.label}
@@ -634,7 +619,7 @@ export default function Onboarding() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="label">Typical weekly volume</label>
+                <label className="label">{t.onboarding.weeklyVolume}</label>
                 <div className="flex items-center gap-2">
                   <input
                     type="number"
@@ -650,7 +635,7 @@ export default function Onboarding() {
                 </div>
               </div>
               <div>
-                <label className="label">Longest recent run</label>
+                <label className="label">{t.onboarding.longestRun}</label>
                 <div className="flex items-center gap-2">
                   <input
                     type="number"
@@ -671,20 +656,20 @@ export default function Onboarding() {
             Continue
           </button>
           <p className="mt-3 text-center text-xs text-zinc-600">
-            Not sure? Leave them blank — your coach will work it out from your runs.
+            {t.onboarding.experienceHint}
           </p>
         </div>
       )}
 
       {step === 'days' && (
         <div className="animate-fade-up">
-          <h1 className="text-3xl font-extrabold">When can you run?</h1>
+          <h1 className="text-3xl font-extrabold">{t.onboarding.daysTitle}</h1>
           <p className="mt-2 text-zinc-400">
-            Your plan only puts sessions on days that work for you.
+            {t.onboarding.daysSubtitle}
           </p>
 
           <div className="mt-8">
-            <label className="label">Days per week</label>
+            <label className="label">{t.onboarding.daysPerWeek}</label>
             <div className="mt-2 flex flex-wrap gap-2">
               {[2, 3, 4, 5, 6, 7].map((n) => (
                 <button
@@ -704,7 +689,7 @@ export default function Onboarding() {
           </div>
 
           <div className="mt-6">
-            <label className="label">Which days? (optional)</label>
+            <label className="label">{t.onboarding.whichDays}</label>
             <div className="mt-2 grid grid-cols-7 gap-1.5">
               {WEEKDAYS.map((d) => {
                 const on = availableDays.includes(d)
@@ -721,17 +706,17 @@ export default function Onboarding() {
                       on ? 'bg-primary text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
                     }`}
                   >
-                    {d.slice(0, 2)}
+                    {t.onboarding.weekdays[WEEKDAYS.indexOf(d)]}
                   </button>
                 )
               })}
             </div>
             <p className="mt-2 text-xs text-zinc-600">
               {availableDays.length === 0
-                ? 'Leave all off and your coach picks the days.'
+                ? t.onboarding.noDaysPicked
                 : availableDays.length < Number(daysPerWeek || 0)
-                  ? `You picked ${availableDays.length} day${availableDays.length === 1 ? '' : 's'} but asked for ${daysPerWeek} runs a week — your coach will use ${availableDays.length}.`
-                  : `${availableDays.length} days available.`}
+                  ? t.onboarding.daysConflict(availableDays.length, daysPerWeek)
+                  : t.onboarding.daysAvailable(availableDays.length)}
             </p>
           </div>
 
@@ -743,9 +728,9 @@ export default function Onboarding() {
 
       {step === 'runbefore' && (
         <div className="animate-fade-up">
-          <h1 className="text-3xl font-extrabold">Have you run before?</h1>
+          <h1 className="text-3xl font-extrabold">{t.onboarding.runBeforeTitle}</h1>
           <p className="mt-2 text-zinc-400">
-            Real runs beat any questionnaire — they show your coach what you can do today.
+            {t.onboarding.runBeforeSubtitle}
           </p>
           <div className="mt-8 space-y-3">
             <button
@@ -757,8 +742,8 @@ export default function Onboarding() {
                 hasRun === true ? 'border-primary ring-1 ring-primary/40' : ''
               }`}
             >
-              <h3 className="font-bold">Yes, regularly or on and off</h3>
-              <p className="mt-1 text-sm text-zinc-400">You’ll log 3 recent runs from memory.</p>
+              <h3 className="font-bold">{t.onboarding.yesRegularly}</h3>
+              <p className="mt-1 text-sm text-zinc-400">{t.onboarding.yesDesc}</p>
             </button>
             <button
               onClick={() => {
@@ -769,8 +754,8 @@ export default function Onboarding() {
                 hasRun === false ? 'border-primary ring-1 ring-primary/40' : ''
               }`}
             >
-              <h3 className="font-bold">No, I’m brand new</h3>
-              <p className="mt-1 text-sm text-zinc-400">Your coach will set you a simple test run.</p>
+              <h3 className="font-bold">{t.onboarding.noBrandNew}</h3>
+              <p className="mt-1 text-sm text-zinc-400">{t.onboarding.noDesc}</p>
             </button>
           </div>
         </div>
@@ -778,28 +763,28 @@ export default function Onboarding() {
 
       {step === 'runs' && (
         <div className="animate-fade-up">
-          <h1 className="text-3xl font-extrabold">Your 3 most recent runs</h1>
+          <h1 className="text-3xl font-extrabold">{t.onboarding.runsTitle}</h1>
           <p className="mt-2 text-zinc-400">
-            Rough numbers are fine — your coach calibrates the plan from these.
+            {t.onboarding.runsSubtitle}
           </p>
           <div className="mt-6 space-y-4">
             {runs.map((r, i) => (
               <div key={i} className="card space-y-3">
                 <div className="flex items-center justify-between">
-                  <p className="text-xs font-bold uppercase tracking-widest text-zinc-500">Run {i + 1}</p>
+                  <p className="text-xs font-bold uppercase tracking-widest text-zinc-500">{t.onboarding.runLabel(i + 1)}</p>
                   {i >= 3 && (
                     <button
                       type="button"
                       onClick={() => setRuns((rs) => rs.filter((_, idx) => idx !== i))}
                       className="text-xs text-zinc-500 hover:text-rose-400"
                     >
-                      Remove
+                      {t.onboarding.remove}
                     </button>
                   )}
                 </div>
                 <div className="grid grid-cols-3 gap-3">
                   <div>
-                    <label className="label">Distance (km)</label>
+                    <label className="label">{t.onboarding.distanceKm}</label>
                     <input
                       type="number"
                       step="0.1"
@@ -811,7 +796,7 @@ export default function Onboarding() {
                     />
                   </div>
                   <div>
-                    <label className="label">Time (min)</label>
+                    <label className="label">{t.onboarding.timeMin}</label>
                     <input
                       type="number"
                       min="1"
@@ -822,7 +807,7 @@ export default function Onboarding() {
                     />
                   </div>
                   <div>
-                    <label className="label">Date</label>
+                    <label className="label">{t.onboarding.date}</label>
                     <input
                       type="date"
                       max={todayISO()}
@@ -834,7 +819,7 @@ export default function Onboarding() {
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="label">Effort</label>
+                    <label className="label">{t.onboarding.effort}</label>
                     <select
                       className="input"
                       value={r.effort}
@@ -848,7 +833,7 @@ export default function Onboarding() {
                     </select>
                   </div>
                   <div>
-                    <label className="label">Avg HR (optional)</label>
+                    <label className="label">{t.onboarding.avgHr}</label>
                     <input
                       type="number"
                       min="60"
@@ -868,7 +853,7 @@ export default function Onboarding() {
             onClick={() => setRuns((rs) => [...rs, emptyRun(0)])}
             className="btn-ghost mt-4 w-full text-sm"
           >
-            + Add another run
+            {t.onboarding.addRun}
           </button>
           <button
             className="btn-primary mt-4 w-full"
@@ -882,19 +867,18 @@ export default function Onboarding() {
 
       {step === 'gorun' && (
         <div className="animate-fade-up">
-          <h1 className="text-3xl font-extrabold">Your first assignment 🏃</h1>
+          <h1 className="text-3xl font-extrabold">{t.onboarding.testRunTitle}</h1>
           <div className="card mt-6 border-primary/40">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-primary">Coach Runko says</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-primary">{t.onboarding.coachSays}</p>
             <p className="mt-2 leading-relaxed text-zinc-200">
-              Go run <strong>3 km at a conversational pace</strong> — you should be able to talk in full
-              sentences the whole way. Walk breaks are completely fine. Then come back and log it below.
+              {t.onboarding.testRunBody}
             </p>
           </div>
           <div className="card mt-4 space-y-3">
-            <p className="text-xs font-bold uppercase tracking-widest text-zinc-500">Log your test run</p>
+            <p className="text-xs font-bold uppercase tracking-widest text-zinc-500">{t.onboarding.logTestRun}</p>
             <div className="grid grid-cols-3 gap-3">
               <div>
-                <label className="label">Distance (km)</label>
+                <label className="label">{t.onboarding.distanceKm}</label>
                 <input
                   type="number"
                   step="0.1"
@@ -905,7 +889,7 @@ export default function Onboarding() {
                 />
               </div>
               <div>
-                <label className="label">Time (min)</label>
+                <label className="label">{t.onboarding.timeMin}</label>
                 <input
                   type="number"
                   min="1"
@@ -916,7 +900,7 @@ export default function Onboarding() {
                 />
               </div>
               <div>
-                <label className="label">Avg HR (optional)</label>
+                <label className="label">{t.onboarding.avgHr}</label>
                 <input
                   type="number"
                   min="60"
@@ -929,7 +913,7 @@ export default function Onboarding() {
               </div>
             </div>
             <div>
-              <label className="label">How hard did it feel?</label>
+              <label className="label">{t.onboarding.howHard}</label>
               <select
                 className="input"
                 value={testRun.effort}
@@ -947,21 +931,21 @@ export default function Onboarding() {
             Continue
           </button>
           <button onClick={() => go(1)} className="mt-3 w-full text-center text-xs text-zinc-500 hover:text-zinc-300">
-            I’ll do the test run later — skip for now
+            {t.onboarding.skipTestRun}
           </button>
         </div>
       )}
 
       {step === 'notes' && (
         <div className="animate-fade-up">
-          <h1 className="text-3xl font-extrabold">Anything else?</h1>
+          <h1 className="text-3xl font-extrabold">{t.onboarding.notesTitle}</h1>
           <p className="mt-2 text-zinc-400">
-            Tell your coach anything important — injuries, schedule, past races, how you like to train.
+            {t.onboarding.notesSubtitle}
           </p>
           <textarea
             rows={5}
             className="input mt-8 resize-none"
-            placeholder="e.g. Knee acts up on back-to-back days. I can only run mornings. Did a 25:30 5K last year…"
+            placeholder={t.onboarding.notesPlaceholder}
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
           />
@@ -971,14 +955,14 @@ export default function Onboarding() {
             className="btn-primary mt-6 w-full"
             onClick={() => (path === 'thorough' ? go(1) : finish())}
           >
-            {path === 'thorough' ? 'Continue' : 'Build my plan'}
+            {path === 'thorough' ? t.common.continue : t.onboarding.buildMyPlan}
           </button>
         </div>
       )}
 
       {step === 'chat' && (
         <div className="flex min-h-0 flex-1 flex-col animate-fade-up">
-          <h1 className="text-3xl font-extrabold">A few questions from your coach</h1>
+          <h1 className="text-3xl font-extrabold">{t.onboarding.chatTitle}</h1>
           <div className="mt-6 flex-1 space-y-3 overflow-y-auto">
             {chatMsgs.map((m, i) => (
               <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -1011,14 +995,14 @@ export default function Onboarding() {
 
           {ready ? (
             <button className="btn-primary mt-6 w-full" onClick={finish}>
-              Looks good — build my plan
+              {t.onboarding.chatLooksGood}
             </button>
           ) : (
             <>
               <form onSubmit={sendChat} className="mt-6 flex gap-2">
                 <input
                   className="input flex-1"
-                  placeholder="Answer your coach…"
+                  placeholder={t.onboarding.chatPlaceholder}
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
                 />
@@ -1030,7 +1014,7 @@ export default function Onboarding() {
                 onClick={finish}
                 className="mt-3 w-full text-center text-xs text-zinc-500 hover:text-zinc-300"
               >
-                Skip the questions — build my plan now
+                {t.onboarding.chatSkip}
               </button>
             </>
           )}
@@ -1043,7 +1027,7 @@ export default function Onboarding() {
       <div className="mt-auto flex items-center justify-between gap-4 pt-8">
         {stepIdx > 0 && step !== 'chat' ? (
           <button onClick={() => go(-1)} className="text-sm text-zinc-500 hover:text-zinc-300">
-            ← Back
+            {t.common.back}
           </button>
         ) : (
           <span />
@@ -1052,7 +1036,7 @@ export default function Onboarding() {
           onClick={skip}
           className="text-xs text-zinc-600 underline underline-offset-4 transition hover:text-zinc-400"
         >
-          {rebuilding ? 'Not now — back to the app' : 'Skip for now'}
+          {rebuilding ? t.onboarding.notNow : t.onboarding.skipForNow}
         </button>
       </div>
     </div>

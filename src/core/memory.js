@@ -95,13 +95,13 @@ export async function touchMemories(ids) {
 const MEMORY_RULES = `Store a fact ONLY if it will still be true in a month and changes how
 training should be planned.
 
-STORE (examples):
-- "Knee pain flares up when running on consecutive days" -> injury
-- "Can only run before work, early mornings" -> schedule
-- "Travels for work about one week every month" -> life_context
-- "Hates treadmills, runs outdoors in any weather" -> preference
-- "Switched target from the 10K to the spring marathon" -> goal_change
-- "Has a 5K PB of 21:40 from last autumn" -> preference
+STORE (examples, written in Slovenian because the runner reads these):
+- "Koleno zaboli, ko teče dva dni zapored" -> injury
+- "Teče lahko samo zjutraj pred službo" -> schedule
+- "Zaradi službe potuje približno en teden na mesec" -> life_context
+- "Ne mara tekalne steze, teče zunaj v vsakem vremenu" -> preference
+- "Cilj je zamenjal z 10 km na spomladanski maraton" -> goal_change
+- "Osebni rekord na 5 km je 21:40 iz lanske jeseni" -> preference
 
 DO NOT STORE (examples):
 - "Felt tired today" — transient
@@ -131,7 +131,7 @@ ${existing.length ? existing.map((m) => `- [${m.category}] ${m.content}`).join('
 ${MEMORY_RULES}
 
 Respond with JSON only:
-{"memories": [{"content": "<the fact, one short sentence, written in English in the third person>", "category": "<category>"}]}
+{"memories": [{"content": "<the fact, one short SLOVENIAN sentence in the third person>", "category": "<category>"}]}
 Return {"memories": []} if there is nothing durable to store.`
 }
 

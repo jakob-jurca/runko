@@ -91,16 +91,37 @@ is generic.
 1. Create a project at [supabase.com](https://supabase.com).
 2. **SQL Editor** → run [`supabase/schema.sql`](supabase/schema.sql) for a new
    database. For an existing one run the migrations you have not applied yet,
-   in order: [`migration_v3.sql`](supabase/migration_v3.sql) then
-   [`migration_v4.sql`](supabase/migration_v4.sql). Both contain new statements
-   only and will not re-issue policies.
+   in order: [`migration_v3.sql`](supabase/migration_v3.sql),
+   [`migration_v4.sql`](supabase/migration_v4.sql), then
+   [`migration_v5.sql`](supabase/migration_v5.sql), which adds the `ai_usage`
+   table the AI proxy rate-limits against, then
+   [`migration_v6.sql`](supabase/migration_v6.sql), which makes the two
+   subscription columns read-only to clients so the paywall cannot be
+   self-granted. All contain new statements only and will not re-issue
+   policies.
 3. (For fast local testing) **Authentication → Providers → Email**: disable
    "Confirm email" so signups get a session immediately.
 4. Copy the **Project URL** and **anon key** from **Settings → API**.
 
-### 2. Groq
+### 2. Groq — server-side only
 
 Create an API key at [console.groq.com/keys](https://console.groq.com/keys).
+
+**This key never goes in `.env`.** Anything named `VITE_*` is inlined into the
+browser bundle by Vite and is therefore public. The key is held as a Supabase
+secret and used only by the `ai-proxy` Edge Function, which requires a signed-in
+user and rate-limits per user:
+
+```bash
+# the CLI cannot be npm-installed globally; npx needs no install at all
+npx supabase@latest login
+npx supabase@latest link --project-ref <the subdomain of your VITE_SUPABASE_URL>
+npx supabase@latest functions deploy ai-proxy
+npx supabase@latest secrets set GROQ_API_KEY=gsk_...
+```
+
+Full details, the request/response contract and the error codes are in
+[`supabase/functions/ai-proxy/README.md`](supabase/functions/ai-proxy/README.md).
 
 ### 3. Environment
 
@@ -109,7 +130,7 @@ cp .env.example .env
 # fill in:
 # VITE_SUPABASE_URL=...
 # VITE_SUPABASE_ANON_KEY=...
-# VITE_GROQ_API_KEY=...
+# and nothing else — there is no AI key in the client.
 ```
 
 ### 4. Run
@@ -117,8 +138,8 @@ cp .env.example .env
 ```bash
 npm install
 npm run dev     # paywall is bypassed in dev
-npm test        # training-plan maths — no API key needed
-npm run build
+npm test        # plan maths, plus the RLS audit if .env is present
+npm run build   # refuses to emit a bundle containing a secret or the dev bypass
 ```
 
 ## Project structure
@@ -140,7 +161,7 @@ src/
     ├── env.js               # the only bundler-config touchpoint
     ├── supabase.js          # client
     ├── db.js                # all table reads/writes
-    ├── ai.js                # ALL Groq calls               ← AI integration point
+    ├── ai.js                # ALL AI calls, via ai-proxy   ← AI integration point
     ├── coach-prompt.js      # Coach Runko's persona + full runner context
     ├── memory.js            # durable facts the coach remembers
     ├── knowledge.js         # loads knowledge/*.md into prompts

@@ -14,6 +14,7 @@
  * Nothing else in the app needs to change — all gating goes through hasPremium().
  */
 import { IS_DEV } from './env'
+import { t } from './strings'
 
 export function isTrialActive(profile) {
   return Boolean(profile?.trial_end && new Date(profile.trial_end) > new Date())
@@ -51,14 +52,9 @@ export function trialDaysLeft(profile) {
 export const PLANS = [
   {
     id: 'premium_monthly',
-    name: 'Runko Premium',
-    price: '€7.99 / month',
-    features: [
-      'Unlimited AI coach chat',
-      'Personalized weekly training plans',
-      'Automatic plan adaptation',
-      'Priority access to integrations',
-    ],
+    name: t.subscription.planName,
+    price: t.subscription.price,
+    features: t.subscription.features,
   },
 ]
 
@@ -77,6 +73,6 @@ export async function startCheckout(planId = 'premium_monthly') {
   return {
     ok: false,
     reason: 'coming_soon',
-    message: `Payments are almost ready! (${planId}) Stripe checkout will be enabled in an upcoming release.`,
+    message: t.subscription.checkoutComingSoon,
   }
 }

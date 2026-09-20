@@ -12,6 +12,8 @@
  * Platform-agnostic (see ./README.md): no React, no DOM, no network.
  */
 
+import { heartRateFor, heartRateZones, maxHeartRate } from './heart-rate.js'
+
 export const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
 // ---------------------------------------------------------------------------
@@ -150,12 +152,12 @@ export const PACE_INTENSITIES = {
 
 /** Human labels used in the plan and shown on each workout card. */
 export const PACE_LABELS = {
-  easy: 'easy',
-  marathon: 'marathon pace',
-  threshold: 'threshold',
-  interval: 'interval',
-  repetition: 'repetition',
-  goal: 'goal pace',
+  easy: 'lahkotno',
+  marathon: 'maratonski tempo',
+  threshold: 'pragovni',
+  interval: 'intervalni',
+  repetition: 'ponovitve',
+  goal: 'ciljni tempo',
 }
 
 /**
@@ -178,6 +180,37 @@ export function pacesFromVdot(vdot) {
     out[name] = clamp(1000 / velocity, MIN_PLAUSIBLE_PACE, MAX_PLAUSIBLE_PACE)
   }
   return out
+}
+
+/**
+ * How wide a pace target should be, by intensity.
+ *
+ * A single "6:17/km" reads as a precision nobody can hold — terrain, wind and
+ * how the legs feel move every run. Easy runs get an asymmetric window because
+ * running them slower is fine (and usually better); hard efforts are tighter
+ * because the pace is the point.
+ */
+const PACE_WINDOW = {
+  easy: [-0.02, 0.06],
+  warmup: [-0.02, 0.06],
+  cooldown: [-0.02, 0.06],
+  recovery: [-0.02, 0.08],
+  marathon: [-0.02, 0.03],
+  goal: [-0.02, 0.03],
+  threshold: [-0.02, 0.02],
+  interval: [-0.02, 0.02],
+  repetition: [-0.02, 0.02],
+}
+
+/**
+ * A target pace window, e.g. "6:10-6:40/km".
+ * @returns {{min: number, max: number, label: string}}
+ */
+export function paceRange(minPerKm, paceKey = 'easy') {
+  const [lo, hi] = PACE_WINDOW[paceKey] ?? PACE_WINDOW.easy
+  const fast = minPerKm * (1 + lo)
+  const slow = minPerKm * (1 + hi)
+  return { min: fast, max: slow, label: `${formatPace(fast)}-${formatPace(slow)}/km` }
 }
 
 /** "5:42" from 5.7 min/km. */
@@ -353,10 +386,10 @@ function goalMessage({ verdict, targetDistanceKm, targetTimeMin, predictedMin, a
 export function goalLabel(profile = {}) {
   const d = Number(profile.target_distance_km)
   const time = Number(profile.target_time_min)
-  if (!(d > 0)) return profile.event_date ? `Event on ${profile.event_date}` : 'General fitness'
+  if (!(d > 0)) return profile.event_date ? `Tekma ${profile.event_date}` : 'Splošna kondicija'
   const parts = [`${d} km`]
-  if (time > 0) parts.push(`in ${formatDuration(time)}`)
-  parts.push(profile.event_date ? `on ${profile.event_date}` : '— no date set')
+  if (time > 0) parts.push(`v ${formatDuration(time)}`)
+  parts.push(profile.event_date ? `dne ${profile.event_date}` : '— brez datuma')
   return parts.join(' ')
 }
 
@@ -380,10 +413,10 @@ export const PHASES = ['base', 'build', 'sharpen', 'taper']
 
 /** What each phase is for — surfaced on the dashboard and fed to the AI. */
 export const PHASE_INTENT = {
-  base: 'building aerobic base and getting the body used to regular running',
-  build: 'raising sustainable speed with threshold work while volume grows',
-  sharpen: 'race-specific speed and rehearsing goal pace',
-  taper: 'shedding fatigue while staying sharp for race day',
+  base: 'gradnjo aerobne osnove in navajanje telesa na reden tek',
+  build: 'dvig vzdržne hitrosti s pragovnim delom, medtem ko obseg raste',
+  sharpen: 'tekmovalno hitrost in vadbo ciljnega tempa',
+  taper: 'odpravljanje utrujenosti ob ohranjanju ostrine za dan tekme',
 }
 
 export const TAPER_WEEKS = 2
@@ -531,6 +564,7 @@ export function buildVolumeCurve({
   const volumes = []
   let progressive = startVolumeKm // the build trend, ignoring recovery dips
   let atCeilingCount = 0
+  let lastProgressiveValue = null
 
   for (let i = 0; i < totalWeeks; i++) {
     if (phases[i] === 'taper') {
@@ -538,7 +572,7 @@ export function buildVolumeCurve({
       continue
     }
     if (recoveryWeeks[i]) {
-      volumes.push(round1(progressive * RECOVERY_VOLUME_FACTOR))
+      volumes.push(Math.max(1, Math.round(progressive * RECOVERY_VOLUME_FACTOR)))
       continue
     }
     if (i > 0) progressive = Math.min(progressive * MAX_WEEKLY_INCREASE, peakCap)
@@ -549,7 +583,19 @@ export function buildVolumeCurve({
     // one — standard undulating periodization, and every week now differs.
     const atCeiling = progressive >= peakCap - 0.05
     const lighter = atCeiling && atCeilingCount++ % 2 === 1
-    volumes.push(round1(lighter ? progressive * CAP_UNDULATION : progressive))
+    let value = Math.round(lighter ? progressive * CAP_UNDULATION : progressive)
+
+    // Distances are whole kilometres, so a week must step by at least one.
+    // Below ~15 km/week a 10% increase rounds to nothing and two consecutive
+    // weeks come out identical, which reads as a broken plan. A 1 km step on
+    // a 9 km week is 11% — over the ceiling in percentage terms, but it is
+    // one kilometre, and the alternative is a plan that never changes.
+    if (!lighter && !atCeiling && lastProgressiveValue !== null && value <= lastProgressiveValue) {
+      value = Math.min(Math.round(peakCap), lastProgressiveValue + 1)
+      progressive = Math.max(progressive, value)
+    }
+    if (!lighter) lastProgressiveValue = value
+    volumes.push(value)
   }
 
   // Taper: measured against the biggest week actually reached.
@@ -887,7 +933,7 @@ export function layOutWeek({
     return { day, type: 'tempo', paceKey: 'threshold' } // taper: short and sharp
   })
 
-  return DAYS.map((day) => {
+  const built = DAYS.map((day) => {
     // Race day overrides everything else on the calendar.
     if (race && day === race.day) {
       return makeDay({
@@ -921,18 +967,53 @@ export function layOutWeek({
     }
     return makeDay({ day, type: 'easy', distanceKm: easyEach, paceKey: 'easy', paces, intensity: 'easy' })
   })
+
+  return settleRounding(built, budget, maxLongRunKm, paces)
+}
+
+/**
+ * Give the rounding remainder to the long run.
+ *
+ * Rounding every day to a whole kilometre loses up to half a kilometre per
+ * day, which at beginner volumes is most of a week's 10% progression — two
+ * consecutive weeks would round to exactly the same numbers. Pushing the
+ * difference onto the long run keeps the week's total honest AND keeps
+ * consecutive weeks distinct.
+ */
+function settleRounding(days, budget, maxLongRunKm, paces) {
+  const target = Math.round(budget)
+  const trainable = days.filter((d) => d.type !== 'rest' && d.type !== 'race')
+  if (!trainable.length) return days
+
+  const sum = trainable.reduce((t, d) => t + d.distance_km, 0)
+  let diff = target - sum
+  if (diff === 0) return days
+
+  // The long run absorbs it; it is the least sensitive to a kilometre either
+  // way, and never past its ramp ceiling.
+  const long = trainable.find((d) => d.type === 'long') ||
+    trainable.reduce((a, b) => (b.distance_km > a.distance_km ? b : a))
+  const ceiling = maxLongRunKm ? Math.round(maxLongRunKm) : Infinity
+  const adjusted = clamp(long.distance_km + diff, 1, ceiling)
+  if (adjusted === long.distance_km) return days
+
+  return days.map((d) =>
+    d === long
+      ? { ...d, distance_km: adjusted, duration_min: Math.round(adjusted * (paces[d.pace_key] ?? paces.easy)) }
+      : d
+  )
 }
 
 /** Structural fallback titles. The AI may replace these with Slovenian ones. */
 export const DEFAULT_TITLES = {
-  easy: 'Easy Run',
-  long: 'Long Run',
-  tempo: 'Tempo Run',
-  interval: 'Intervals',
-  repetition: 'Repetitions',
-  cross: 'Cross Training',
-  race: 'Race Day',
-  rest: 'Rest Day',
+  easy: 'Lahkoten tek',
+  long: 'Dolgi tek',
+  tempo: 'Tempo tek',
+  interval: 'Intervali',
+  repetition: 'Ponovitve',
+  cross: 'Druga vadba',
+  race: 'Dan tekme',
+  rest: 'Počitek',
 }
 
 function restDay(day) {
@@ -948,15 +1029,27 @@ function restDay(day) {
   }
 }
 
+/**
+ * Prescribed distances are WHOLE kilometres. "7.4 km" is false precision —
+ * nobody paces a run to 100 m, and it made every card look machine-generated.
+ * Interval reps are the exception and stay in metres (400 m, 800 m, 1000 m).
+ */
+export function roundKm(km) {
+  if (!(km > 0)) return 0
+  return Math.max(1, Math.round(km))
+}
+
 function makeDay({ day, type, distanceKm, hardKm = 0, paceKey, paces, intensity }) {
-  const distance = round1(Math.max(0, distanceKm))
+  // Race day keeps the REAL distance: a half marathon is 21.1 km, not 21.
+  const distance = type === 'race' ? round1(distanceKm) : roundKm(distanceKm)
   const paceMin = paces[paceKey]
   // A quality session runs its hard portion at the target pace and jogs the
   // rest, so its duration is a blend rather than distance x target pace.
-  const hard = round1(Math.min(hardKm, distance))
+  const hard = Math.min(round1(hardKm), distance)
   const duration = hard > 0
     ? Math.round(hard * paceMin + (distance - hard) * paces.easy)
     : Math.round(distance * paceMin)
+  const range = paceRange(paceMin, paceKey)
   return {
     day,
     type,
@@ -965,10 +1058,174 @@ function makeDay({ day, type, distanceKm, hardKm = 0, paceKey, paces, intensity 
     hard_km: hard || 0,
     duration_min: duration,
     pace: `${formatPace(paceMin)}/km`,
+    pace_range: range.label,
     pace_key: paceKey,
     pace_label: PACE_LABELS[paceKey],
     intensity,
   }
+}
+
+// ---------------------------------------------------------------------------
+// 6b. Workout segments — the structure the card renders from
+// ---------------------------------------------------------------------------
+
+/**
+ * Rep distances (metres) chosen by how much fast running the session carries.
+ * Shorter, sharper reps for small volumes; 1 km reps once there is enough.
+ */
+const REP_LADDER = [
+  { upToHardKm: 2.0, metres: 300 },
+  { upToHardKm: 3.2, metres: 400 },
+  { upToHardKm: 5.0, metres: 800 },
+  { upToHardKm: Infinity, metres: 1000 },
+]
+
+/** Shortest session worth breaking into warm-up / main / cool-down. */
+const MIN_SEGMENTED_KM = 4
+
+/** Workout types that are run at one steady effort start to finish. */
+const STEADY_TYPES = new Set(['easy', 'long', 'cross', 'race', 'rest'])
+
+const round1seg = (n) => Math.round(n * 10) / 10
+
+/**
+ * Break a workout into the parts the runner actually executes.
+ *
+ * A tempo run is not "9.8 km at 5:35"; it is a jog, a hard middle, and a jog.
+ * Showing one averaged pace for it is wrong, and it is what made the cards
+ * unreadable. Steady runs get no segments — their single spec line says
+ * everything.
+ *
+ * Every segment carries its own pace AND its own heart-rate range, so the UI
+ * renders from data instead of parsing a sentence.
+ *
+ * @param {object} day - a day from layOutWeek
+ * @param {object} paces - min/km by pace key
+ * @param {number|null} age - for the HR ranges; null simply omits them
+ * @returns {Array} segments, empty for steady workouts
+ */
+export function buildSegments(day, paces, age = null) {
+  if (STEADY_TYPES.has(day.type)) return []
+
+  const total = day.distance_km
+  const hard = day.hard_km || 0
+  if (!(total > 0) || !(hard > 0)) return []
+
+  // A session has to be long enough to hold a warm-up, a main part and a
+  // cool-down of a kilometre each. Below that the breakdown is fiction —
+  // a 1 km "tempo" was rendering as three 1 km segments totalling 3 km.
+  if (total < MIN_SEGMENTED_KM) return []
+
+  const easyPace = paces.easy
+  const mainPace = paces[day.pace_key] ?? easyPace
+  const isReps = day.type === 'interval' || day.type === 'repetition'
+
+  // Reserve the jogs FIRST. Sizing the hard part first and giving it whatever
+  // was left meant a short session could end up with no cool-down at all.
+  // Roughly a fifth of the session warming up, a tenth cooling down.
+  const warmup = clamp(Math.round(total * 0.2), 1, 3)
+  const cooldown = clamp(Math.round(total * 0.12), 1, 2)
+  const available = Math.max(1, total - warmup - cooldown)
+
+  let repPlan = null
+  let mainDistance = available
+  if (isReps) {
+    const metres = REP_LADDER.find((r) => hard <= r.upToHardKm).metres
+    const recovery = Math.max(100, Math.round(metres / 2 / 100) * 100)
+    // Each rep costs its own distance plus the jog that follows it.
+    const perRep = metres + recovery
+    const count = clamp(Math.round((available * 1000) / perRep), 3, 20)
+    repPlan = { count, distance_m: metres, recovery_m: recovery }
+    mainDistance = (count * metres + Math.max(0, count - 1) * recovery) / 1000
+  }
+
+  const segments = []
+  if (warmup > 0) {
+    segments.push(segment({
+      kind: 'warmup', label: 'OGREVANJE', distanceKm: warmup,
+      paceKey: 'warmup', paceMin: easyPace, age,
+    }))
+  }
+
+  if (isReps) {
+    const { count, distance_m: metres, recovery_m: recoveryMetres } = repPlan
+    segments.push({
+      ...segment({
+        kind: 'reps', label: 'GLAVNI DEL',
+        distanceKm: round1seg(mainDistance),
+        paceKey: day.pace_key, paceMin: mainPace, age,
+      }),
+      reps: {
+        count,
+        distance_m: metres,
+        recovery_m: recoveryMetres,
+        // Rendered as: 6 × 400 m @ 4:50/km, vmes 200 m lahkotno
+        summary: `${count} × ${metres} m @ ${paceRange(mainPace, day.pace_key).label}, vmes ${recoveryMetres} m lahkotno`,
+      },
+    })
+  } else {
+    // tempo, progression and anything else with a sustained hard middle
+    segments.push(segment({
+      kind: 'main', label: 'GLAVNI DEL', distanceKm: Math.max(1, Math.round(mainDistance)),
+      paceKey: day.pace_key, paceMin: mainPace, age,
+    }))
+  }
+
+  if (cooldown > 0) {
+    segments.push(segment({
+      kind: 'cooldown', label: 'OHLAJANJE', distanceKm: cooldown,
+      paceKey: 'cooldown', paceMin: easyPace, age,
+    }))
+  }
+  return segments
+}
+
+function segment({ kind, label, distanceKm, paceKey, paceMin, age }) {
+  return {
+    kind,
+    label,
+    distance_km: distanceKm,
+    pace: `${formatPace(paceMin)}/km`,
+    pace_range: paceRange(paceMin, paceKey).label,
+    pace_key: paceKey,
+    duration_min: Math.round(distanceKm * paceMin),
+    hr: heartRateFor(age, { paceKey }),
+  }
+}
+
+/**
+ * A realistic time window for a run, rather than a single fake-precise
+ * number. Terrain, traffic lights and how the legs feel move this around.
+ */
+export function durationRange(durationMin) {
+  if (!(durationMin > 0)) return null
+  return {
+    min: Math.max(1, Math.round(durationMin * 0.95)),
+    max: Math.round(durationMin * 1.1),
+  }
+}
+
+/**
+ * Attach segments, an HR range and a duration window to every day of a week.
+ * Called once at plan-build time; the result is stored, so rendering a card
+ * costs nothing.
+ */
+export function enrichDays(days, paces, age = null) {
+  return days.map((day) => {
+    const segments = buildSegments(day, paces, age)
+    const paceMin = paces[day.pace_key]
+    return {
+      ...day,
+      hr: heartRateFor(age, { paceKey: day.pace_key, intensity: day.intensity }),
+      duration_range: durationRange(day.duration_min),
+      // Legacy days stored before pace ranges existed get one here.
+      pace_range: day.pace_range || (paceMin ? paceRange(paceMin, day.pace_key).label : null),
+      segments,
+      // The card shows a single TEMPO line only when the whole run is at one
+      // pace; segmented workouts show their parts instead.
+      is_segmented: segments.length > 0,
+    }
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -1053,7 +1310,7 @@ export function buildPlanSkeleton({ profile = {}, totalWeeks, runs = [], memorie
     const phase = phases[i]
     const isRecovery = recoveryWeeks[i]
     const isFinalWeek = i === totalWeeks - 1
-    const days = layOutWeek({
+    const rawDays = layOutWeek({
       volumeKm: volumes[i],
       phase,
       isRecovery,
@@ -1064,14 +1321,19 @@ export function buildPlanSkeleton({ profile = {}, totalWeeks, runs = [], memorie
       goalPaceKey,
       race: isFinalWeek && raceDay ? { day: raceDay, distanceKm: targetDistanceKm } : null,
     })
+    // Segments, HR ranges and time windows are computed ONCE here and stored
+    // with the plan, so rendering a workout card never calculates or calls out.
+    const days = enrichDays(rawDays, paces, profile.age)
     weeks.push({
       week_number: i + 1,
       phase,
       is_recovery: isRecovery,
-      target_volume_km: round1(days.reduce((s, d) => s + d.distance_km, 0)),
+      // Recomputed from the ROUNDED day distances, so the week total always
+      // equals what the cards actually add up to.
+      target_volume_km: Math.round(days.reduce((s, d) => s + d.distance_km, 0)),
       planned_volume_km: volumes[i],
       intent: isRecovery
-        ? 'absorbing the last three weeks of training so the next block can go harder'
+        ? 'vsrkavanje zadnjih treh tednov treninga, da bo naslednji blok lahko trši'
         : PHASE_INTENT[phase],
       days,
     })
@@ -1093,6 +1355,8 @@ export function buildPlanSkeleton({ profile = {}, totalWeeks, runs = [], memorie
     start_volume_km: startVolumeKm,
     peak_volume_km: Math.max(...weeks.map((w) => w.target_volume_km)),
     start_long_run_km: round1(startLongRunKm),
+    hr_max: maxHeartRate(profile.age),
+    hr_zones: heartRateZones(profile.age),
     max_long_run_km: round1(Math.max(...longRunCaps)),
     constraints,
     weeks,

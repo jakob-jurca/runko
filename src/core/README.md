@@ -38,6 +38,9 @@ this folder.
 | File | Responsibility |
 | --- | --- |
 | `env.js` | The only place that reads bundler configuration. See below. |
+| `strings.js` | Every user-facing string, in Slovenian. Pure data; core produces runner-facing text too, so it cannot live in the UI layer. |
+| `dates.js` | Calendar-date arithmetic in the runner's local timezone. Pure, and tested — getting it wrong files runs on the wrong day. |
+| `heart-rate.js` | Training heart-rate zones from age (Tanaka). |
 | `supabase.js` | The Supabase client, plus a dev-time sanity check of the anon key. |
 | `db.js` | Every table read and write. Pages never query Supabase directly. |
 | `ai.js` | Every call to the AI provider (Groq), and the prompt builders around them. |
@@ -55,7 +58,10 @@ rewrites **these two and nothing else**:
 
 1. **`env.js`** — reads `import.meta.env.*`. Swap it for `expo-constants`,
    `react-native-config`, or whatever the app uses, keeping the same exported
-   names (`IS_DEV`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `GROQ_API_KEY`).
+   names (`IS_DEV`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`). There is deliberately
+   no AI key among them: the client holds no AI credential on any platform, and
+   a port must not add one. `ai.js` calls the `ai-proxy` Edge Function, which is
+   the only thing that sees the Groq key.
 
 2. **`knowledge.js`** — uses `import.meta.glob('../../knowledge/*.md', { query: '?raw' })`
    to bundle the knowledge base at build time. Metro has no `import.meta.glob`;

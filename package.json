@@ -5,9 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && node scripts/verify-bundle.mjs",
     "preview": "vite preview",
-    "test": "node tests/run.mjs"
+    "test": "node tests/run.mjs",
+    "verify:bundle": "node scripts/verify-bundle.mjs",
+    "audit:rls": "node tests/rls-live.test.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",

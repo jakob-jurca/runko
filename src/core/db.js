@@ -3,6 +3,11 @@
  * Every table read/write goes through here so pages stay declarative.
  */
 import { supabase } from './supabase'
+import { t } from './strings'
+// Imported for use INSIDE this file. The re-export at the bottom is a
+// convenience for callers and does NOT bind these names locally — assuming
+// it did is what left currentWeekNumber calling an undefined startOfWeekISO.
+import { currentWeekNumber } from './dates.js'
 
 // ---------- users (profile) ----------
 
@@ -30,9 +35,7 @@ export async function getConfirmedUserId() {
   const { data: refreshed, error: refreshErr } = await supabase.auth.refreshSession()
   if (!refreshErr && refreshed?.user) return refreshed.user.id
 
-  throw new Error(
-    'Your login session is no longer valid. Please sign out, sign back in, and try again.'
-  )
+  throw new Error(t.errors.sessionInvalid)
 }
 
 /**
@@ -52,10 +55,7 @@ export async function saveProfile(profile, { retries = 3 } = {}) {
     if (error.code !== FK_VIOLATION) throw error
 
     if (attempt >= retries) {
-      throw new Error(
-        'Could not link your profile to your account (the sign-up hasn’t fully settled). ' +
-          'Please sign out, sign back in, and finish onboarding again.'
-      )
+      throw new Error(t.errors.profileLink)
     }
     await sleep(1000 * (attempt + 1)) // 1s, 2s, 3s
     // Re-confirm (and possibly refresh) the auth user before the next try.
@@ -94,23 +94,6 @@ export async function getPlans(userId) {
     .order('week_number', { ascending: true })
   if (error) throw error
   return data ?? []
-}
-
-/**
- * Which week of the plan is the runner in right now?
- * Week 1 is the calendar week the plan was created in (created_at of the
- * first row); clamped to the last generated week so a lapsed plan still
- * shows something sensible.
- */
-export function currentWeekNumber(plans) {
-  if (!plans?.length) return 1
-  const first = plans[0]
-  const lastWeek = plans[plans.length - 1].week_number
-  if (!first.created_at) return lastWeek
-  const start = new Date(startOfWeekISO(new Date(first.created_at)))
-  const now = new Date(startOfWeekISO())
-  const elapsed = Math.round((now - start) / (7 * 86_400_000))
-  return Math.min(Math.max(first.week_number + elapsed, 1), lastWeek)
 }
 
 /** The plan row for the week the runner is currently in. */
@@ -222,28 +205,12 @@ export async function addChatMessage(userId, role, content) {
 
 // ---------- helpers ----------
 
-/** ISO date (yyyy-mm-dd) of the Monday of the current week. */
-export function startOfWeekISO(d = new Date()) {
-  const date = new Date(d)
-  const day = (date.getDay() + 6) % 7 // Mon=0 … Sun=6
-  date.setDate(date.getDate() - day)
-  return date.toISOString().slice(0, 10)
-}
-
-/** ISO date `days` days after `iso`. */
-export function addDaysISO(iso, days) {
-  const d = new Date(iso + 'T00:00:00Z')
-  d.setUTCDate(d.getUTCDate() + days)
-  return d.toISOString().slice(0, 10)
-}
-
-/**
- * Calendar Monday a given plan week starts on. Week 1 = the Monday of the
- * week the plan was created in, each following week 7 days later.
- */
-export function weekStartISO(plans, weekNumber) {
-  if (!plans?.length) return startOfWeekISO()
-  const first = plans[0]
-  const base = startOfWeekISO(first.created_at ? new Date(first.created_at) : new Date())
-  return addDaysISO(base, (weekNumber - first.week_number) * 7)
-}
+// Date helpers live in ./dates.js (pure, no Supabase) and are re-exported
+// here so existing imports keep working.
+export {
+  todayISO,
+  startOfWeekISO,
+  addDaysISO,
+  weekStartISO,
+  currentWeekNumber,
+} from './dates.js'

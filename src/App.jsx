@@ -1,7 +1,9 @@
 import { BrowserRouter, Routes, Route, Navigate, useSearchParams } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { isSupabaseConfigured } from './core/supabase'
+import { t } from './core/strings'
 import Auth from './pages/Auth'
+import ResetPassword from './pages/ResetPassword'
 import Onboarding from './pages/Onboarding'
 import Dashboard from './pages/Dashboard'
 import Plan from './pages/Plan'
@@ -13,8 +15,11 @@ import { FullScreenSpinner } from './components/Spinner'
 
 /** Requires a session AND a completed onboarding profile. */
 function Protected({ children }) {
-  const { session, profile, loading } = useAuth()
+  const { session, profile, loading, recovery } = useAuth()
   if (loading) return <FullScreenSpinner />
+  // A recovery session is a real session, so this guard would otherwise wave
+  // the user straight through without them ever setting a new password.
+  if (recovery) return <Navigate to="/reset-password" replace />
   if (!session) return <Navigate to="/auth" replace />
   if (!profile) return <Navigate to="/onboarding" replace />
   return (
@@ -33,20 +38,32 @@ function Protected({ children }) {
  * home, so a stray /onboarding URL can't wipe their setup.
  */
 function OnboardingGate({ children }) {
-  const { session, profile, loading } = useAuth()
+  const { session, profile, loading, recovery } = useAuth()
   const [params] = useSearchParams()
   if (loading) return <FullScreenSpinner />
+  if (recovery) return <Navigate to="/reset-password" replace />
   if (!session) return <Navigate to="/auth" replace />
   if (profile && params.get('rebuild') !== '1') return <Navigate to="/" replace />
   return children
+}
+
+/**
+ * The login screen. Diverts to /reset-password mid-recovery — the emailed
+ * link can land here (it is where an unauthenticated user is sent), and
+ * showing a login form at that point is exactly the bug this fixes.
+ */
+function AuthGate() {
+  const { recovery, loading } = useAuth()
+  if (loading) return <FullScreenSpinner />
+  if (recovery) return <Navigate to="/reset-password" replace />
+  return <Auth />
 }
 
 function ConfigBanner() {
   if (isSupabaseConfigured) return null
   return (
     <div className="fixed inset-x-0 top-0 z-50 bg-amber-500/90 px-4 py-2 text-center text-sm font-medium text-black">
-      Supabase is not configured — copy <code>.env.example</code> to <code>.env</code> and fill in
-      your keys, then restart the dev server.
+      {t.errors.supabaseMissing}
     </div>
   )
 }
@@ -57,7 +74,8 @@ export default function App() {
       <BrowserRouter>
         <ConfigBanner />
         <Routes>
-          <Route path="/auth" element={<Auth />} />
+          <Route path="/auth" element={<AuthGate />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route
             path="/onboarding"
             element={
