@@ -10,7 +10,13 @@ export const supabase = createClient(url, anonKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
+    // Parses the emailed link (#access_token=…&type=recovery) into a session
+    // and fires PASSWORD_RECOVERY; AuthContext turns that into the recovery
+    // lock. Implicit, not PKCE: PKCE only works if the link is opened in the
+    // same browser that requested it, and reset emails are often opened on a
+    // phone.
     detectSessionInUrl: true,
+    flowType: 'implicit',
   },
 })
 

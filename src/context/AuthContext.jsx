@@ -15,11 +15,13 @@ import { getProfile } from '../core/db'
 const AuthContext = createContext(null)
 
 /**
- * The flag is mirrored into sessionStorage because PASSWORD_RECOVERY fires
- * exactly once, when the SDK parses the link out of the URL. A reload (or
- * React refreshing the tree) during the reset would otherwise drop the flag
- * and let the half-finished recovery through. Cleared on success and on
- * sign-out; scoped to the tab, so it cannot linger.
+ * The flag is persisted because PASSWORD_RECOVERY fires exactly once, when
+ * the SDK parses the link out of the URL. It lives in localStorage, next to
+ * the Supabase session it describes: the recovery session is shared by every
+ * tab and survives a browser restart, so the flag must too. With a tab-scoped
+ * flag, opening the app in a second tab (or reopening the browser) found a
+ * valid session, no flag, and walked the user into the dashboard on their old
+ * password. Cleared on success, on sign-out, and whenever there is no session.
  */
 const RECOVERY_KEY = 'runko_password_recovery'
 
@@ -41,13 +43,40 @@ function urlIsRecoveryLink() {
   }
 }
 
+/**
+ * A rejected email link (expired, already used) comes back as
+ * #error=…&error_code=otp_expired. If Supabase's Redirect URLs allowlist does
+ * not include /reset-password it falls back to the Site URL, so the error
+ * lands on "/" — where the guards bounce to /auth and drop the hash, leaving
+ * the runner on a login screen with no idea why. Move it to /reset-password,
+ * which explains and offers a fresh link. Must run before the router reads
+ * the URL (see main.jsx). Signup confirmation is off, so every emailed link
+ * this app sends is a recovery link.
+ */
+export function routeFailedAuthLink() {
+  try {
+    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+    const query = new URLSearchParams(window.location.search)
+    const failed = hash.get('error_code') || query.get('error_code')
+    if (failed && window.location.pathname !== '/reset-password') {
+      window.history.replaceState(
+        null,
+        '',
+        `/reset-password${window.location.search}${window.location.hash}`
+      )
+    }
+  } catch {
+    /* no history API — the runner still lands on the login screen */
+  }
+}
+
 function readRecoveryFlag() {
   if (urlIsRecoveryLink()) {
     writeRecoveryFlag(true)
     return true
   }
   try {
-    return sessionStorage.getItem(RECOVERY_KEY) === '1'
+    return localStorage.getItem(RECOVERY_KEY) === '1'
   } catch {
     return false
   }
@@ -67,14 +96,14 @@ function cleanRecoveryUrl() {
     if (!window.location.hash && !window.location.search) return
     window.history.replaceState(null, '', window.location.pathname)
   } catch {
-    /* no history API — the sessionStorage flag still governs */
+    /* no history API — the stored flag still governs */
   }
 }
 
 function writeRecoveryFlag(on) {
   try {
-    if (on) sessionStorage.setItem(RECOVERY_KEY, '1')
-    else sessionStorage.removeItem(RECOVERY_KEY)
+    if (on) localStorage.setItem(RECOVERY_KEY, '1')
+    else localStorage.removeItem(RECOVERY_KEY)
   } catch {
     /* private mode — the in-memory flag still covers the common path */
   }
@@ -97,13 +126,21 @@ export function AuthProvider({ children }) {
         if (error) {
           console.warn('[auth] Stored session is no longer valid — clearing it:', error.message)
           await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
+          writeRecoveryFlag(false)
+          setRecovery(false)
           setSession(null)
           setLoading(false)
           return
         }
       }
       setSession(data.session)
-      if (!data.session) setLoading(false)
+      if (!data.session) {
+        // A leftover flag with no session behind it (recovery session expired,
+        // or signed out elsewhere) has nothing left to protect.
+        writeRecoveryFlag(false)
+        setRecovery(false)
+        setLoading(false)
+      }
     })
     const { data: sub } = supabase.auth.onAuthStateChange((event, newSession) => {
       if (event === 'PASSWORD_RECOVERY') {
@@ -118,7 +155,17 @@ export function AuthProvider({ children }) {
       }
       setSession(newSession)
     })
-    return () => sub.subscription.unsubscribe()
+    // Keep other open tabs in step: a recovery started (or finished) in one
+    // tab must lock (or release) the app in all of them, since they share
+    // the session.
+    const onStorage = (e) => {
+      if (e.key === RECOVERY_KEY) setRecovery(e.newValue === '1')
+    }
+    window.addEventListener('storage', onStorage)
+    return () => {
+      sub.subscription.unsubscribe()
+      window.removeEventListener('storage', onStorage)
+    }
   }, [])
 
   // Load the profile row whenever the session changes.
@@ -152,6 +199,18 @@ export function AuthProvider({ children }) {
     setRecovery(false)
   }, [])
 
+  /**
+   * The runner backed out of the reset. The recovery session must not
+   * outlive the screen that justified it, so end it here (this device only —
+   * backing out is not a reason to log them out everywhere).
+   */
+  const cancelRecovery = useCallback(async () => {
+    writeRecoveryFlag(false)
+    cleanRecoveryUrl()
+    await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
+    setRecovery(false)
+  }, [])
+
   const signOut = useCallback(() => {
     // Drop any in-progress onboarding draft (same key as pages/Onboarding.jsx)
     // so the next account on this browser doesn't inherit it.
@@ -164,7 +223,16 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider
-      value={{ session, profile, loading, recovery, clearRecovery, refreshProfile, signOut }}
+      value={{
+        session,
+        profile,
+        loading,
+        recovery,
+        clearRecovery,
+        cancelRecovery,
+        refreshProfile,
+        signOut,
+      }}
     >
       {children}
     </AuthContext.Provider>

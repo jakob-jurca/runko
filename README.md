@@ -102,6 +102,12 @@ is generic.
 3. (For fast local testing) **Authentication → Providers → Email**: disable
    "Confirm email" so signups get a session immediately.
 4. Copy the **Project URL** and **anon key** from **Settings → API**.
+5. **Authentication → URL Configuration → Redirect URLs**: add
+   `https://<your-app>.vercel.app/reset-password` and
+   `http://localhost:5173/reset-password`. Without them Supabase silently
+   drops the `redirectTo` of password-reset emails and sends the link to the
+   Site URL instead. The app copes (it detects the recovery link on any path),
+   but the link should land on the reset screen directly.
 
 ### 2. Groq — server-side only
 

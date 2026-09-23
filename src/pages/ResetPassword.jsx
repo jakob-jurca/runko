@@ -4,8 +4,26 @@ import { useAuth } from '../context/AuthContext'
 import { supabase } from '../core/supabase'
 import Spinner from '../components/Spinner'
 import { t } from '../core/strings'
+import { RESET_REDIRECT_PATH } from './Auth'
 
 const MIN_LENGTH = 6
+
+/**
+ * Supabase error from updateUser → something a Slovenian runner can act on.
+ * Matched on the stable `code` first; the message check covers older servers
+ * that send only English text.
+ */
+function describeUpdateError(err) {
+  const code = err?.code || ''
+  const msg = err?.message || ''
+  if (code === 'same_password' || /different from the old/i.test(msg)) return t.reset.samePassword
+  if (code === 'weak_password' || /weak/i.test(msg)) return t.reset.weakPassword
+  if (err?.name === 'AuthSessionMissingError' || code === 'session_not_found' || /session/i.test(msg)) {
+    return t.reset.sessionGone
+  }
+  if (err?.status === 429 || /rate limit/i.test(msg)) return t.reset.rateLimited
+  return t.reset.genericError
+}
 
 /**
  * Where the emailed recovery link lands.
@@ -14,15 +32,16 @@ const MIN_LENGTH = 6
  * (detectSessionInUrl), creates a session and fires PASSWORD_RECOVERY, which
  * AuthContext turns into a flag that routes the user here. So by the time
  * this renders there is normally a valid session — the user is technically
- * signed in, just not finished.
+ * signed in, just not finished, and every other route bounces back here
+ * until they either set a password or cancel (which ends the session).
  *
- * The link can also fail: expired, already used, or opened in a different
- * browser than it was requested from. Supabase then returns an error in the
- * URL instead of a session, and this screen has to say so rather than
- * showing a form that cannot work.
+ * The link can also fail: expired, already used, or opened after a newer one
+ * was sent. Supabase then returns an error in the URL instead of a session,
+ * and this screen says so and lets the runner request a fresh link on the
+ * spot rather than showing a form that cannot work.
  */
 export default function ResetPassword() {
-  const { session, recovery, clearRecovery, loading } = useAuth()
+  const { session, clearRecovery, cancelRecovery, loading } = useAuth()
   const navigate = useNavigate()
 
   const [password, setPassword] = useState('')
@@ -30,15 +49,25 @@ export default function ResetPassword() {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState(false)
-  const [linkError, setLinkError] = useState('')
+  const [linkFailed, setLinkFailed] = useState(false)
 
-  // Supabase reports a bad link as error_description, in the hash for the
-  // implicit flow and the query string for PKCE. Read both.
+  // Request-a-new-link form, shown when the link did not work.
+  const [email, setEmail] = useState('')
+  const [resendInfo, setResendInfo] = useState('')
+  const [resendError, setResendError] = useState('')
+
+  // Supabase reports a bad link as error / error_code / error_description, in
+  // the hash for the implicit flow and the query string for PKCE. Read both;
+  // the English description is not shown, only the fact that it failed.
   useEffect(() => {
     const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''))
     const query = new URLSearchParams(window.location.search)
-    const description = hash.get('error_description') || query.get('error_description')
-    if (description) setLinkError(description.replace(/\+/g, ' '))
+    const code = hash.get('error_code') || query.get('error_code')
+    const failed = code || hash.get('error') || query.get('error')
+    if (failed) {
+      console.warn('[reset] Recovery link rejected:', code, hash.get('error_description') || query.get('error_description'))
+      setLinkFailed(true)
+    }
   }, [])
 
   const submit = async (e) => {
@@ -56,23 +85,68 @@ export default function ResetPassword() {
 
     setBusy(true)
     try {
+      const userEmail = session?.user?.email
       const { error: updateError } = await supabase.auth.updateUser({ password })
       if (updateError) throw updateError
 
-      // updateUser keeps the session, so the user is now signed in with the
-      // new password. Drop the recovery flag so the guards stop diverting,
-      // and let them into the app.
+      // Swap the recovery session for an ordinary one by signing in with the
+      // password just set — which also proves it works. If this fails the
+      // password is still changed and the current session still valid, so
+      // carry on rather than alarm the runner.
+      if (userEmail) {
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: userEmail,
+          password,
+        })
+        if (signInError) {
+          console.warn('[reset] Password changed but re-login failed:', signInError.message)
+        } else {
+          // Revoke every other session: the recovery one, and anything still
+          // signed in elsewhere on the old password. No event fires for this.
+          await supabase.auth.signOut({ scope: 'others' }).catch(() => {})
+        }
+      }
+
+      // Drop the recovery flag so the guards stop diverting, and let them in.
       clearRecovery()
       setDone(true)
       // A beat so the confirmation is actually readable.
       setTimeout(() => navigate('/', { replace: true }), 900)
     } catch (err) {
-      setError(err.message)
+      setError(describeUpdateError(err))
       setBusy(false)
     }
   }
 
-  if (loading) {
+  const requestNewLink = async (e) => {
+    e.preventDefault()
+    setResendError('')
+    setResendInfo('')
+    setBusy(true)
+    try {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}${RESET_REDIRECT_PATH}`,
+      })
+      if (resetError) throw resetError
+      // Same answer whether or not the address exists, as on the login page.
+      setResendInfo(t.reset.newSent)
+    } catch (err) {
+      setResendError(err?.status === 429 || /rate limit/i.test(err?.message || '')
+        ? t.reset.rateLimited
+        : t.reset.genericError)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const cancel = async () => {
+    await cancelRecovery()
+    navigate('/auth', { replace: true })
+  }
+
+  // `done` first: the re-login above reloads the profile, and the spinner
+  // would otherwise hide the confirmation.
+  if (loading && !done) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <Spinner className="h-6 w-6 text-primary" />
@@ -80,8 +154,8 @@ export default function ResetPassword() {
     )
   }
 
-  // No session and no recovery in flight: the link did not work.
-  const brokenLink = linkError || (!session && !recovery)
+  // The link was rejected, or there is no session to change a password on.
+  const brokenLink = !done && (linkFailed || !session)
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center px-6">
@@ -92,22 +166,41 @@ export default function ResetPassword() {
             {brokenLink ? t.reset.expiredTitle : t.reset.title}
           </h1>
           <p className="mt-2 text-sm text-zinc-400">
-            {brokenLink
-              ? t.reset.expiredSubtitle
-              : t.reset.subtitle}
+            {brokenLink ? t.reset.expiredSubtitle : t.reset.subtitle}
           </p>
         </div>
 
         {brokenLink ? (
-          <div className="card text-center">
-            {linkError && <p className="mb-3 text-sm text-rose-400">{linkError}</p>}
-            <p className="text-sm leading-relaxed text-zinc-400">
-              {t.reset.expiredBody}
-            </p>
-            <Link to="/auth" className="btn-primary mt-5 inline-block w-full">
+          <form onSubmit={requestNewLink} className="card space-y-4">
+            <p className="text-sm leading-relaxed text-zinc-400">{t.reset.expiredBody}</p>
+            <div>
+              <label className="label">{t.auth.email}</label>
+              <input
+                type="email"
+                required
+                autoComplete="email"
+                className="input"
+                placeholder={t.auth.emailPlaceholder}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </div>
+
+            {resendError && <p className="text-sm text-rose-400">{resendError}</p>}
+            {resendInfo && <p className="text-sm text-emerald-400">{resendInfo}</p>}
+
+            <button type="submit" disabled={busy} className="btn-primary w-full">
+              {busy ? <Spinner className="h-5 w-5 text-white" /> : t.reset.requestNew}
+            </button>
+
+            <Link
+              to="/auth"
+              replace
+              className="block pt-1 text-center text-xs text-zinc-500 underline underline-offset-4 hover:text-zinc-300"
+            >
               {t.reset.backToLogin}
             </Link>
-          </div>
+          </form>
         ) : done ? (
           <div className="card text-center">
             <p className="text-3xl">✅</p>
@@ -150,12 +243,16 @@ export default function ResetPassword() {
               {busy ? <Spinner className="h-5 w-5 text-white" /> : t.reset.submit}
             </button>
 
-            <Link
-              to="/auth"
-              className="block pt-1 text-center text-xs text-zinc-600 underline underline-offset-4 hover:text-zinc-400"
+            {/* Leaving must end the recovery session, not just the screen —
+                a plain link to /auth would bounce straight back here. */}
+            <button
+              type="button"
+              onClick={cancel}
+              disabled={busy}
+              className="block w-full pt-1 text-center text-xs text-zinc-600 underline underline-offset-4 hover:text-zinc-400"
             >
-              {t.common.cancel}
-            </Link>
+              {t.reset.cancel}
+            </button>
           </form>
         )}
       </div>

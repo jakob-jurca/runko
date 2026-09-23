@@ -77,18 +77,29 @@ export const t = {
   reset: {
     title: 'Nastavi novo geslo',
     subtitle: 'Izberi geslo, ki ga tukaj še nisi uporabil.',
-    expiredTitle: 'Povezava je potekla',
-    expiredSubtitle: 'Povezave za ponastavitev so enkratne in časovno omejene.',
-    expiredBody: 'Zahtevaj novo povezavo na prijavni strani in jo odpri na tej napravi.',
+    expiredTitle: 'Povezava ne deluje več',
+    expiredSubtitle: 'Povezave za ponastavitev so enkratne in veljajo omejen čas.',
+    expiredBody:
+      'Ta povezava je potekla ali je bila že uporabljena. Vpiši e-naslov in poslali ti bomo novo.',
+    linkInvalid: 'Povezava je neveljavna. Zahtevaj novo spodaj.',
+    requestNew: 'Pošlji novo povezavo',
+    newSent: 'Če za ta e-naslov obstaja račun, je nova povezava na poti. Odpri najnovejše sporočilo.',
     backToLogin: 'Nazaj na prijavo',
     newPassword: 'Novo geslo',
     confirmPassword: 'Ponovi novo geslo',
     submit: 'Shrani novo geslo',
+    cancel: 'Prekliči in se odjavi',
     tooShort: (n) => `Uporabi vsaj ${n} znakov.`,
     mismatch: 'Gesli se ne ujemata.',
+    samePassword: 'Novo geslo mora biti drugačno od starega.',
+    weakPassword: 'Geslo je prešibko. Izberi daljše ali bolj raznoliko geslo.',
+    sessionGone: 'Seja za ponastavitev je potekla. Zahtevaj novo povezavo.',
+    rateLimited: 'Preveč poskusov. Počakaj nekaj minut in poskusi znova.',
+    genericError: 'Gesla ni bilo mogoče shraniti. Poskusi znova.',
     doneTitle: 'Geslo posodobljeno',
     doneBody: 'Prijavljam te…',
   },
+
 
   // -------------------------------------------------------------------------
   // Dashboard
