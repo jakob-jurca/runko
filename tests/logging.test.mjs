@@ -64,7 +64,7 @@ for (const bad of ['', null, undefined, 'soon', '19-09-2026', '2026-9-9'])
 console.log('\n=== A LOGGED RUN MARKS ITS CARD ===')
 /** Exactly what the dashboard does to decide the checkmark. */
 function marks({ plans, workouts, now }) {
-  const currentWeek = currentWeekNumber(plans)
+  const currentWeek = currentWeekNumber(plans, now)
   const start = weekStartISO(plans, currentWeek)
   const dayDates = Array.from({ length: 7 }, (_, i) => addDaysISO(start, i))
   const logged = new Set(workouts.filter((w) => Number(w.distance) > 0).map((w) => w.date))
@@ -109,7 +109,7 @@ const plan = buildPlanSkeleton({
 const plans = plan.weeks.map((w) => ({
   week_number: w.week_number, created_at: '2026-09-14T10:00:00+02:00', plan_json: w,
 }))
-const week = plans[currentWeekNumber(plans) - 1]
+const week = plans[currentWeekNumber(plans, today) - 1]
 const start = weekStartISO(plans, week.week_number)
 const dayDates = Array.from({ length: 7 }, (_, i) => addDaysISO(start, i))
 

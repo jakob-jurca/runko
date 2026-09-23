@@ -55,14 +55,17 @@ export function weekStartISO(plans, weekNumber) {
  * Week 1 is the calendar week the plan was created in (created_at of the
  * first row); clamped to the last generated week so a lapsed plan still
  * shows something sensible.
+ *
+ * `now` is injectable so tests pin the clock; without it, tests written
+ * against a fixed date silently started failing once real time moved on.
  */
-export function currentWeekNumber(plans) {
+export function currentWeekNumber(plans, now = new Date()) {
   if (!plans?.length) return 1
   const first = plans[0]
   const lastWeek = plans[plans.length - 1].week_number
   if (!first.created_at) return lastWeek
   const start = new Date(startOfWeekISO(new Date(first.created_at)))
-  const now = new Date(startOfWeekISO())
-  const elapsed = Math.round((now - start) / (7 * 86_400_000))
+  const thisWeek = new Date(startOfWeekISO(now))
+  const elapsed = Math.round((thisWeek - start) / (7 * 86_400_000))
   return Math.min(Math.max(first.week_number + elapsed, 1), lastWeek)
 }
