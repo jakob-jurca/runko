@@ -2,15 +2,17 @@
  * plan.js — the Training Plan Engine.
  *
  * Structure comes from CODE, personality comes from the AI:
- *   1. core/periodization.js calculates the skeleton — VDOT, paces, phases,
- *      weekly volume, recovery weeks, taper, and which session lands on which
- *      day (80/20 polarized, honouring constraints from coach memory).
- *   2. core/ai.js describePlanSkeleton() writes the words for it.
- *   3. The AI's output is validated against the skeleton; any distance or pace
+ *   1. core/planning runs the planning pipeline — collect, assess, classify
+ *      into one of seven runner scenarios, check feasibility, ask up to three
+ *      follow-up questions if something critical is missing, build with the
+ *      scenario's own rules, explain. Pure code, no AI.
+ *   2. core/ai.js describePlanSkeleton() writes the words for it — ONE call.
+ *   3. The AI's output is validated against the plan; any distance or pace
  *      it tried to change is discarded in favour of the calculated value.
  *
- * That ordering is the whole point: the plan can no longer repeat the same
- * week or ignore the runner, because the maths that produced it never did.
+ * That ordering is the whole point: an unsafe goal is never squeezed into a
+ * plan, and why a plan looks the way it does is stored with it
+ * (plan_json.planning).
  *
  * Tiers:
  *  - Premium (trial or subscriber): calculated skeleton + AI descriptions.
@@ -22,8 +24,9 @@
  * see PLAN_LIMIT_ENABLED below to switch it back on without a migration.
  */
 import { describePlanSkeleton, mergeDescriptions, adaptWeeklyPlan } from './ai'
+import { runPlanningPipeline } from './planning/index.js'
+import { enforceWeekRules, isAdaptable } from './planning/guard.js'
 import {
-  buildPlanSkeleton,
   enrichDays,
   pacesFromVdot,
   paceRange,
@@ -44,24 +47,7 @@ import { getMemories } from './memory'
 import { hasPremium } from './subscription'
 import { IS_DEV } from './env'
 
-/** General-fitness plans run 12 weeks; event plans cap at 16 weeks out. */
-const DEFAULT_WEEKS = 12
-const MAX_WEEKS = 16
-
 const DEBUG = IS_DEV
-
-/** How many weeks the runner's plan should span, from their profile. */
-export function totalWeeksFor(profile) {
-  // An event date is what makes a plan date-bound — there is no race-type
-  // enum any more, just a distance and (optionally) a date.
-  if (profile?.event_date) {
-    const start = new Date(startOfWeekISO())
-    const event = new Date(profile.event_date)
-    const weeks = Math.ceil((event - start + 1) / (7 * 86_400_000))
-    return Math.min(Math.max(weeks, 1), MAX_WEEKS)
-  }
-  return DEFAULT_WEEKS
-}
 
 // ---------------------------------------------------------------------------
 // Rebuild limit — CURRENTLY DISABLED
@@ -151,11 +137,13 @@ export function hydratePlanJson(planJson, profile = {}) {
   const days = planJson?.days
   if (!Array.isArray(days) || days.length === 0) return planJson
 
+  // Time-based days (walk-run, minutes) are stored complete; recomputing them
+  // from a pace would turn "20 min" into kilometres.
   const needsWork = days.some(
     (d) =>
-      d.segments === undefined ||
+      !d.time_based && (d.segments === undefined ||
       d.pace_range === undefined ||
-      (d.type !== 'rest' && (!d.hr || !Number.isInteger(d.distance_km)))
+      (d.type !== 'rest' && (!d.hr || !Number.isInteger(d.distance_km))))
   )
   if (!needsWork) return planJson
 
@@ -165,6 +153,7 @@ export function hydratePlanJson(planJson, profile = {}) {
   if (!paces) return planJson // nothing to derive from; render what we have
 
   const rounded = days.map((day) => {
+    if (day.time_based) return day
     if (day.type === 'rest') {
       return { ...day, distance_km: 0, duration_min: 0, segments: [], is_segmented: false }
     }
@@ -186,7 +175,7 @@ export function hydratePlanJson(planJson, profile = {}) {
     }
   })
 
-  const enriched = enrichDays(rounded, paces, profile.age)
+  const enriched = rounded.map((d) => (d.time_based ? d : enrichDays([d], paces, profile.age)[0]))
   return {
     ...planJson,
     days: enriched,
@@ -245,10 +234,12 @@ export async function getHydratedPlans(profile) {
  */
 async function gatherRuns(profile, intake) {
   let logged = []
-  try {
-    logged = await getWorkouts(profile.id, { limit: 20 })
-  } catch (err) {
-    if (DEBUG) console.warn('[plan] could not read logged runs:', err.message)
+  if (profile?.id) {
+    try {
+      logged = await getWorkouts(profile.id, { limit: 20 })
+    } catch (err) {
+      if (DEBUG) console.warn('[plan] could not read logged runs:', err.message)
+    }
   }
 
   const intakeRuns = (intake?.runs ?? []).map((r) => ({
@@ -272,6 +263,49 @@ async function gatherRuns(profile, intake) {
   ]
 }
 
+async function gatherMemories(profile) {
+  if (!profile?.id) return []
+  try {
+    return await getMemories(profile.id)
+  } catch (err) {
+    if (DEBUG) console.warn('[plan] could not read coach memory:', err.message)
+    return []
+  }
+}
+
+/** The pipeline's input: the profile, with anything the intake adds on top. */
+function pipelineProfile(profile, intake) {
+  return {
+    ...profile,
+    ...(intake?.hasRunBefore === false ? { hasRunBefore: false } : {}),
+  }
+}
+
+/**
+ * Thrown by createInitialPlan when the pipeline needs answers first. The
+ * plan is never built on a guess about something that changes its shape.
+ */
+export class ClarificationNeededError extends Error {
+  constructor(questions) {
+    super('The plan needs a few answers before it can be built.')
+    this.name = 'ClarificationNeededError'
+    this.questions = questions
+  }
+}
+
+/**
+ * Run the planning pipeline without saving anything — what onboarding uses to
+ * ask its follow-up questions and show the coach's verdict before building.
+ * Pure code: no AI call.
+ *
+ * @returns {Promise<object>} the pipeline result (status, questions, verdict,
+ *   explain, proposal, ...)
+ */
+export async function previewPlan(profile, intake = null, answers = {}) {
+  const [runs, memories] = await Promise.all([gatherRuns(profile, intake), gatherMemories(profile)])
+  return runPlanningPipeline({ profile: pipelineProfile(profile, intake), runs, memories, answers })
+}
+
 /**
  * Create the runner's full plan — at onboarding completion, and again on
  * every later rebuild ("Create my plan" / "Create new plan").
@@ -279,59 +313,47 @@ async function gatherRuns(profile, intake) {
  * Persists one row per week, stamps users.last_plan_created_at and returns
  * the saved weeks.
  *
+ * @param {object} profile
+ * @param {object|null} intake - onboarding intake (runs typed in, etc.)
+ * @param {object} answers - replies to the pipeline's follow-up questions
+ * @throws {ClarificationNeededError} when critical information is missing
  * @throws {PlanLimitError} only if PLAN_LIMIT_ENABLED is turned back on.
  */
-export async function createInitialPlan(profile, intake = null) {
+export async function createInitialPlan(profile, intake = null, answers = {}) {
   // No-op while PLAN_LIMIT_ENABLED is false; kept so re-enabling the limit
   // is a one-line change.
   if (!canCreatePlan(profile)) throw new PlanLimitError(profile)
 
-  const totalWeeks = totalWeeksFor(profile)
-  const runs = await gatherRuns(profile, intake)
+  const [runs, memories] = await Promise.all([gatherRuns(profile, intake), gatherMemories(profile)])
 
-  // Coach memory feeds the structural constraints (no back-to-back days,
-  // available days, how many times a week they can run).
-  let memories = []
-  try {
-    memories = await getMemories(profile.id)
-  } catch (err) {
-    if (DEBUG) console.warn('[plan] could not read coach memory:', err.message)
-  }
-
-  // --- 1. CODE calculates the structure ------------------------------------
-  const skeleton = buildPlanSkeleton({ profile, totalWeeks, runs, memories })
+  // --- 1. CODE decides everything structural ---------------------------------
+  const result = runPlanningPipeline({ profile: pipelineProfile(profile, intake), runs, memories, answers })
+  if (result.status !== 'ready') throw new ClarificationNeededError(result.questions)
+  const skeleton = result.skeleton
   if (DEBUG) {
     console.log(
-      `[plan] skeleton: VDOT ${skeleton.vdot} (${skeleton.vdot_source}), ` +
-        `${totalWeeks} weeks, ${skeleton.start_volume_km}→${skeleton.peak_volume_km} km/week, ` +
-        `paces ${Object.entries(skeleton.paces).map(([k, v]) => `${k} ${v.label}`).join(' ')}`
+      `[plan] ${result.scenario} / ${result.verdict} — ${skeleton.total_weeks} weeks, ` +
+        `unit ${result.unit}, VDOT ${skeleton.vdot} (${skeleton.vdot_source})`
     )
+    for (const reason of result.explain.reasons) console.log(`[plan]   · ${reason}`)
     console.log(
       '[plan] weeks:',
       skeleton.weeks
-        .map((w) => `${w.week_number}${w.is_recovery ? 'R' : ''}:${w.phase}:${w.target_volume_km}km`)
+        .map((w) => `${w.week_number}${w.is_recovery ? 'R' : ''}:${w.phase}:${w.unit === 'time' ? `${w.target_minutes}min` : `${w.target_volume_km}km`}`)
         .join(' ')
     )
   }
 
-  // --- 2. The AI writes the words ------------------------------------------
-  let weeks
-  let intro
+  // --- 2. The AI writes the words — one call ----------------------------------
   // Recorded on the saved plan so the page can say the words are the
   // built-in ones. A free user's plan is still fully calculated for them —
   // only the prose is generic — and silently serving stock text as the
   // coach's own made the free tier look like a failed premium one.
   const aiDescribed = hasPremium(profile)
-  if (aiDescribed) {
-    const result = await describePlanSkeleton(skeleton, { profile, memories, language: 'sl' })
-    weeks = result.weeks
-    intro = result.intro
-  } else {
-    if (DEBUG) console.log('[plan] no premium — calculated plan with built-in descriptions.')
-    const result = mergeDescriptions(skeleton, {})
-    weeks = result.weeks
-    intro = result.intro
-  }
+  const described = aiDescribed
+    ? await describePlanSkeleton(skeleton, { profile, memories, language: 'sl' })
+    : mergeDescriptions(skeleton, {})
+  if (!aiDescribed && DEBUG) console.log('[plan] no premium — calculated plan with built-in descriptions.')
 
   // --- 3. Persist -----------------------------------------------------------
   // Clear the old plan before writing the new one. Upserting alone would
@@ -341,21 +363,22 @@ export async function createInitialPlan(profile, intake = null) {
   await deletePlans(profile.id)
 
   const saved = []
-  for (const week of weeks) {
+  for (const week of described.weeks) {
     const { week_number, ...planJson } = week
     saved.push(
       await savePlan(profile.id, week_number, {
         ...planJson,
         // Plan-wide facts repeated on each row so any single week can be
-        // rendered (and sent to the coach) without loading all of them.
+        // rendered (and sent to the coach) without loading all of them —
+        // including `planning`: assessment, scenario and feasibility.
         vdot: skeleton.vdot,
         paces: skeleton.paces,
-        total_weeks: totalWeeks,
+        total_weeks: skeleton.total_weeks,
         target_distance_km: skeleton.target_distance_km,
         goal_assessment: skeleton.goal_assessment,
         ai_described: aiDescribed,
         // The intro belongs to the plan, not a week — stored on week 1 only.
-        ...(week_number === 1 ? { intro } : {}),
+        ...(week_number === 1 ? { intro: described.intro } : {}),
       })
     )
   }
@@ -372,8 +395,11 @@ export async function createInitialPlan(profile, intake = null) {
  * a week would strip the phase and the dashboard would lose its banner.
  */
 function mergeAdapted(original = {}, adapted = {}, profile = {}) {
-  const rawDays =
-    Array.isArray(adapted.days) && adapted.days.length === 7 ? adapted.days : original.days
+  // The scenario's rules still hold: no hard sessions where the plan allows
+  // none, no runs on rest days, never more than the week the progression
+  // allowed (core/planning/guard.js).
+  const { days: rawDays, changes } = enforceWeekRules(original, adapted.days)
+  if (changes.length && DEBUG) console.warn('[plan] adaptation corrected:', changes.join('; '))
 
   // The adapted week comes back as bare days. Re-run the same enrichment the
   // skeleton does, or the card loses its segments, heart rates and time
@@ -382,7 +408,7 @@ function mergeAdapted(original = {}, adapted = {}, profile = {}) {
     Object.entries(original.paces || {}).map(([k, v]) => [k, v?.min_per_km ?? v])
   )
   const days = Object.keys(paceMinPerKm).length
-    ? enrichDays(rawDays, paceMinPerKm, profile.age)
+    ? rawDays.map((d) => (d.time_based ? d : enrichDays([d], paceMinPerKm, profile.age)[0]))
     : rawDays
   return {
     ...original,
@@ -397,6 +423,12 @@ function mergeAdapted(original = {}, adapted = {}, profile = {}) {
     vdot: original.vdot,
     paces: original.paces,
     total_weeks: original.total_weeks,
+    // Plan-wide facts the AI must not overwrite.
+    scenario: original.scenario,
+    feasibility_verdict: original.feasibility_verdict,
+    planning: original.planning,
+    allow_hard: original.allow_hard,
+    unit: original.unit,
     adapted: true,
   }
 }
@@ -420,6 +452,8 @@ export async function maybeAdaptPlan(profile, plans, workout, recentWorkouts) {
   const nextWeek = week + 1
   const base = plans.find((p) => p.week_number === nextWeek)
   if (!base) return null // plan ends here (e.g. race week) — nothing to rewrite
+  // Walk-run weeks follow a ladder; no AI call can improve on it.
+  if (!isAdaptable(base.plan_json)) return null
 
   try {
     const adapted = await adaptWeeklyPlan(profile, {
@@ -450,6 +484,7 @@ export async function adaptCurrentWeekIfNeeded(profile, plans, recentWorkouts) {
   if (week <= 1) return null
   const current = plans.find((p) => p.week_number === week)
   if (!current || current.plan_json?.adapted) return null
+  if (!isAdaptable(current.plan_json)) return null
 
   // Only adapt off runs actually logged during the previous week.
   const prevMonday = new Date(startOfWeekISO())

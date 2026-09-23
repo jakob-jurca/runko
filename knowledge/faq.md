@@ -49,7 +49,7 @@ Yes. Set 1% incline to match outdoor effort. [Jones & Doust 1996] Treadmill pace
 To start a marathon plan: ≥ 30-40 km/week consistently. Plans peak at ~55-70 km (beginner/Hansons beginner), 70-90 km (intermediate), 90+ km (advanced). Finishing is possible on less, but the last 10 km suffer. [Pfitzinger; Hansons]
 
 ## How long should my longest run be before a marathon?
-~29-35 km for most runners (Pfitzinger), or ~26 km with higher weekly volume (Hansons). Keep it ≤ ~3 h; beyond that, recovery cost outweighs benefit. Peak long run 3-5 weeks before race.
+~29-32 km for most runners (Pfitzinger), or ~26 km with higher weekly volume (Hansons) — but never more than ~3 h, whichever comes first; beyond that, recovery cost outweighs benefit. Slower runners reach 3 h before 29 km, and that is enough. Peak long run 3-5 weeks before race.
 
 ## What pace should my long run be?
 Easy pace (E), often 60-90 s/km slower than marathon pace. Experienced runners can add M-pace segments in the last part during the build. [Daniels; Pfitzinger]

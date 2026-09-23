@@ -18,6 +18,7 @@ import { todayISO } from './dates.js'
 export const DEFAULT_EFFORT_BY_TYPE = {
   easy: 2,
   recovery: 2,
+  walk_run: 2,
   long: 3,
   cross: 2,
   tempo: 4,

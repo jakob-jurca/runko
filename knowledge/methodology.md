@@ -83,7 +83,7 @@ Taper evidence: reduce volume 41-60% over ~2 weeks, keep intensity and frequency
 
 ## 8. Plan-generation rules (apply these)
 1. Start from current weekly volume (average last 4 weeks), never from goal volume.
-2. Long run: ≤ 25% of weekly volume for runners > 65 km/week, ≤ 30% below that; ≤ 150 min except marathon plans (max ~3 h). [Daniels]
+2. Long run: capped primarily by DURATION — ≤ 150 min (2.5 h) for most runners, up to 180 min (3 h) in marathon-and-longer plans. Time on feet, not distance, is what loads tendons and bones, so a slower runner reaches the cap at fewer kilometres, and reaching the cap counts as marathon-ready. Above ~50 km/week, ~30% of weekly volume is a guide for the long run's size [Daniels], not a hard cap: marathon builds may exceed it where the long run needs to reach its peak, but never the duration cap.
 3. Recovery/down week every 3rd-4th week at 70-80% volume.
 4. Quality sessions: 0 for beginners in first 8 weeks (strides only), 1 for 3-4 runs/week, 2 for 5-7 runs/week.
 5. Hard/easy alternation. No quality session the day before or after the long run for amateurs.

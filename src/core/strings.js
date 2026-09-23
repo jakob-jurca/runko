@@ -121,6 +121,7 @@ export const t = {
     phaseSuffix: 'faza',
     recoveryWeek: 'Regeneracijski teden',
     targetThisWeek: (km) => `Cilj ta teden: ${km} km`,
+    targetThisWeekTime: (min) => `Cilj ta teden: ${min} min teka in hoje`,
     fullPlan: 'Cel načrt',
     emptyWeek: 'Ta teden nima treningov — izberi drug teden ali vpiši tek.',
     noPlanTitle: 'Načrta še ni',
@@ -164,6 +165,7 @@ export const t = {
       cross: 'druga vadba',
       race: 'tekma',
       rest: 'počitek',
+      walk_run: 'hoja-tek',
     },
   },
 
@@ -173,15 +175,16 @@ export const t = {
   plan: {
     title: 'Tvoj načrt',
     summary: (weeks, km) => `${weeks} tednov · ${km} km skupaj`,
+    summaryTime: (weeks, hours) => `${weeks} tednov · približno ${hours} ur teka in hoje`,
     rangeNote:
       'Številke so okvirne. Tempo in utrip sta razpona, ne točni cilji — manjša odstopanja so povsem v redu. Teren, veter in počutje vsak dan malo premaknejo.',
     rangeNoteStrong: 'okvirne',
     yourPaces: 'Tvoji trenažni tempi',
     weeklyVolume: 'Tedenski obseg',
-    peak: (km) => `vrh ${km} km`,
+    peak: (n, unit = 'km') => `vrh ${n} ${unit}`,
     recoveryWeekLegend: 'Regeneracijski teden',
     recoveryShort: 'Regeneracija',
-    weekTooltip: (n, km, rec) => `Teden ${n}: ${km} km${rec ? ' (regeneracija)' : ''}`,
+    weekTooltip: (n, v, rec, unit = 'km') => `Teden ${n}: ${v} ${unit}${rec ? ' (regeneracija)' : ''}`,
     weekByWeek: 'Teden za tednom',
     noPlan: 'Načrta še ni.',
     howBuilt: 'Kako je nastal ta načrt',
@@ -192,7 +195,17 @@ export const t = {
       build: 'Nadgradnja',
       sharpen: 'Ostrenje',
       taper: 'Razbremenitev',
+      walk_run: 'Hoja-tek',
+      return: 'Vrnitev',
+      consistency: 'Rednost',
+      maintain: 'Ohranjanje',
     },
+    scenarioLabel: 'Vrsta načrta',
+    verdictLabel: 'Ocena cilja',
+    originalGoal: 'Tvoj prvotni cilj',
+    builtFor: 'Načrt je zgrajen za',
+    otherOption: 'Druga možnost',
+    fallbackLabel: 'Rezervni cilj',
   },
 
   // -------------------------------------------------------------------------
@@ -265,7 +278,7 @@ export const t = {
     thoroughTitle: 'Temeljita priprava',
     thoroughBadge: 'Priporočeno',
     thoroughDesc:
-      '~5 min. Deli svoje zadnje teke in se pogovori s trenerjem — načrt ti ustreza od prvega dne.',
+      '~5 min. Deli svoje zadnje teke — načrt ti ustreza od prvega dne.',
     quickTitle: 'Hitra priprava',
     quickDesc: '~1 min. Samo osnove — trenerju lahko poveš več kasneje.',
 
@@ -307,6 +320,7 @@ export const t = {
     longestRun: 'Najdaljši nedavni tek',
     experienceHint: 'Nisi prepričan? Pusti prazno — trener bo ocenil iz tvojih tekov.',
     experienceOptions: [
+      { months: 0, label: 'Še nikoli nisem tekel/a' },
       { months: 2, label: 'Šele začenjam (manj kot 3 mesece)' },
       { months: 6, label: '3-12 mesecev' },
       { months: 24, label: '1-3 leta' },
@@ -358,15 +372,172 @@ export const t = {
       'npr. Koleno nagaja, če tečem dva dneva zapored. Tečem lahko samo zjutraj. Lani 5 km v 25:30…',
     buildMyPlan: 'Sestavi mi načrt',
 
-    chatTitle: 'Nekaj vprašanj od trenerja',
-    chatPlaceholder: 'Odgovori trenerju…',
-    chatLooksGood: 'Izgleda dobro — sestavi načrt',
-    chatSkip: 'Preskoči vprašanja — sestavi načrt zdaj',
+    clarifyTitle: 'Še nekaj vprašanj',
+    clarifySubtitle: 'Brez teh odgovorov bi moral trener ugibati — in ugibanje tu pomeni napačen načrt.',
+    clarifyContinue: 'Naprej',
+    changeGoal: 'Spremeni cilj',
+    verdictTitle: 'Trenerjeva ocena tvojega cilja',
+    chooseGoal: 'Izberi, za kaj naj sestavim načrt:',
 
     building: 'Runko sestavlja tvoj načrt…',
     saving: 'Shranjujem, kar si povedal…',
     skipForNow: 'Preskoči za zdaj',
     notNow: 'Ne zdaj — nazaj v aplikacijo',
+  },
+
+  // -------------------------------------------------------------------------
+  // Planning pipeline — scenarios, verdicts, follow-up questions, plan intro
+  // -------------------------------------------------------------------------
+  planning: {
+    scenarios: {
+      complete_beginner: 'Popoln začetnik',
+      beginner_with_deadline: 'Začetnik z rokom',
+      recreational: 'Rekreativni tek',
+      short_race: 'Kratka tekma',
+      long_race: 'Dolga tekma',
+      returning: 'Vrnitev k teku',
+      maintenance: 'Ohranjanje forme',
+    },
+    verdicts: { feasible: 'Izvedljivo', stretch: 'Izziv', unsafe: 'Ni varno' },
+
+    questions: {
+      event_date: {
+        text: 'Datum tvoje tekme je že mimo. Kako naj sestavim načrt?',
+        why: 'Brez veljavnega datuma ne vem, kdaj naj bo forma na vrhuncu.',
+        options: [{ value: 'no_date', label: 'Treniraj za razdaljo, brez datuma' }],
+      },
+      current_volume: {
+        text: 'Koliko trenutno pretečeš na teden?',
+        why: 'Od tega je odvisno, kje načrt začne — prehiter začetek je najpogostejši vzrok poškodb.',
+        options: [
+          { value: '0', label: 'Trenutno ne tečem' },
+          { value: '5', label: 'Do 5 km' },
+          { value: '15', label: 'Okoli 15 km' },
+          { value: '30', label: 'Okoli 30 km' },
+          { value: '50', label: '50 km ali več' },
+        ],
+      },
+      returning: {
+        text: 'Se vračaš k teku po premoru ali poškodbi?',
+        why: 'Vrnitev zahteva drugačen, previdnejši začetek kot redni trening.',
+        options: [
+          { value: 'no', label: 'Ne, tečem redno' },
+          { value: 'break', label: 'Da, po daljšem premoru' },
+          { value: 'injury', label: 'Da, po poškodbi (zdaj brez bolečin)' },
+        ],
+      },
+      longest_run: {
+        text: 'Kako dolg je bil tvoj najdaljši tek v zadnjem mesecu?',
+        why: 'Dolgi tek mora rasti postopoma od tega, kar zmoreš zdaj.',
+        options: [
+          { value: '3', label: 'Do 3 km' },
+          { value: '5', label: 'Okoli 5 km' },
+          { value: '8', label: 'Okoli 8 km' },
+          { value: '12', label: 'Okoli 12 km' },
+          { value: '16', label: 'Okoli 16 km' },
+          { value: '21', label: '20 km ali več' },
+        ],
+      },
+      intent: {
+        text: 'V dobri formi si. Kaj želiš v naslednjih tednih?',
+        why: 'Ohranjanje in nadgradnja sta dva različna načrta.',
+        options: [
+          { value: 'maintain', label: 'Ohraniti formo' },
+          { value: 'build', label: 'Postopoma jo nadgraditi' },
+        ],
+      },
+    },
+
+    assumptions: {
+      event_date: 'Datum tekme je bil v preteklosti, zato načrt ni vezan na datum.',
+      current_volume: 'Trenutni obseg ni znan, zato načrt začne previdno pri približno 5 km na teden.',
+      returning: 'Ni jasno, ali se vračaš po premoru, zato načrt začne previdno, kot vrnitev.',
+      longest_run: 'Najdaljši tek ni jasen, zato je upoštevana previdnejša ocena.',
+      intent: 'Cilj ni znan, zato načrt ohranja trenutno formo.',
+    },
+
+    priorities: {
+      complete_beginner: [
+        'rednost pred hitrostjo',
+        'hoja-tek po minutah, ne po kilometrih',
+        'brez trdih treningov',
+        'dan počitka med vsakim tekom',
+      ],
+      beginner_with_deadline: [
+        'varno priti do cilja — tempo ni pomemben',
+        'hoja med tekmo je dovoljena in pametna',
+        'brez hitrostnih treningov',
+        'previden, postopen porast',
+      ],
+      recreational: [
+        'rednost',
+        'večinoma lahkoten tek',
+        'raznolikost po želji (kratki pospeški)',
+        'počasen porast do stabilne ravni',
+      ],
+      short_race: [
+        'hitrost: intervali in kratke ponovitve',
+        'pragovni tempo',
+        'krajši dolgi teki',
+        'razbremenitev pred tekmo',
+      ],
+      long_race: [
+        'dolgi tek kot temelj',
+        'postopna rast obsega',
+        'faze: osnova, nadgradnja, ostrenje, razbremenitev',
+        'tempo tekme v zadnjem delu',
+      ],
+      returning: [
+        'začetek precej pod prejšnjo ravnjo',
+        'previden porast',
+        'prvih 6 tednov brez intenzivnih treningov',
+        'bolečina pomeni korak nazaj, ne naprej',
+      ],
+      maintenance: [
+        'stabilen obseg, brez nadgradnje',
+        'en do dva kakovostna treninga na teden',
+        'lažji teden vsak 4. teden',
+      ],
+    },
+
+    goal: (km, date, walkBreaks) => {
+      if (!km) return 'rednost in splošno kondicijo'
+      const d = String(km).replace('.', ',')
+      const base = date ? `${d} km dne ${date}` : `${d} km`
+      return walkBreaks ? `${base} (s hojo po potrebi)` : base
+    },
+    time: (minutes) => {
+      const total = Math.round(minutes * 60)
+      const h = Math.floor(total / 3600)
+      const m = Math.floor((total % 3600) / 60)
+      const s = total % 60
+      return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}` : `${m}:${String(s).padStart(2, '0')}`
+    },
+
+    // Built-in intro, used whenever the AI does not write one.
+    intro: {
+      opening: (scenario, weeks) => `${scenario} — ${weeks}-tedenski načrt.`,
+      feasible: 'Cilj je v razpoložljivem času dosegljiv brez bližnjic.',
+      stretch: (fallback) =>
+        `Cilj je izziv: dosegljiv je, a brez rezerve. Če bo šlo težje, je povsem dober rezervni cilj ${fallback}.`,
+      unsafe: (original, adopted) =>
+        `Tvoj prvotni cilj (${original}) v tem času ni varen — srce in pljuča bi zmogla, kite in kosti pa potrebujejo več časa. ` +
+        `Zato je načrt zgrajen za ${adopted}.`,
+      otherOption: (option) => `Druga varna možnost: ${option}.`,
+      priorities: (list) => `Načrt daje prednost temu: ${list.join(', ')}.`,
+      noGoal: 'Brez tekme in brez ciljne razdalje — gradiva rednost in veselje do teka.',
+    },
+    fallback: {
+      time: (time) => `čas ${time}`,
+      walk_breaks: (km) => `priti do cilja na ${String(km).replace('.', ',')} km s hojo po potrebi`,
+      finish: (km) => `udobno priti do cilja na ${String(km).replace('.', ',')} km, brez ciljnega časa`,
+    },
+    alternative: {
+      shorter: (goal) => goal,
+      later: (goal) => goal,
+      more_days: (goal, days) => `${goal}, če lahko tečeš vsaj ${days}-krat na teden`,
+      no_event: 'najprej začetni program hoje-teka, tekma pa ob naslednji priložnosti',
+    },
   },
 
   // -------------------------------------------------------------------------

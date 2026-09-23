@@ -6,7 +6,7 @@
  * our own Supabase Edge Function (supabase/functions/ai-proxy). The rest of
  * the app never talks to a provider directly — it uses the purpose-built
  * helpers below (askCoach, describePlanSkeleton, adaptWeeklyPlan,
- * coachReaction, motivationalMessage, coachIntakeFollowUp).
+ * coachReaction, motivationalMessage).
  *
  * SECURITY: the browser holds no AI credential. The Groq key is a Supabase
  * secret readable only by the Edge Function, which additionally requires a
@@ -23,7 +23,7 @@ import {
   detectLanguage,
   sanitizeChatReply,
 } from './coach-prompt'
-import { buildKnowledgeBlock, KNOWLEDGE_BUDGETS } from './knowledge'
+import { buildKnowledgeBlock, buildScenarioKnowledgeBlock, KNOWLEDGE_BUDGETS } from './knowledge'
 import { buildExtractionPrompt, parseExtractedMemories } from './memory'
 
 /**
@@ -266,6 +266,16 @@ export function buildCoachContext(profile, plan, workouts = [], { totalWeeks } =
   if (profile?.age) lines.push(`- Age: ${profile.age}`)
   if (profile?.weight) lines.push(`- Weight: ${profile.weight} kg`)
   if (profile?.coach_notes) lines.push(`- Notes from the runner: "${profile.coach_notes}"`)
+  const planning = plan?.plan_json?.planning
+  if (planning?.explain) {
+    lines.push(
+      `- Plan type: ${planning.explain.scenario} (goal verdict: ${planning.explain.verdict}` +
+        `${planning.explain.adopted_goal_text ? `, built for ${planning.explain.adopted_goal_text}` : ''})`
+    )
+    if (planning.explain.verdict === 'unsafe' && planning.explain.original_goal_text) {
+      lines.push(`- Their original goal (${planning.explain.original_goal_text}) was judged unsafe in the time available.`)
+    }
+  }
   if (plan?.plan_json?.days) {
     const weekLabel = totalWeeks
       ? `week ${plan.week_number} of ${totalWeeks}`
@@ -277,8 +287,11 @@ export function buildCoachContext(profile, plan, workouts = [], { totalWeeks } =
       // should this be?" from the plan instead of guessing.
       ...plan.plan_json.days.map(
         (d) =>
-          `- ${d.day}: ${d.title}${d.distance_km ? ` (${d.distance_km} km)` : ''}` +
-          `${d.pace ? ` at ${d.pace}` : ''}${d.purpose ? ` — ${d.purpose}` : ''}`
+          `- ${d.day}: ${d.title}` +
+          (d.time_based
+            ? `${d.duration_min ? ` (${d.duration_min} min${d.segments?.[1]?.text ? `: ${d.segments[1].text}` : ''})` : ''}`
+            : `${d.distance_km ? ` (${d.distance_km} km)` : ''}${d.pace ? ` at ${d.pace}` : ''}`) +
+          `${d.purpose ? ` — ${d.purpose}` : ''}`
       )
     )
   }
@@ -377,81 +390,6 @@ export async function extractMemories({ userMessage, coachReply, existing = [] }
 // Onboarding intake
 // ---------------------------------------------------------------------------
 
-/**
- * Plain-text summary of everything collected during onboarding. Shared by the
- * follow-up chat and the plan generator so both see the same picture.
- * @param {object} intake - { name, age, weight, fitness_level, goal,
- *   event_name, event_date, hasRunBefore, runs, notes, followUp }
- */
-export function intakeSummary(intake) {
-  const lines = [
-    `New runner intake:`,
-    `- Name: ${intake.name}`,
-    intake.age ? `- Age: ${intake.age}` : null,
-    intake.weight ? `- Weight: ${intake.weight} kg` : null,
-    `- Self-assessed fitness level: ${intake.fitness_level}`,
-    intake.goal === 'event'
-      ? `- Goal: preparing for "${intake.event_name}" on ${intake.event_date}`
-      : `- Goal: general fitness`,
-  ].filter(Boolean)
-
-  if (intake.hasRunBefore === false) {
-    lines.push(`- Brand new to running; did a 3 km test run at conversational pace.`)
-  }
-  if (intake.runs?.length) {
-    lines.push(
-      `- Recent runs they logged:`,
-      ...intake.runs.map(
-        (r) =>
-          `  - ${r.date}: ${r.distance} km in ${r.duration} min, effort ${r.effort}/5${
-            r.hr ? `, avg HR ${r.hr}` : ''
-          }`
-      )
-    )
-  }
-  if (intake.notes?.trim()) {
-    lines.push(`- In their own words: "${intake.notes.trim()}"`)
-  }
-  if (intake.followUp?.length) {
-    lines.push(
-      `- Follow-up conversation with the coach:`,
-      ...intake.followUp.map((m) => `  ${m.role === 'user' ? 'Runner' : 'Coach'}: ${m.content}`)
-    )
-  }
-  return lines.join('\n')
-}
-
-/** The coach signals it has everything it needs with this token. */
-export const INTAKE_READY_TOKEN = '[READY]'
-
-/**
- * AI INTEGRATION POINT — Onboarding follow-up chat (thorough path).
- * The coach reviews the intake and asks short follow-up questions, one per
- * message, at most 3 in total. When satisfied it summarises how it will
- * build the plan and ends the message with INTAKE_READY_TOKEN.
- */
-export async function coachIntakeFollowUp(intake, history) {
-  const system = `${COACH_PERSONA}
-
-You are onboarding this new runner. Everything they told you so far:
-
-${intakeSummary(intake)}
-
-Your job now: ask the most useful follow-up question to fine-tune their
-training plan (things like injuries, weekly time available, preferred running
-days, past race times). Ask ONE short question per message and AT MOST 3
-questions in the whole conversation. When you have enough — or after the 3rd
-answer — reply with 2-3 warm sentences confirming how you'll shape their plan
-and end that final message with the exact token ${INTAKE_READY_TOKEN}${IN_SLOVENIAN}`
-
-  return callAi({
-    system,
-    messages: history.length
-      ? history.slice(-12)
-      : [{ role: 'user', content: '(The runner just finished the intake form. Start the follow-up.)' }],
-  })
-}
-
 // ---------------------------------------------------------------------------
 // Plan generation & adaptation
 // ---------------------------------------------------------------------------
@@ -516,7 +454,7 @@ export async function adaptWeeklyPlan(profile, { weekNumber, basePlan, recentWor
 ${triggerText}
 ${
   basePlan
-    ? `The originally planned week ${weekNumber} was:\n${JSON.stringify(basePlan)}\nAdjust it as needed while keeping its overall intent.`
+    ? `The originally planned week ${weekNumber} was:\n${JSON.stringify(compactWeek(basePlan))}\nAdjust it as needed while keeping its overall intent.\n${weekRulesText(basePlan)}`
     : `Write week ${weekNumber} of the plan.`
 }
 ${WEEK_SCHEMA_PROMPT}`,
@@ -526,6 +464,25 @@ ${WEEK_SCHEMA_PROMPT}`,
     maxTokens: 2048,
   })
   return parseWeekJson(text)
+}
+
+/** A stored week without the plan-wide records the AI does not need. */
+function compactWeek(week) {
+  const { planning, paces, goal_assessment, intro, ...rest } = week || {}
+  return {
+    ...rest,
+    days: (rest.days || []).map(({ segments, hr, duration_range, walk_run, ...d }) => d),
+  }
+}
+
+/** The scenario's rules for this week, in words the model will follow. */
+function weekRulesText(week) {
+  const rules = ['RULES YOU MUST KEEP (the app enforces them and discards anything else):']
+  if (week?.scenario) rules.push(`- This is a "${week.scenario}" plan.`)
+  if (week?.allow_hard === false) rules.push('- NO tempo, interval or repetition sessions this week. Easy running only.')
+  rules.push('- Runs only on the days that already have a run; rest days stay rest days.')
+  rules.push('- Never more total distance than the original week, never a run longer than its longest run.')
+  return rules.join('\n')
 }
 
 /**
@@ -630,9 +587,11 @@ export function planShapes(skeleton) {
         // every shape and was the bulk of the prompt.
         example: (day.segments || []).length
           ? day.segments
-              .map((g) => `${g.label} ${g.reps ? g.reps.summary : `${g.distance_km}km @ ${g.pace}`}`)
+              .map((g) => `${g.label} ${g.text || (g.reps ? g.reps.summary : `${g.distance_km}km @ ${g.pace}`)}`)
               .join(' | ')
-          : `${day.distance_km}km @ ${day.pace}`,
+          : day.time_based
+            ? `${day.duration_min} min`
+            : `${day.distance_km}km @ ${day.pace}`,
       })
     }
   }
@@ -645,7 +604,7 @@ function skeletonForPrompt(skeleton) {
     week: w.week_number,
     phase: w.phase,
     recovery: w.is_recovery,
-    volume_km: w.target_volume_km,
+    ...(w.unit === 'time' ? { minutes: w.target_minutes } : { volume_km: w.target_volume_km }),
     // Deliberately NOT the per-day detail: the model only writes a one-line
     // note per week, and the sessions are described once per shape below.
     sessions: [...new Set(w.days.filter((d) => d.type !== 'rest').map((d) => d.type))].join('+'),
@@ -743,10 +702,20 @@ const TYPE_SL = {
   cross: 'nadomestna vadba',
   race: 'tekma',
   rest: 'počitek',
+  walk_run: 'hoja-tek',
 }
 
 function defaultHow(day) {
   if (day.type === 'rest') return 'Počitek. Danes brez teka — telo dela svoje.'
+  if (day.type === 'race' && day.walk_breaks) {
+    return 'Začni počasneje, kot se ti zdi potrebno, in hodi, kadar zmanjka sape. Hoja je del načrta, ne poraz.'
+  }
+  if (day.time_based && day.segments?.length) {
+    return `${day.segments.map((g) => `${g.label.toLowerCase()}: ${g.text}`).join('; ')}. Tempo naj bo tak, da lahko govoriš v celih stavkih.`
+  }
+  if (day.variant === 'strides') {
+    return 'Lahkoten tek, na koncu 4-6 kratkih pospeškov po 20 sekund, vmes hoja ali počasen tek.'
+  }
   if (!day.segments?.length) {
     return `Preteci ${day.distance_km} km pri ${day.pace}. Tempo naj bo enakomeren od začetka do konca.`
   }
@@ -767,6 +736,7 @@ function defaultWhy(day, week) {
     interval: 'Intervali dvigujejo VO2 max in tekaško ekonomičnost.',
     repetition: 'Kratke ponovitve izboljšajo hitrost in tehniko teka.',
     race: 'Dan tekme — vse od tu naprej je izvedba.',
+    walk_run: 'Izmenjava hoje in teka nauči telo teka, ne da bi ga preobremenila — kite in kosti se prilagajajo počasneje kot pljuča.',
   }[day.type] || 'Gradi splošno tekaško pripravljenost.'
   return base
 }
@@ -781,22 +751,21 @@ function defaultPurpose(day) {
     repetition: 'izboljša hitrost',
     race: 'ciljna tekma',
     cross: 'ohranja kondicijo brez obremenitve nog',
+    walk_run: 'postopno navajanje na tek',
   }[day.type] || 'gradi aerobno osnovo'
 }
 
 function defaultWeekFocus(week) {
-  if (week.is_recovery) return `Regeneracijski teden — ${week.target_volume_km} km, brez trdih treningov.`
-  const phase = {
-    base: 'Osnova',
-    build: 'Nadgradnja',
-    sharpen: 'Ostrenje',
-    taper: 'Razbremenitev',
-  }[week.phase] || 'Trening'
-  return `${phase} — ${week.target_volume_km} km.`
+  const amount = week.unit === 'time' ? `${week.target_minutes} min` : `${week.target_volume_km} km`
+  if (week.is_recovery) return `Regeneracijski teden — ${amount}, brez trdih treningov.`
+  const phase = t.plan.phases[week.phase] || 'Trening'
+  return `${phase} — ${amount}.`
 }
 
 /** A usable intro when the AI gives none — states the goal and the shape. */
 function defaultIntro(skeleton) {
+  // Pipeline plans carry their own explanation: scenario, verdict, priorities.
+  if (skeleton.explain?.intro) return skeleton.explain.intro
   const d = skeleton.target_distance_km
   const weeks = skeleton.total_weeks
   const goal = d
@@ -847,6 +816,45 @@ function goalAssessmentBlock(skeleton) {
   return lines.join('\n') + '\n'
 }
 
+/**
+ * What the planning pipeline decided and why — scenario, verdict, priorities,
+ * and for an unsafe goal what was built instead. The AI explains this; it
+ * never decides it.
+ */
+function planTypeBlock(skeleton) {
+  const e = skeleton.explain
+  if (!e) return ''
+  const lines = ['PLAN TYPE (decided by the app — explain it, do not second-guess it)']
+  lines.push(`- Scenario: ${e.scenario} ("${e.scenario_label}")`)
+  lines.push(`- Verdict on their goal: ${e.verdict} ("${e.verdict_label}")`)
+  if (e.verdict === 'unsafe' && e.original_goal_text) {
+    lines.push(`- Their original goal: ${e.original_goal_text} — NOT safe in the time available.`)
+    lines.push(`- The plan is built for the closest safe goal instead: ${e.adopted_goal_text}.`)
+    if (e.other_options?.length) lines.push(`- Another safe option they could choose: ${e.other_options[0]}.`)
+  } else if (e.verdict === 'stretch' && e.fallback_text) {
+    lines.push(`- Fallback target if it gets too hard: ${e.fallback_text}.`)
+  }
+  lines.push(`- What the plan prioritises: ${e.priorities.join('; ')}`)
+  lines.push(`- Why (for you, do not quote): ${e.reasons.join(' ')}`)
+  return lines.join('\n') + '\n'
+}
+
+/** The verdict-specific instruction for the intro. */
+function introVerdictRule(skeleton) {
+  const v = skeleton.explain?.verdict
+  if (v === 'unsafe') {
+    return ' The original goal is unsafe: say so plainly and kindly — the body' +
+      ' (tendons, bones) needs more time than the date allows — name the goal' +
+      ' the plan is built for instead, and mention the other option. Never' +
+      ' shame them for the goal; it is a good goal, just not on this timeline.'
+  }
+  if (v === 'stretch') {
+    return ' The goal is a stretch: be clear it is achievable but tight, and' +
+      ' name the fallback target so falling short of the stretch still feels like success.'
+  }
+  return ''
+}
+
 function formatDurationMin(minutes) {
   const total = Math.round(minutes * 60)
   const h = Math.floor(total / 3600)
@@ -884,13 +892,15 @@ export async function describePlanSkeleton(skeleton, { profile = {}, memories = 
   const languageName = language === 'sl' ? 'Slovenian' : 'English'
   const shapes = planShapes(skeleton)
 
-  const knowledge = buildKnowledgeBlock({
-    situations: ['plan_generation'],
-    budgetTokens: KNOWLEDGE_BUDGETS.plan_generation,
-  })
+  // Only the guidance for THIS runner's scenario — one file's section, not
+  // the whole library — keeps the single call cheap.
+  const knowledge = skeleton.scenario
+    ? buildScenarioKnowledgeBlock(skeleton.scenario, { budgetTokens: KNOWLEDGE_BUDGETS.plan_generation })
+    : buildKnowledgeBlock({ situations: ['plan_generation'], budgetTokens: KNOWLEDGE_BUDGETS.plan_generation })
 
   const prompt = `You are writing the words for a training plan that has ALREADY been calculated.
 
+${planTypeBlock(skeleton)}
 THE RUNNER
 - Name: ${profile.name || 'the runner'}
 - Level: ${profile.fitness_level || 'beginner'}
@@ -913,8 +923,9 @@ ${shapes.map((s) => `${s.key}  (${s.min_km}-${s.max_km} km, e.g. ${s.example})`)
 
 YOUR JOB — three things, all in ${languageName}.
 
-1. "intro": 2-3 sentences opening the plan. What it builds toward and how it
-   will feel.${skeleton.goal_assessment?.message ? ' You MUST address the goal-time note above honestly here, in one sentence, without discouraging them.' : ''}
+1. "intro": 3-4 sentences opening the plan. It MUST say, in plain words: what
+   kind of plan this is (the plan type above), the verdict on their goal, and
+   what the plan prioritises.${introVerdictRule(skeleton)}${skeleton.goal_assessment?.message ? ' Also address the goal-time note above honestly, in one sentence, without discouraging them.' : ''}
 
 2. "weeks": one short "note" per week (one sentence, what that week is for).
 
@@ -930,10 +941,15 @@ YOUR JOB — three things, all in ${languageName}.
 
 RULES
 - Coach Runko's voice: warm, direct, concrete, never preachy. Natural
-  idiomatic ${languageName}, not a translation.
+  idiomatic ${languageName}, not a translation. No English terms or
+  jargon (not "walk-run", "ladder", "taper", "tempo run" in English) —
+  use the ${languageName} words (e.g. hoja-tek, razbremenitev).
 - DO NOT restate the numbers. The card already shows distance, time, pace and
   heart rate next to your text. Explain the session, do not recite it.
-- DO NOT change any distance, pace, day or workout type.
+- DO NOT change any distance, pace, day or workout type.${skeleton.unit === 'time' ? `
+- This plan is prescribed in MINUTES (walk-run, then continuous running).
+  Talk about time and effort ("able to talk in full sentences"), never about
+  kilometres or pace per km. Walking is part of the plan, not a failure.` : ''}
 - Keep it SHORT — this is a strict budget, not a style note. The card already
   shows every number; your text only adds the reasoning.
 - No markdown, no bullets, no headings inside these strings.

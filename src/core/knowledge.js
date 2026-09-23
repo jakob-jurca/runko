@@ -12,6 +12,7 @@
  * See /knowledge/README.md for the file format and the situation vocabulary.
  */
 import { IS_DEV } from './env'
+import { scenarioSection, documentForScenario } from './knowledge-scenarios.js'
 
 // ---------------------------------------------------------------------------
 // Situations — the vocabulary a `load_when:` list draws from
@@ -172,6 +173,8 @@ const DOCUMENTS = Object.entries(RAW_FILES)
       path,
       topic: meta.topic || name.replace(/\.md$/, ''),
       loadWhen: Array.isArray(meta.load_when) ? meta.load_when : [],
+      // Runner scenarios this file owns (core/planning). See buildScenarioKnowledgeBlock.
+      scenarios: Array.isArray(meta.scenarios) ? meta.scenarios : [],
       priority: PRIORITY_RANK[meta.priority] !== undefined ? meta.priority : 'medium',
       content,
       isEmpty: content.length === 0,
@@ -275,6 +278,38 @@ export function selectKnowledge({ situations = [], text = '', budgetTokens } = {
   }
 
   return { docs, tokens, skipped, situations: [...active] }
+}
+
+/**
+ * The knowledge block for plan generation: ONLY the `## Scenario: <id>`
+ * section of the one file that owns the runner's scenario. Everything else
+ * in the knowledge base stays out of the plan call.
+ *
+ * @param {string} scenario
+ * @param {object} [opts]
+ * @param {number} [opts.budgetTokens]
+ * @returns {string} '' when the scenario has no guidance or it is over budget
+ */
+export function buildScenarioKnowledgeBlock(scenario, { budgetTokens = KNOWLEDGE_BUDGETS.plan_generation } = {}) {
+  const doc = documentForScenario(DOCUMENTS, scenario)
+  const section = doc ? scenarioSection(doc.content, scenario) : null
+  if (!section) {
+    if (IS_DEV) console.warn(`[knowledge] no scenario guidance for "${scenario}"`)
+    return ''
+  }
+  const tokens = estimateTokens(section)
+  if (tokens > budgetTokens) {
+    // Never truncate guidance mid-rule; the tests keep every section in budget.
+    if (IS_DEV) console.warn(`[knowledge] ${doc.name} "${scenario}" section is ~${tokens} tokens, over the ${budgetTokens} budget — skipped`)
+    return ''
+  }
+  if (IS_DEV) console.log(`[knowledge] plan generation: ${doc.name} → Scenario: ${scenario} (~${tokens} tokens)`)
+  return [
+    '# COACHING GUIDANCE FOR THIS KIND OF RUNNER',
+    'Written by the Runko team. Follow it over your own defaults; do not quote it verbatim.',
+    '',
+    section,
+  ].join('\n')
 }
 
 /**

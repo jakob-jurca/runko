@@ -47,8 +47,10 @@ this folder.
 | `coach-prompt.js` | Coach Runko's system prompt and the full-context builder. |
 | `memory.js` | Durable facts the coach remembers about a runner. |
 | `knowledge.js` | Loads `/knowledge/*.md` and injects the relevant parts into prompts. |
-| `periodization.js` | The training-plan maths: VDOT, paces, phases, volume, taper. |
-| `plan.js` | The plan engine — builds the skeleton, has the AI describe it, persists it. |
+| `knowledge-scenarios.js` | Picks the one `## Scenario: <id>` section plan generation loads. Pure, tested. |
+| `periodization.js` | The training-plan maths: VDOT, paces, phases, volume, taper, week layout. |
+| `planning/` | The planning pipeline, one file per step: `collect` → `assess` → `classify` (seven runner scenarios) → `feasibility` (feasible / stretch / unsafe) → `clarify` (≤ 3 questions) → `build` (a builder per scenario) → `explain`. `rules.js` holds the safety limits every step shares; `guard.js` keeps AI-adapted weeks inside them. Pure code, no AI; tested by `tests/personas.test.mjs`. |
+| `plan.js` | The plan engine — runs the pipeline, has the AI describe the result (one call), persists it. |
 | `subscription.js` | Trial and premium gating. |
 
 ## The two bundler touchpoints

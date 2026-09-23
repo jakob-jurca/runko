@@ -30,6 +30,29 @@ Body text the coach will read...
 | `topic` | yes | Short identifier, unique across the folder. Used in logs and as the heading of the injected block. |
 | `load_when` | yes | List of situations in which this document is injected. See below. |
 | `priority` | yes | `high`, `medium` or `low`. Decides who survives the token budget: high first, then medium, then low. |
+| `scenarios` | no | Runner scenarios this file owns (see below). Each scenario must be owned by exactly one file. |
+
+### Scenarios (`scenarios`) — plan generation
+
+Plan generation does **not** use situations. The planning pipeline
+(`src/core/planning`) classifies each runner into one of seven scenarios, and
+the plan call loads only the `## Scenario: <id>` section of the one file that
+lists that scenario — nothing else from this folder. That keeps the single
+plan call cheap and specific.
+
+| Scenario | File |
+| --- | --- |
+| `complete_beginner`, `beginner_with_deadline` | `beginners.md` |
+| `recreational` | `recreational.md` |
+| `short_race` | `short-race.md` |
+| `long_race` | `long-race.md` |
+| `returning` | `returning.md` |
+| `maintenance` | `maintenance.md` |
+
+A scenario section must fit the plan-generation budget (700 tokens) and must
+describe the rules the engine already enforces (`src/core/planning/rules.js`)
+— the AI explains the plan, it never overrides it. `tests/knowledge-scenarios.test.mjs`
+checks ownership, presence and size.
 
 ### Situations (`load_when`)
 
@@ -37,8 +60,8 @@ Body text the coach will read...
 | --- | --- |
 | `always` | Every AI call, no exceptions. Use sparingly -- `tone.md` only. |
 | `chat` | Any coach chat message. |
-| `plan_generation` | Building or rebuilding a training plan. |
-| `onboarding` | The intake follow-up conversation. |
+| `plan_generation` | Fallback only, for a plan built without a scenario. Pipeline plans use `scenarios` instead. |
+| `onboarding` | Onboarding copy and questions. |
 | `injury_mention` | The runner's message mentions pain, an injury or a body part. |
 | `nutrition_question` | The message is about food, fuelling, hydration or gels. |
 | `pace_question` | The message is about pace, VDOT, race times or how fast to run. |

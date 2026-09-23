@@ -13,7 +13,14 @@ export const PHASE_STYLES = {
   build: { label: t.plan.phases.build, bar: 'bg-primary', text: 'text-primary', chip: 'bg-primary-faint text-primary' },
   sharpen: { label: t.plan.phases.sharpen, bar: 'bg-rose-500', text: 'text-rose-400', chip: 'bg-rose-500/15 text-rose-400' },
   taper: { label: t.plan.phases.taper, bar: 'bg-sky-500', text: 'text-sky-400', chip: 'bg-sky-500/15 text-sky-400' },
+  // Scenario phases (core/planning)
+  walk_run: { label: t.plan.phases.walk_run, bar: 'bg-amber-500', text: 'text-amber-400', chip: 'bg-amber-500/15 text-amber-400' },
+  return: { label: t.plan.phases.return, bar: 'bg-violet-500', text: 'text-violet-400', chip: 'bg-violet-500/15 text-violet-400' },
+  consistency: { label: t.plan.phases.consistency, bar: 'bg-teal-500', text: 'text-teal-400', chip: 'bg-teal-500/15 text-teal-400' },
+  maintain: { label: t.plan.phases.maintain, bar: 'bg-zinc-400', text: 'text-zinc-300', chip: 'bg-zinc-500/20 text-zinc-300' },
 }
+
+const VERDICT_STYLES = { feasible: 'text-emerald-400', stretch: 'text-amber-400', unsafe: 'text-rose-400' }
 
 export const phaseStyle = (phase) => PHASE_STYLES[phase] || PHASE_STYLES.base
 
@@ -48,9 +55,11 @@ export default function Plan() {
     () =>
       plans.map((row) => {
         const j = row.plan_json || {}
+        // Walk-run plans are prescribed in minutes; their km are estimates.
         const volume =
-          j.target_volume_km ??
-          (j.days || []).reduce((s, d) => s + (Number(d.distance_km) || 0), 0)
+          j.unit === 'time'
+            ? j.target_minutes ?? (j.days || []).reduce((s, d) => s + (d.type === 'race' ? 0 : Number(d.duration_min) || 0), 0)
+            : j.target_volume_km ?? (j.days || []).reduce((s, d) => s + (Number(d.distance_km) || 0), 0)
         return {
           number: row.week_number,
           phase: j.phase || 'base',
@@ -71,6 +80,10 @@ export default function Plan() {
   const paces = plans[0]?.plan_json?.paces
   const intro = plans[0]?.plan_json?.intro
   const assessment = plans[0]?.plan_json?.goal_assessment
+  // Why the plan looks the way it does (core/planning): scenario and verdict.
+  const explain = plans[0]?.plan_json?.planning?.explain
+  const timeBased = plans[0]?.plan_json?.unit === 'time'
+  const unit = timeBased ? t.common.min : t.common.km
   // Explicitly false only on plans built without premium. Plans saved before
   // this flag existed leave it undefined, so they show no notice.
   const genericWording = plans[0]?.plan_json?.ai_described === false
@@ -104,10 +117,13 @@ export default function Plan() {
       <header className="animate-fade-up">
         <h1 className="text-2xl font-extrabold tracking-tight">{t.plan.title}</h1>
         <p className="mt-1 text-sm text-zinc-500">
-          {t.plan.summary(weeks.length, totalKm)}
-          {vdot ? ` · VDOT ${vdot}` : ''}
+          {timeBased ? t.plan.summaryTime(weeks.length, Math.round(totalKm / 60)) : t.plan.summary(weeks.length, totalKm)}
+          {vdot && !timeBased ? ` · VDOT ${vdot}` : ''}
         </p>
-        <p className="mt-1 text-sm font-medium text-primary">{goalLabel(profile)}</p>
+        {/* An unsafe goal is never built: show the goal this plan is for. */}
+        <p className="mt-1 text-sm font-medium text-primary">
+          {explain?.verdict === 'unsafe' ? explain.adopted_goal_text : goalLabel(profile)}
+        </p>
       </header>
 
       {/* The maths is the same on every tier; only the prose is generic. Say
@@ -129,7 +145,8 @@ export default function Plan() {
             Coach Runko
           </p>
           <p className="mt-1.5 text-sm leading-relaxed text-zinc-200">{intro}</p>
-          {assessment && !assessment.realistic && (
+          {explain && <VerdictCard explain={explain} />}
+          {!explain && assessment && !assessment.realistic && (
             <p className="mt-3 rounded-xl bg-zinc-950/60 p-3 text-xs leading-relaxed text-zinc-400">
               This plan is built toward a realistic outcome for these{' '}
               {weeks.length} weeks rather than your stated target. Keep the target — it is a
@@ -145,7 +162,7 @@ export default function Plan() {
       </p>
 
       {/* training paces */}
-      {paces && (
+      {paces && !timeBased && (
         <section className="card mt-6 animate-fade-up" style={{ animationDelay: '40ms' }}>
           <h2 className="mb-3 text-sm font-bold uppercase tracking-widest text-zinc-500">
             {t.plan.yourPaces}
@@ -167,7 +184,7 @@ export default function Plan() {
           <h2 className="text-sm font-bold uppercase tracking-widest text-zinc-500">
             {t.plan.weeklyVolume}
           </h2>
-          <span className="text-xs text-zinc-500">{t.plan.peak(peak)}</span>
+          <span className="text-xs text-zinc-500">{t.plan.peak(peak, unit)}</span>
         </div>
 
         {/* phase band */}
@@ -191,7 +208,7 @@ export default function Plan() {
                 key={w.number}
                 onClick={() => setOpenWeek(openWeek === w.number ? null : w.number)}
                 className="group flex h-full min-w-0 flex-1 flex-col justify-end"
-                title={t.plan.weekTooltip(w.number, w.volume, w.isRecovery)}
+                title={t.plan.weekTooltip(w.number, w.volume, w.isRecovery, unit)}
               >
                 <span
                   className={`mb-1 text-center text-[9px] font-medium ${
@@ -219,7 +236,7 @@ export default function Plan() {
         </div>
 
         <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1">
-          {Object.entries(PHASE_STYLES).map(([phase, s]) => (
+          {Object.entries(PHASE_STYLES).filter(([phase]) => blocks.some((b) => b.phase === phase)).map(([phase, s]) => (
             <span key={phase} className="flex items-center gap-1.5 text-[10px] text-zinc-500">
               <span className={`h-2 w-2 rounded-full ${s.bar}`} />
               {s.label}
@@ -272,7 +289,7 @@ export default function Plan() {
                     </div>
                     <p className="mt-1 truncate text-sm text-zinc-300">{w.focus || s.label}</p>
                     <p className="mt-0.5 text-xs text-zinc-600">
-                      {shortDate(w.start)} · {w.volume} km
+                      {shortDate(w.start)} · {w.volume} {unit}
                     </p>
                   </div>
                   <span className={`shrink-0 text-zinc-600 transition-transform ${open ? 'rotate-90' : ''}`}>
@@ -291,10 +308,12 @@ export default function Plan() {
                             <span className={d.type === 'rest' ? 'text-zinc-600' : 'text-zinc-200'}>
                               {d.title || d.type}
                             </span>
-                            {d.distance_km > 0 && (
+                            {d.time_based && d.type !== 'race' && d.duration_min > 0 ? (
+                              <span className="text-zinc-500"> — {d.duration_min} min</span>
+                            ) : d.distance_km > 0 && (
                               <span className="text-zinc-500">
                                 {' '}
-                                — {d.distance_km} km{d.pace ? ` at ${d.pace}` : ''}
+                                — {d.distance_km} km{d.pace ? ` @ ${d.pace}` : ''}
                               </span>
                             )}
                             {d.purpose && (
@@ -316,10 +335,49 @@ export default function Plan() {
         <p className="mb-1 font-semibold text-zinc-400">{t.plan.howBuilt}</p>
         {t.plan.howBuiltBody}{' '}
         {Object.entries(PHASE_INTENT)
-          .map(([p, intent]) => `${phaseStyle(p).label.toLowerCase()} is ${intent}`)
+          .filter(([p]) => blocks.some((b) => b.phase === p))
+          .map(([p, intent]) => `${phaseStyle(p).label.toLowerCase()} — ${intent}`)
           .join('; ')}
         .
       </div>
     </main>
+  )
+}
+
+/**
+ * The pipeline's verdict under the coach's intro: what kind of plan this is,
+ * how the goal was judged, and — for an unsafe goal — what was built instead.
+ */
+function VerdictCard({ explain }) {
+  return (
+    <div className="mt-3 space-y-1 rounded-xl bg-zinc-950/60 p-3 text-xs leading-relaxed text-zinc-400">
+      <p>
+        <span className="font-semibold text-zinc-300">{t.plan.scenarioLabel}:</span> {explain.scenario_label}
+      </p>
+      <p>
+        <span className="font-semibold text-zinc-300">{t.plan.verdictLabel}:</span>{' '}
+        <span className={`font-semibold ${VERDICT_STYLES[explain.verdict] || ''}`}>{explain.verdict_label}</span>
+      </p>
+      {explain.verdict === 'unsafe' && explain.original_goal_text && (
+        <>
+          <p>
+            <span className="font-semibold text-zinc-300">{t.plan.originalGoal}:</span> {explain.original_goal_text}
+          </p>
+          <p>
+            <span className="font-semibold text-zinc-300">{t.plan.builtFor}:</span> {explain.adopted_goal_text}
+          </p>
+          {explain.other_options?.[0] && (
+            <p>
+              <span className="font-semibold text-zinc-300">{t.plan.otherOption}:</span> {explain.other_options[0]}
+            </p>
+          )}
+        </>
+      )}
+      {explain.verdict === 'stretch' && explain.fallback_text && (
+        <p>
+          <span className="font-semibold text-zinc-300">{t.plan.fallbackLabel}:</span> {explain.fallback_text}
+        </p>
+      )}
+    </div>
   )
 }

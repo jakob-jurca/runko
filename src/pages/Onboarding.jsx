@@ -2,10 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { saveProfile, addWorkout, addDaysISO, todayISO } from '../core/db'
-import { createInitialPlan } from '../core/plan'
+import { createInitialPlan, previewPlan, ClarificationNeededError } from '../core/plan'
 import { parseDuration, formatPace } from '../core/periodization'
-import { coachIntakeFollowUp, friendlyAiMessage, INTAKE_READY_TOKEN } from '../core/ai'
-import Spinner, { FullScreenSpinner } from '../components/Spinner'
+import { FullScreenSpinner } from '../components/Spinner'
 import { t } from '../core/strings'
 
 const LEVELS = t.onboarding.levels
@@ -80,11 +79,14 @@ function prefill(draftValue, profileValue, fallback = '') {
 }
 
 /**
- * Onboarding v3 — two paths after signup:
- *  QUICK:    personal data only, plan built straight away.
+ * Onboarding v4 — two paths after signup:
+ *  QUICK:    personal data only.
  *  THOROUGH: personal data → running history (3 recent runs, or a 3 km test
- *            run for brand-new runners) → free-text notes → the coach asks
- *            follow-up questions → plan confirmed and built.
+ *            run for brand-new runners) → free-text notes.
+ * Both then run the planning pipeline locally (core/planning, no AI): if
+ * something critical is missing or contradictory it asks up to three
+ * questions, and if the goal is unsafe it shows the coach's verdict and lets
+ * the runner pick the safer goal to build. Only then is the plan built.
  * Intake runs are saved as real workout rows; everything else feeds the
  * AI plan generator via the intake object.
  *
@@ -145,14 +147,11 @@ export default function Onboarding() {
   const [testRun, setTestRun] = useState(saved.testRun || { ...emptyRun(0), distance: '3' })
   const [notes, setNotes] = useState(prefill(saved.notes, prof.coach_notes))
 
-  // coach follow-up chat
-  const [chatMsgs, setChatMsgs] = useState(saved.chatMsgs || []) // {role, content}
-  const [chatInput, setChatInput] = useState('')
-  const [thinking, setThinking] = useState(false)
-  const [ready, setReady] = useState(saved.ready || false)
-  // Don't re-open the follow-up if a restored conversation already exists.
-  const chatStarted = useRef((saved.chatMsgs || []).length > 0)
-  const bottomRef = useRef(null)
+  // Planning pipeline follow-up: its questions, the runner's answers, and the
+  // preview (verdict) the clarify step shows before anything is built.
+  const [answers, setAnswers] = useState(saved.answers || {})
+  const [preview, setPreview] = useState(null)
+  const [preparing, setPreparing] = useState(false)
 
   // Persist progress on every change so switching tabs, reloads or an auth
   // re-login never resets the flow. Cleared in finish() on success.
@@ -163,12 +162,12 @@ export default function Onboarding() {
         step, path, name, age, weight, level, eventDate,
         targetDistance, hasDate, targetTime, experienceMonths, weeklyVolume,
         longestRun, daysPerWeek, availableDays,
-        hasRun, runs, testRun, notes, chatMsgs, ready,
+        hasRun, runs, testRun, notes, answers,
       })
     )
   }, [step, path, name, age, weight, level, eventDate, targetDistance, hasDate,
       targetTime, experienceMonths, weeklyVolume, longestRun, daysPerWeek,
-      availableDays, hasRun, runs, testRun, notes, chatMsgs, ready])
+      availableDays, hasRun, runs, testRun, notes, answers])
 
   const stepOrder = useMemo(() => {
     const s = ['path', 'name', 'body', 'level', 'goal', 'experience', 'days']
@@ -178,9 +177,9 @@ export default function Onboarding() {
       if (hasRun === false) s.push('gorun')
     }
     s.push('notes')
-    if (path === 'thorough') s.push('chat')
+    if (step === 'clarify') s.push('clarify')
     return s
-  }, [path, hasRun])
+  }, [path, hasRun, step])
 
   // --- derived goal values -------------------------------------------------
   const targetDistanceValid = Number(targetDistance) > 0 && Number(targetDistance) <= 200
@@ -214,55 +213,7 @@ export default function Onboarding() {
     hasRunBefore: hasRun,
     runs: (hasRun === false ? [testRun] : runs).filter(runValid),
     notes,
-    followUp: chatMsgs.map((m) => ({
-      role: m.role,
-      content: m.content.replace(INTAKE_READY_TOKEN, '').trim(),
-    })),
   })
-
-  // AI INTEGRATION POINT — the coach opens the follow-up conversation as soon
-  // as the chat step is reached.
-  useEffect(() => {
-    if (step !== 'chat' || chatStarted.current) return
-    chatStarted.current = true
-    setThinking(true)
-    coachIntakeFollowUp(buildIntake(), [])
-      .then((reply) => receiveCoach(reply))
-      .catch((err) => {
-        setChatMsgs([{ role: 'assistant', content: friendlyAiMessage(err) }])
-        setReady(true) // never dead-end onboarding on an API failure
-      })
-      .finally(() => setThinking(false))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step])
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [chatMsgs, thinking])
-
-  const receiveCoach = (reply) => {
-    if (reply.includes(INTAKE_READY_TOKEN)) setReady(true)
-    setChatMsgs((m) => [...m, { role: 'assistant', content: reply.replace(INTAKE_READY_TOKEN, '').trim() }])
-  }
-
-  const sendChat = async (e) => {
-    e?.preventDefault()
-    const content = chatInput.trim()
-    if (!content || thinking) return
-    setChatInput('')
-    const history = [...chatMsgs, { role: 'user', content }]
-    setChatMsgs(history)
-    setThinking(true)
-    try {
-      const reply = await coachIntakeFollowUp(buildIntake(), history)
-      receiveCoach(reply)
-    } catch (err) {
-      setChatMsgs((m) => [...m, { role: 'assistant', content: friendlyAiMessage(err) }])
-      setReady(true)
-    } finally {
-      setThinking(false)
-    }
-  }
 
   /**
    * The users-row shape, from whatever has been filled in so far. Every field
@@ -306,7 +257,40 @@ export default function Onboarding() {
     }
   }
 
-  const finish = async () => {
+  /**
+   * Run the planning pipeline locally before building: ask its follow-up
+   * questions, or show the verdict on an unsafe goal and let the runner pick
+   * what to build. Builds straight away when there is nothing to ask.
+   */
+  const prepare = async (nextAnswers = answers) => {
+    setPreparing(true)
+    setError('')
+    try {
+      const intake = path === 'thorough' ? buildIntake() : null
+      const result = await previewPlan({ ...prof, ...profileFields() }, intake, nextAnswers)
+      setPreview(result)
+      const unsafeUnchosen = result.status === 'ready' && result.verdict === 'unsafe' && !nextAnswers.safe_goal
+      if (result.status === 'needs_answers' || unsafeUnchosen) {
+        setStep('clarify')
+        return
+      }
+      await finish(nextAnswers)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setPreparing(false)
+    }
+  }
+
+  /** Record one answer; re-run the pipeline once every question has one. */
+  const answer = (id, value) => {
+    const next = { ...answers, [id]: value }
+    setAnswers(next)
+    const open = (preview?.questions || []).filter((q) => next[q.id] === undefined)
+    if (!open.length) prepare(next)
+  }
+
+  const finish = async (finalAnswers = answers) => {
     setBuilding(true)
     setError('')
     try {
@@ -330,17 +314,25 @@ export default function Onboarding() {
 
       // AI plan from the full intake (falls back to a static template), and
       // stamps last_plan_created_at for the once-a-month rebuild limit.
-      await createInitialPlan(savedProfile, intake)
+      await createInitialPlan(savedProfile, intake, finalAnswers)
       clearOnboardingProgress()
       await refreshProfile()
       navigate('/')
     } catch (err) {
-      setError(err.message)
+      if (err instanceof ClarificationNeededError) {
+        // The saved profile turned up something the preview did not (coach
+        // memory, logged runs): ask rather than guess.
+        setPreview({ status: 'needs_answers', questions: err.questions })
+        setStep('clarify')
+      } else {
+        setError(err.message)
+      }
       setBuilding(false)
     }
   }
 
   if (building) return <FullScreenSpinner message={t.onboarding.building} />
+  if (preparing) return <FullScreenSpinner message={t.onboarding.saving} />
   if (skipping) return <FullScreenSpinner message={t.onboarding.saving} />
 
   const updateRun = (i, patch) =>
@@ -949,83 +941,33 @@ export default function Onboarding() {
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
           />
-          {/* Notes is the LAST step on the quick path, so it builds the plan
-              rather than advancing into a step that does not exist. */}
-          <button
-            className="btn-primary mt-6 w-full"
-            onClick={() => (path === 'thorough' ? go(1) : finish())}
-          >
-            {path === 'thorough' ? t.common.continue : t.onboarding.buildMyPlan}
+          {/* Notes is the last data step on both paths: from here the planning
+              pipeline decides whether it needs to ask anything. */}
+          <button className="btn-primary mt-6 w-full" onClick={() => prepare()}>
+            {t.onboarding.buildMyPlan}
           </button>
         </div>
       )}
 
-      {step === 'chat' && (
-        <div className="flex min-h-0 flex-1 flex-col animate-fade-up">
-          <h1 className="text-3xl font-extrabold">{t.onboarding.chatTitle}</h1>
-          <div className="mt-6 flex-1 space-y-3 overflow-y-auto">
-            {chatMsgs.map((m, i) => (
-              <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div
-                  className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-relaxed ${
-                    m.role === 'user'
-                      ? 'rounded-br-sm bg-primary text-white'
-                      : 'rounded-tl-sm bg-zinc-900 text-zinc-100'
-                  }`}
-                >
-                  {m.content}
-                </div>
-              </div>
-            ))}
-            {thinking && (
-              <div className="flex justify-start">
-                <div className="flex gap-1.5 rounded-2xl rounded-tl-sm bg-zinc-900 px-4 py-4">
-                  {[0, 1, 2].map((i) => (
-                    <span
-                      key={i}
-                      className="h-2 w-2 animate-pulse-dot rounded-full bg-zinc-500"
-                      style={{ animationDelay: `${i * 200}ms` }}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-            <div ref={bottomRef} />
-          </div>
-
-          {ready ? (
-            <button className="btn-primary mt-6 w-full" onClick={finish}>
-              {t.onboarding.chatLooksGood}
-            </button>
-          ) : (
-            <>
-              <form onSubmit={sendChat} className="mt-6 flex gap-2">
-                <input
-                  className="input flex-1"
-                  placeholder={t.onboarding.chatPlaceholder}
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                />
-                <button type="submit" disabled={!chatInput.trim() || thinking} className="btn-primary !px-4">
-                  {thinking ? <Spinner className="h-5 w-5 text-white" /> : '→'}
-                </button>
-              </form>
-              <button
-                onClick={finish}
-                className="mt-3 w-full text-center text-xs text-zinc-500 hover:text-zinc-300"
-              >
-                {t.onboarding.chatSkip}
-              </button>
-            </>
-          )}
-        </div>
+      {step === 'clarify' && preview && (
+        <ClarifyStep
+          preview={preview}
+          answers={answers}
+          onAnswer={answer}
+          onChooseGoal={(id) => {
+            const next = { ...answers, safe_goal: id }
+            setAnswers(next)
+            finish(next)
+          }}
+          onChangeGoal={() => setStep('goal')}
+        />
       )}
 
       {error && <p className="mt-4 text-sm text-rose-400">{error}</p>}
 
       {/* Bottom bar: back where it applies, and "skip for now" on every step. */}
       <div className="mt-auto flex items-center justify-between gap-4 pt-8">
-        {stepIdx > 0 && step !== 'chat' ? (
+        {stepIdx > 0 ? (
           <button onClick={() => go(-1)} className="text-sm text-zinc-500 hover:text-zinc-300">
             {t.common.back}
           </button>
@@ -1039,6 +981,94 @@ export default function Onboarding() {
           {rebuilding ? t.onboarding.notNow : t.onboarding.skipForNow}
         </button>
       </div>
+    </div>
+  )
+}
+
+/**
+ * The planning pipeline's follow-up: up to three questions answered with a
+ * tap, or — for an unsafe goal — the coach's verdict and a choice of the
+ * safer goals to build instead.
+ */
+function ClarifyStep({ preview, answers, onAnswer, onChooseGoal, onChangeGoal }) {
+  if (preview.status === 'needs_answers') {
+    return (
+      <div className="animate-fade-up">
+        <h1 className="text-3xl font-extrabold">{t.onboarding.clarifyTitle}</h1>
+        <p className="mt-2 text-zinc-400">{t.onboarding.clarifySubtitle}</p>
+        <div className="mt-8 space-y-8">
+          {preview.questions.map((q) => (
+            <div key={q.id}>
+              <p className="font-semibold">{q.text}</p>
+              <p className="mt-1 text-xs text-zinc-500">{q.why}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {q.options.map((o) => (
+                  <button
+                    key={o.value}
+                    onClick={() => onAnswer(q.id, o.value)}
+                    className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+                      answers[q.id] === o.value
+                        ? 'bg-primary text-white'
+                        : 'bg-zinc-900 text-zinc-300 hover:bg-zinc-800'
+                    }`}
+                  >
+                    {o.label}
+                  </button>
+                ))}
+                {q.id === 'event_date' && (
+                  <button
+                    onClick={onChangeGoal}
+                    className="rounded-full px-4 py-2 text-sm font-medium text-zinc-400 underline underline-offset-4 hover:text-zinc-200"
+                  >
+                    {t.onboarding.changeGoal}
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  // Unsafe goal: explain, then let them choose what gets built.
+  const alternatives = (preview.proposal?.alternatives || []).filter((a) => a.kind !== 'more_days')
+  const moreDays = (preview.proposal?.alternatives || []).find((a) => a.kind === 'more_days')
+  const P = t.planning
+  const label = (a) =>
+    a.kind === 'no_event' ? P.alternative.no_event : P.goal(a.distance_km, a.event_date, a.walk_breaks)
+  return (
+    <div className="animate-fade-up">
+      <h1 className="text-3xl font-extrabold">{t.onboarding.verdictTitle}</h1>
+      <div className="card mt-6">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-rose-400">
+          {P.verdicts.unsafe}
+        </p>
+        <p className="mt-2 text-sm leading-relaxed text-zinc-200">{preview.explain?.intro}</p>
+      </div>
+      <p className="mt-6 text-sm font-semibold">{t.onboarding.chooseGoal}</p>
+      <div className="mt-3 space-y-2">
+        {alternatives.map((a) => (
+          <button
+            key={a.id}
+            onClick={() => onChooseGoal(a.id)}
+            className="w-full rounded-2xl bg-zinc-900 px-4 py-3 text-left text-sm font-medium text-zinc-100 transition hover:bg-zinc-800"
+          >
+            {label(a)}
+          </button>
+        ))}
+      </div>
+      {moreDays && (
+        <p className="mt-4 text-xs text-zinc-500">
+          {P.alternative.more_days(P.goal(moreDays.distance_km, moreDays.event_date, false), moreDays.run_days)}
+        </p>
+      )}
+      <button
+        onClick={onChangeGoal}
+        className="mt-4 w-full text-center text-xs text-zinc-500 underline underline-offset-4 hover:text-zinc-300"
+      >
+        {t.onboarding.changeGoal}
+      </button>
     </div>
   )
 }

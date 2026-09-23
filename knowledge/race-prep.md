@@ -24,7 +24,7 @@ priority: medium
 | 5K | 5-7 days | final week -30-40% | 4-5 days before: short I or R session (e.g. 4 x 400 R) | normal long run 7-10 days before, shortened |
 | 10K | 7-10 days | final week -35-50% | 4-5 days before: e.g. 3-4 x 1 km at 10K pace | 8-10 days before, ~75% of usual |
 | Half marathon | 10-14 days | week -2: -20-30%; race week -40-50% | 4-5 days before: e.g. 3 x 2 km at HM pace or 20 min T | 10-14 days before, ~16-18 km |
-| Marathon | 2-3 weeks | week -3: -20-25%; week -2: -40%; race week -60% (Pfitzinger) | 7-10 days before: moderate M or T session; race week: short M-pace segments only (e.g. 3-5 km at M) | 3 weeks before (peak long run 29-35 km); 2 weeks before ~20-24 km |
+| Marathon | 2-3 weeks | week -3: -20-25%; week -2: -40%; race week -60% (Pfitzinger) | 7-10 days before: moderate M or T session; race week: short M-pace segments only (e.g. 3-5 km at M) | 3 weeks before (peak long run ~29-32 km or 3 h, whichever comes first); 2 weeks before ~20-24 km or ~2 h |
 - Hansons marathon taper is shorter (~10 days) because peak long runs are shorter (26 km). [Hansons]
 - Beginners/first-timers: taper length at the upper end, volume cut at the upper end.
 

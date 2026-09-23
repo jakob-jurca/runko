@@ -12,6 +12,7 @@ const TYPE_STYLES = {
   cross: 'bg-violet-500/15 text-violet-400',
   race: 'bg-amber-500/20 text-amber-400',
   rest: 'bg-zinc-700/30 text-zinc-400',
+  walk_run: 'bg-amber-500/15 text-amber-400',
 }
 
 /** One row of the spec block: LABEL on the left, value on the right. */
@@ -37,9 +38,10 @@ function Segment({ segment }) {
           {segment.label}
         </span>
         <span className="text-right font-mono text-sm font-semibold text-zinc-100">
-          {segment.reps
-            ? segment.reps.summary
-            : `${segment.distance_km} km @ ${segment.pace_range || segment.pace}`}
+          {segment.text ||
+            (segment.reps
+              ? segment.reps.summary
+              : `${segment.distance_km} km @ ${segment.pace_range || segment.pace}`)}
         </span>
       </div>
       {hr && <p className="mt-0.5 text-right font-mono text-[11px] text-zinc-500">{hr}</p>}
@@ -169,7 +171,11 @@ export default function WorkoutCard({
       {/* spec block — the scannable part */}
       {!isRest && (
         <div className="mt-3 divide-y divide-zinc-800/70 border-t border-zinc-800/70 pt-2">
-          <Spec label={t.workout.distance} value={day.distance_km > 0 ? `${day.distance_km} km` : null} />
+          {/* Minute-based sessions carry only an estimated distance. */}
+          <Spec
+            label={t.workout.distance}
+            value={day.distance_km > 0 ? `${day.time_based && day.type !== 'race' ? '~' : ''}${day.distance_km} km` : null}
+          />
           <Spec label={t.workout.time} value={time} />
 
           {hasSegments ? (

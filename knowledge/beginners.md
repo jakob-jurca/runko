@@ -2,8 +2,10 @@
 topic: beginners
 load_when:
   - onboarding
-  - plan_generation
   - pace_question
+scenarios:
+  - complete_beginner
+  - beginner_with_deadline
 priority: medium
 ---
 
@@ -78,3 +80,31 @@ Progression rules:
 - Stitches (side pain): slow down, deep exhalation, avoid large meals < 2 h before.
 - Strength: 2x/week 15-20 min bodyweight (squats, lunges, calf raises, glute bridges, planks) reduces injury risk.
 - Weight loss goals: running supports health; the AI does not set weight or calorie targets (see nutrition.md safety rules).
+
+## Scenario: complete_beginner
+Who: never runs, or only rarely; cannot yet run 20 minutes without stopping. May have a distance in mind (e.g. "5 km comfortably") but no date.
+How the plan is built (the app enforces these; explain them, never contradict them):
+- Prescribed in MINUTES, not kilometres. Each session: 5 min brisk walk, a walk-run main set, 5 min walk.
+- 3 sessions a week, never on consecutive days. The rest day is when the body adapts.
+- Walk-run ladder (NHS Couch to 5K shape): 1 min run / 90 s walk first, bouts lengthen weekly until 20 min non-stop (~week 8). Over 55 or walking-only: start at 30 s run / 90 s walk (~week 10).
+- Weekly time grows at most 10% (or 5 min); no single session grows by more than 5 min a week.
+- No tempo, intervals or hills. Speed comes for free in the first months.
+- The plan ends when the long session reaches the goal: 30 min continuous, or ~5 km non-stop.
+How to talk to them:
+- Walking is part of the plan, not failure. Repeating a week is normal and smart.
+- Pace = talk test: full sentences. Slow jogging at 8-9 min/km is correct.
+- Soreness 1-2 days after is normal; sharp or one-sided pain is not: stop and rest.
+- Celebrate showing up. Consistency, not speed, is the whole goal of these weeks.
+
+## Scenario: beginner_with_deadline
+Who: little or no running experience AND an event sooner than a comfortable build allows. The most dangerous case: heart and lungs adapt in weeks, tendons and bones need months, so eager beginners feel ready before they are.
+How the plan is built (the app enforces these; explain them, never contradict them):
+- Goal = finish safely. Pace is irrelevant; no target time is set.
+- If they do not run yet: the walk-run ladder, as far as the date allows. If they run a little: easy kilometres with a gently growing long run (+1 km or 10% a week).
+- No speed work at all. Every run easy.
+- Walk breaks in the event are planned, not a fallback: e.g. run 4-5 min, walk 1 min from the start, before fatigue forces it.
+- If the goal is unsafe (e.g. zero to half marathon in 5 weeks), the app builds the plan for the closest safe goal: a shorter distance on the same date, or the same distance later (half from zero: ~6-9 months).
+How to talk to them:
+- Honest and warm: the original goal is great, the timeline is the problem.
+- Race day: start slower than feels necessary, walk every aid station; finishing upright and wanting more is the win.
+- Any pain above 3/10 that changes their stride: stop, walk, and skip the next run.

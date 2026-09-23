@@ -35,7 +35,7 @@ Fallback cross-check (not Daniels): Riegel `T2 = T1 * (D2/D1)^1.06`. [Riegel 198
 ## Intensity targets
 | Zone | Purpose | %VO2max | %HRmax | Effort cue | Per-session volume limit [Daniels] |
 |---|---|---|---|---|---|
-| E (easy/long) | aerobic base, capillaries, mitochondria, tendon/bone adaptation, recovery | 59-74 | 65-79 | full sentences, RPE 2-4/10 | long run <= 25% weekly volume (> 65 km/wk) or <= 30% (< 65 km/wk), and <= 150 min (marathon plans up to ~3 h) |
+| E (easy/long) | aerobic base, capillaries, mitochondria, tendon/bone adaptation, recovery | 59-74 | 65-79 | full sentences, RPE 2-4/10 | long run capped by duration: <= 150 min, up to 180 min in marathon plans; above ~50 km/wk aim for ~30% of weekly volume (a guide, not a cap) |
 | M (marathon) | race-specific endurance, fuel use at goal pace | 75-84 | 80-90 | controlled, sustainable for hours | <= 20% weekly volume or 29 km, whichever less |
 | T (threshold) | raise lactate threshold, "comfortably hard" | 83-88 | 88-92 | short phrases, RPE 6-7 | <= 10% weekly volume per session; continuous tempo ~20 min; cruise intervals 3-15 min reps with 1 min rest per 5 min run |
 | I (interval) | maximise VO2max stimulus | 95-100 | 97-100 | hard, few words, RPE 8-9 | <= 8% weekly volume or 10 km, whichever less; reps 3-5 min (never > 5 min at I pace); jog recovery equal to or slightly less than rep time |

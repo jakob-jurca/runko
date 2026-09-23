@@ -119,7 +119,18 @@ export function estimateVdot(runs = [], fitnessLevel = 'beginner') {
   const ceiling = median + OUTLIER_MARGIN
 
   const usable = candidates.filter((c) => c.vdot <= ceiling)
-  const best = (usable.length ? usable : candidates).reduce((a, b) => (b.vdot > a.vdot ? b : a))
+  let best = (usable.length ? usable : candidates).reduce((a, b) => (b.vdot > a.vdot ? b : a))
+
+  // An all-out effort over a real distance IS a race result, and it beats
+  // anything inferred from training runs. The effort scaling above is a
+  // guess about what an easy run implies; without this cap, an easy 8 km at
+  // effort 2 could "prove" more fitness than the 10 km time trial run the
+  // same week, and a stretch target time would be judged comfortable.
+  const races = candidates.filter((c) => Number(c.run.effort) >= 5 && Number(c.run.distance) >= 3)
+  if (races.length) {
+    const bestRace = races.reduce((a, b) => (b.vdot > a.vdot ? b : a))
+    if (best.vdot > bestRace.vdot) best = bestRace
+  }
 
   return {
     vdot: clamp(round1(Math.min(best.vdot, ceiling)), VDOT_MIN, VDOT_MAX),
@@ -417,6 +428,11 @@ export const PHASE_INTENT = {
   build: 'dvig vzdržne hitrosti s pragovnim delom, medtem ko obseg raste',
   sharpen: 'tekmovalno hitrost in vadbo ciljnega tempa',
   taper: 'odpravljanje utrujenosti ob ohranjanju ostrine za dan tekme',
+  // Scenario phases (core/planning)
+  walk_run: 'navajanje telesa na tek z izmenjavo hoje in teka',
+  return: 'ponovno navajanje kit, kosti in sklepov na tek, brez intenzivnosti',
+  consistency: 'rednost in užitek v teku, večinoma lahkotno',
+  maintain: 'ohranjanje forme brez nadgradnje obsega',
 }
 
 export const TAPER_WEEKS = 2
@@ -430,7 +446,7 @@ export const TAPER_WEEKS = 2
  *
  * @returns {string[]} one phase per week, index 0 = week 1
  */
-export function assignPhases(totalWeeks, { hasEvent = false } = {}) {
+export function assignPhases(totalWeeks, { hasEvent = false, taperWeeks = TAPER_WEEKS } = {}) {
   if (totalWeeks <= 0) return []
 
   if (!hasEvent) {
@@ -443,7 +459,7 @@ export function assignPhases(totalWeeks, { hasEvent = false } = {}) {
   if (totalWeeks === 1) return ['taper']
   if (totalWeeks === 2) return ['taper', 'taper']
 
-  const taper = Math.min(TAPER_WEEKS, totalWeeks - 1)
+  const taper = Math.min(taperWeeks, totalWeeks - 1)
   const preparation = totalWeeks - taper
 
   // Sharpen only earns a slot once there is room for a real build block.
@@ -795,6 +811,18 @@ export const RACE_WEEK_TRAINING_SHARE = 0.35
 export const MAX_HARD_VS_LONG = 0.7
 export const MAX_HARD_SESSION_KM = 12
 
+/**
+ * Daniels' per-session ceilings on fast running, as a share of the week's
+ * volume and in absolute km (knowledge/vdot.md). `marathon` also covers
+ * goal-pace tempo work.
+ */
+export const HARD_SESSION_CAPS = {
+  tempo: { share: 0.1, km: 15 },
+  marathon: { share: 0.2, km: 29 },
+  interval: { share: 0.08, km: 10 },
+  repetition: { share: 0.05, km: 8 },
+}
+
 /** Share of weekly volume in the long run. */
 const LONG_RUN_SHARE = 0.3
 
@@ -855,9 +883,13 @@ export function layOutWeek({
   maxLongRunKm = null,
   goalPaceKey = 'marathon',
   race = null, // { day, distanceKm } on the final week of an event plan
+  // Scenario overrides (core/planning). Omitted, the legacy behaviour holds.
+  runDays: fixedRunDays = null, // explicit weekdays to run on
+  qualityPlan = null, // [{ type, paceKey }] — this week's quality sessions, in order
+  longShare = LONG_RUN_SHARE,
 }) {
   const wanted = constraints.maxRunDays ?? RUN_DAYS_BY_LEVEL[fitnessLevel] ?? 4
-  const runDays = chooseRunDays({
+  const runDays = fixedRunDays ?? chooseRunDays({
     count: wanted,
     availableDays: constraints.availableDays,
     noBackToBack: constraints.noBackToBack,
@@ -867,7 +899,8 @@ export function layOutWeek({
 
   // The long run goes on the latest run day (usually the weekend).
   const longDay = runDays[runDays.length - 1]
-  const qualityCount = isRecovery ? 0 : Math.min(QUALITY_BY_PHASE[phase] ?? 1, Math.max(0, runDays.length - 2))
+  const wantedQuality = qualityPlan ? qualityPlan.length : QUALITY_BY_PHASE[phase] ?? 1
+  const qualityCount = isRecovery ? 0 : Math.min(wantedQuality, Math.max(0, runDays.length - 2))
 
   // Quality sessions sit as far from the long run (and each other) as possible.
   const candidates = runDays.slice(0, -1)
@@ -892,7 +925,7 @@ export function layOutWeek({
 
   // 1. Long run — a share of the week, hard-capped by the ramp ceiling that
   //    starts at the runner's own longest run (see buildLongRunCurve).
-  let longDistance = budget * (isRecovery ? LONG_RUN_SHARE * 0.8 : LONG_RUN_SHARE)
+  let longDistance = budget * (isRecovery ? longShare * 0.8 : longShare)
   if (maxLongRunKm) longDistance = Math.min(longDistance, maxLongRunKm)
 
   // 2. Quality — the 20% in 80/20 is the FAST RUNNING, not the whole session:
@@ -904,12 +937,26 @@ export function layOutWeek({
   const hardEach = qualityDays.length
     ? Math.min((budget * HARD_VOLUME_SHARE) / qualityDays.length, maxHardEach)
     : 0
-  const qualitySession = hardEach > 0 ? hardEach + warmupCooldown : 0
+  // Scenario plans also honour Daniels' per-session limits for each
+  // intensity (knowledge/vdot.md): without them a 20% "hard" budget handed a
+  // single repetition session 8 km of R-pace running.
+  const hardFor = (q) => {
+    if (!qualityPlan) return hardEach
+    const cap = HARD_SESSION_CAPS[q.type === 'tempo' && q.paceKey !== 'threshold' ? 'marathon' : q.type]
+    return cap ? Math.min(hardEach, budget * cap.share, cap.km) : hardEach
+  }
+  // Never longer than the long run: a quality day that out-distances the long
+  // run is a second long run with speed in it.
+  const sessionFor = (hard) => (hard > 0 ? Math.min(hard + warmupCooldown, longDistance) : 0)
+  const qualitySession = sessionFor(hardEach)
 
   // 3. Easy — whatever is left, spread over the remaining days and kept
   //    below the long run.
   const easyDays = runDays.filter((d) => d !== longDay && !qualityDays.includes(d))
-  const easyTotal = Math.max(0, budget - qualitySession * qualityDays.length - longDistance)
+  const qualityKm = qualityPlan
+    ? qualityDays.reduce((t, day, i) => t + sessionFor(hardFor({ day, ...qualityPlan[i] })), 0)
+    : qualitySession * qualityDays.length
+  const easyTotal = Math.max(0, budget - qualityKm - longDistance)
   let easyEach = easyDays.length ? easyTotal / easyDays.length : 0
 
   // Keeping every easy day below the long run leaves a surplus. Give it to
@@ -925,8 +972,10 @@ export function layOutWeek({
     longDistance += Math.min(surplus, headroom)
   }
 
-  // Quality type follows the phase: threshold early, faster work later.
-  const qualityPlan = qualityDays.map((day, i) => {
+  // Quality type follows the phase: threshold early, faster work later —
+  // unless the scenario supplied its own sessions.
+  const sessions = qualityDays.map((day, i) => {
+    if (qualityPlan) return { day, ...qualityPlan[i] }
     if (phase === 'base') return { day, type: 'tempo', paceKey: 'threshold' }
     if (phase === 'build') return { day, type: i === 0 ? 'tempo' : 'interval', paceKey: i === 0 ? 'threshold' : 'interval' }
     if (phase === 'sharpen') return { day, type: i === 0 ? 'interval' : 'tempo', paceKey: i === 0 ? 'interval' : goalPaceKey }
@@ -955,12 +1004,13 @@ export function layOutWeek({
         paceKey: 'easy', paces, intensity: 'easy',
       })
     }
-    const quality = qualityPlan.find((q) => q.day === day)
+    const quality = sessions.find((q) => q.day === day)
     if (quality) {
+      const hard = hardFor(quality)
       return makeDay({
         day, type: quality.type,
-        distanceKm: qualitySession,
-        hardKm: hardEach, // the fast part; the rest is warm-up and cool-down
+        distanceKm: sessionFor(hard),
+        hardKm: hard, // the fast part; the rest is warm-up and cool-down
         paceKey: quality.paceKey, paces,
         intensity: quality.paceKey === 'marathon' ? 'moderate' : 'hard',
       })
@@ -1016,7 +1066,7 @@ export const DEFAULT_TITLES = {
   rest: 'Počitek',
 }
 
-function restDay(day) {
+export function restDay(day) {
   return {
     day,
     type: 'rest',
@@ -1039,7 +1089,7 @@ export function roundKm(km) {
   return Math.max(1, Math.round(km))
 }
 
-function makeDay({ day, type, distanceKm, hardKm = 0, paceKey, paces, intensity }) {
+export function makeDay({ day, type, distanceKm, hardKm = 0, paceKey, paces, intensity }) {
   // Race day keeps the REAL distance: a half marathon is 21.1 km, not 21.
   const distance = type === 'race' ? round1(distanceKm) : roundKm(distanceKm)
   const paceMin = paces[paceKey]

@@ -302,7 +302,9 @@ export default function Dashboard() {
               </p>
               {currentPlan.plan_json.target_volume_km > 0 && (
                 <p className="mt-1 text-xs text-zinc-600">
-                  {t.dashboard.targetThisWeek(currentPlan.plan_json.target_volume_km)}
+                  {currentPlan.plan_json.unit === 'time'
+                    ? t.dashboard.targetThisWeekTime(currentPlan.plan_json.target_minutes)
+                    : t.dashboard.targetThisWeek(currentPlan.plan_json.target_volume_km)}
                 </p>
               )}
             </div>

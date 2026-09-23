@@ -3,21 +3,33 @@ Tokens = body after HTML comments are stripped, ~4 chars/token, same estimate as
 
 vdot.md            high    ~ 2962 tok  load_when: plan_generation, pace_question
                    Daniels-Gilbert formulas + full VDOT 30-85 tables (race times, E/M/T/I/R paces), intensity limits, update/adjustment rules.
-methodology.md     high    ~ 2076 tok  load_when: plan_generation, pace_question, workout_question
+methodology.md     high    ~ 2077 tok  load_when: plan_generation, pace_question, workout_question
                    Intensity zones, 80/20, progressive overload, 10% rule + single-run spike evidence, recovery, periodization phases, plan rules.
-workout-types.md   high    ~ 2381 tok  load_when: plan_generation, workout_question
+workout-types.md   high    ~ 2382 tok  load_when: plan_generation, workout_question
                    One ## section per engine type (easy, long, tempo, interval, repetition, cross, rest, race) with variants, paces, frequency, phase, plain-language line.
 injuries.md        high    ~ 2460 tok  load_when: injury_mention
                    Safety rules, pain scale, red flags, six common injuries, return-to-run protocol.
-nutrition.md       medium  ~ 1626 tok  load_when: nutrition_question
+nutrition.md       medium  ~ 1627 tok  load_when: nutrition_question
                    Safety rules, carbs/protein per kg, fuelling by run duration, hydration, carb loading, caffeine.
-beginners.md       medium  ~ 1368 tok  load_when: onboarding, plan_generation, pace_question
-                   Screening, 9-week walk-run plan, realistic timelines, talk test, common mistakes.
-race-prep.md       medium  ~ 1661 tok  load_when: plan_generation, pace_question, workout_question
+beginners.md       medium  ~ 1997 tok  load_when: onboarding, pace_question   scenarios: complete_beginner, beginner_with_deadline
+                   Screening, 9-week walk-run plan, realistic timelines, talk test, common mistakes; scenario sections for both beginner scenarios.
+race-prep.md       medium  ~ 1662 tok  load_when: plan_generation, pace_question, workout_question
                    Taper by distance, race week/morning routine, pacing by distance, heat adjustments, race-day mistakes, post-race recovery.
-faq.md             low     ~ 2471 tok  load_when: chat, motivation
+faq.md             low     ~ 2472 tok  load_when: chat, motivation
                    40 runner questions as ## headings with short answers.
-slovenia.md        low     ~ 1808 tok  load_when: plan_generation, chat
+slovenia.md        low     ~ 1809 tok  load_when: plan_generation, chat
                    Slovenian races (2026 dates), seasonal anchors, climate, outdoor risks, EN-SL terminology.
 
-Total (9 files): ~18,813 tokens. tone.md is not part of this set.
+Scenario guidance (plan generation loads ONLY the "## Scenario: <id>" section of the one file that owns the runner's scenario):
+recreational.md    medium  ~  302 tok  scenarios: recreational
+                   Rolling consistency plan, mostly easy, optional strides, plateau ~25% above current.
+short-race.md      medium  ~  325 tok  scenarios: short_race
+                   5-10 km: speed-led phases, Daniels per-session limits, deliberately short long runs, taper.
+long-race.md       medium  ~  341 tok  scenarios: long_race
+                   Half and longer: long run central, classic periodization, taper by distance, minimum readiness.
+returning.md       medium  ~  350 tok  scenarios: returning
+                   Comeback after break/injury/pregnancy: start below old level, no intensity for 6 weeks, pain rule.
+maintenance.md     medium  ~  274 tok  scenarios: maintenance
+                   Hold fitness: flat volume, keep intensity, lighter week every 4th.
+
+Total (14 files): ~21,040 tokens. tone.md is not part of this set.
