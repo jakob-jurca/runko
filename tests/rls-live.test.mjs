@@ -16,7 +16,8 @@
  * The two audit users are created once and REUSED: their credentials are kept
  * in .rls-audit.json (gitignored), so running the suite a hundred times does
  * not leave a hundred accounts behind. Delete that file to start fresh. Data
- * rows are removed after every run.
+ * rows are removed after every run, and again at the start of the next one in
+ * case a run crashed before its cleanup.
  *
  * It SKIPS, loudly and without failing, when .env is absent or the project is
  * unreachable — `npm test` must still work offline and in CI. A skip is
@@ -122,6 +123,17 @@ async function audit() {
   /** A write is correctly refused if it errors OR silently affects no rows. */
   const refused = ({ error, data }) => Boolean(error) || !data || data.length === 0
   const detail = (label, err) => (err ? `${label} — ${err.message}` : label)
+
+  /** Remove both users' rows. Also run first, for rows a crashed run left behind. */
+  async function cleanup() {
+    for (const u of [A, B]) {
+      for (const table of ['coach_memory', 'chat_messages', 'workouts', 'training_plans']) {
+        await u.sb.from(table).delete().eq('user_id', u.id)
+      }
+      await u.sb.from('users').delete().eq('id', u.id)
+    }
+  }
+  await cleanup()
 
   // --- A writes one row in every table --------------------------------------
   const created = {}
@@ -291,13 +303,7 @@ async function audit() {
     check("workouts: A's row was not modified by B", intact.data?.notes === 'A-secret-run')
   }
 
-  // --- cleanup ---------------------------------------------------------------
-  for (const u of [A, B]) {
-    for (const table of ['coach_memory', 'chat_messages', 'workouts', 'training_plans']) {
-      await u.sb.from(table).delete().eq('user_id', u.id)
-    }
-    await u.sb.from('users').delete().eq('id', u.id)
-  }
+  await cleanup()
 
   return summary('rls-live')
 }
