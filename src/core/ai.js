@@ -949,7 +949,11 @@ RULES
 - DO NOT change any distance, pace, day or workout type.${skeleton.unit === 'time' ? `
 - This plan is prescribed in MINUTES (walk-run, then continuous running).
   Talk about time and effort ("able to talk in full sentences"), never about
-  kilometres or pace per km. Walking is part of the plan, not a failure.` : ''}
+  kilometres or pace per km. Walking is part of the plan, not a failure.` : ''}${skeleton.unit === 'mixed' ? `
+- This plan starts in MINUTES (walk-run, then continuous running) and switches
+  to KILOMETRES once the runner can run about 30 minutes non-stop. For weeks
+  given in minutes, talk about time and effort, never kilometres or pace;
+  walking is part of the plan, not a failure. The switch is a milestone.` : ''}
 - Keep it SHORT — this is a strict budget, not a style note. The card already
   shows every number; your text only adds the reasoning.
 - No markdown, no bullets, no headings inside these strings.

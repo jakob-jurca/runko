@@ -229,7 +229,10 @@ export const SCENARIO_RULES = {
   },
 }
 
-/** Longest plan we build in one go; a goal further out gets a first block. */
+/**
+ * Longest useful race block. A race further out still gets a plan to race
+ * day: this block ends on it, and steady foundation weeks come before it.
+ */
 export const MAX_PLAN_WEEKS = 30
 
 /** Default length of a plan with a distance goal but no date. */

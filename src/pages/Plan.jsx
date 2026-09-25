@@ -9,6 +9,7 @@ import { t } from '../core/strings'
 
 /** One colour per training phase, reused by the curve and the week list. */
 export const PHASE_STYLES = {
+  foundation: { label: t.plan.phases.foundation, bar: 'bg-lime-600', text: 'text-lime-400', chip: 'bg-lime-500/15 text-lime-400' },
   base: { label: t.plan.phases.base, bar: 'bg-emerald-500', text: 'text-emerald-400', chip: 'bg-emerald-500/15 text-emerald-400' },
   build: { label: t.plan.phases.build, bar: 'bg-primary', text: 'text-primary', chip: 'bg-primary-faint text-primary' },
   sharpen: { label: t.plan.phases.sharpen, bar: 'bg-rose-500', text: 'text-rose-400', chip: 'bg-rose-500/15 text-rose-400' },
@@ -51,15 +52,18 @@ export default function Plan() {
 
   const currentWeek = useMemo(() => currentWeekNumber(plans), [plans])
 
+  // Walk-run weeks are prescribed in minutes; their km are estimates. A plan
+  // that starts with walk-run and switches to kilometres is charted in km,
+  // while each week in the list keeps its own unit.
+  const timeBased = plans.length > 0 && plans.every((row) => row.plan_json?.unit === 'time')
   const weeks = useMemo(
     () =>
       plans.map((row) => {
         const j = row.plan_json || {}
-        // Walk-run plans are prescribed in minutes; their km are estimates.
-        const volume =
-          j.unit === 'time'
-            ? j.target_minutes ?? (j.days || []).reduce((s, d) => s + (d.type === 'race' ? 0 : Number(d.duration_min) || 0), 0)
-            : j.target_volume_km ?? (j.days || []).reduce((s, d) => s + (Number(d.distance_km) || 0), 0)
+        const inMinutes = j.unit === 'time'
+        const minutes = j.target_minutes ?? (j.days || []).reduce((s, d) => s + (d.type === 'race' ? 0 : Number(d.duration_min) || 0), 0)
+        const km = j.target_volume_km ?? (j.days || []).reduce((s, d) => s + (Number(d.distance_km) || 0), 0)
+        const volume = timeBased ? minutes : km
         return {
           number: row.week_number,
           phase: j.phase || 'base',
@@ -67,11 +71,13 @@ export default function Plan() {
           focus: j.focus || '',
           intent: j.intent || '',
           volume: Math.round(volume * 10) / 10,
+          ownVolume: Math.round((inMinutes ? minutes : km) * 10) / 10,
+          ownUnit: inMinutes ? t.common.min : t.common.km,
           days: j.days || [],
           start: weekStartISO(plans, row.week_number),
         }
       }),
-    [plans]
+    [plans, timeBased]
   )
 
   const peak = Math.max(1, ...weeks.map((w) => w.volume))
@@ -82,8 +88,9 @@ export default function Plan() {
   const assessment = plans[0]?.plan_json?.goal_assessment
   // Why the plan looks the way it does (core/planning): scenario and verdict.
   const explain = plans[0]?.plan_json?.planning?.explain
-  const timeBased = plans[0]?.plan_json?.unit === 'time'
   const unit = timeBased ? t.common.min : t.common.km
+  // Paces and VDOT mean nothing to someone still learning to run.
+  const hasWalkRun = plans.some((row) => row.plan_json?.unit === 'time')
   // Explicitly false only on plans built without premium. Plans saved before
   // this flag existed leave it undefined, so they show no notice.
   const genericWording = plans[0]?.plan_json?.ai_described === false
@@ -118,7 +125,7 @@ export default function Plan() {
         <h1 className="text-2xl font-extrabold tracking-tight">{t.plan.title}</h1>
         <p className="mt-1 text-sm text-zinc-500">
           {timeBased ? t.plan.summaryTime(weeks.length, Math.round(totalKm / 60)) : t.plan.summary(weeks.length, totalKm)}
-          {vdot && !timeBased ? ` · VDOT ${vdot}` : ''}
+          {vdot && !hasWalkRun ? ` · VDOT ${vdot}` : ''}
         </p>
         {/* An unsafe goal is never built: show the goal this plan is for. */}
         <p className="mt-1 text-sm font-medium text-primary">
@@ -162,7 +169,7 @@ export default function Plan() {
       </p>
 
       {/* training paces */}
-      {paces && !timeBased && (
+      {paces && !hasWalkRun && (
         <section className="card mt-6 animate-fade-up" style={{ animationDelay: '40ms' }}>
           <h2 className="mb-3 text-sm font-bold uppercase tracking-widest text-zinc-500">
             {t.plan.yourPaces}
@@ -289,7 +296,7 @@ export default function Plan() {
                     </div>
                     <p className="mt-1 truncate text-sm text-zinc-300">{w.focus || s.label}</p>
                     <p className="mt-0.5 text-xs text-zinc-600">
-                      {shortDate(w.start)} · {w.volume} {unit}
+                      {shortDate(w.start)} · {w.ownVolume} {w.ownUnit}
                     </p>
                   </div>
                   <span className={`shrink-0 text-zinc-600 transition-transform ${open ? 'rotate-90' : ''}`}>

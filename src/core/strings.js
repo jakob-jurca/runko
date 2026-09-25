@@ -199,6 +199,7 @@ export const t = {
       return: 'Vrnitev',
       consistency: 'Rednost',
       maintain: 'Ohranjanje',
+      foundation: 'Predpriprava',
     },
     scenarioLabel: 'Vrsta načrta',
     verdictLabel: 'Ocena cilja',
@@ -532,6 +533,10 @@ export const t = {
       otherOption: (option) => `Druga varna možnost: ${option}.`,
       priorities: (list) => `Načrt daje prednost temu: ${list.join(', ')}.`,
       noGoal: 'Brez tekme in brez ciljne razdalje — gradiva rednost in veselje do teka.',
+      timeThenDistance: (week) =>
+        `Začneš s hojo-tekom po minutah. Ko zmoreš približno 30 minut teka brez premora (predvidoma v ${week - 1}. tednu), načrt preide na kilometre in te postopno pripelje do tekme.`,
+      foundation: (weeks, block) =>
+        `Do tekme je še daleč, zato prvih ${weeks} tednov ohranjaš stabilen, varen obseg (predpriprava), zadnjih ${block} tednov pa so ciljne priprave, ki se končajo na dan tekme.`,
     },
     fallback: {
       time: (time) => `čas ${time}`,

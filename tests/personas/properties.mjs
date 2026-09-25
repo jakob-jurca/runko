@@ -20,8 +20,9 @@ const FLOOR_MIN = 5
 const runDaysOf = (week) => week.days.filter((d) => d.type !== 'rest')
 const isRace = (d) => d.type === 'race'
 
-/** Weekly load in the plan's own unit, ignoring the race itself. */
+/** Weekly load in the week's own unit (or the plan's), ignoring the race itself. */
 function weekLoad(week, unit) {
+  unit = week.unit ?? unit
   const days = week.days.filter((d) => d.type !== 'rest' && !isRace(d))
   return unit === 'time'
     ? days.reduce((s, d) => s + (Number(d.duration_min) || 0), 0)
@@ -62,25 +63,29 @@ export function weeklyIncreaseWithinLimit(result, persona, pct = 10) {
   // Week 1 against what they do now.
   const current = Number(persona.profile.weekly_volume_km) || 0
   const first = result.weeks[0]
-  if (unit === 'distance' && current > 0 && first && !hasRaceDay(first)) {
+  if ((first?.unit ?? unit) === 'distance' && current > 0 && first && !hasRaceDay(first)) {
     const load = weekLoad(first, unit)
     if (load > limit(current) + 0.01) {
       return { ok: false, detail: `week 1 is ${load} km against ${current} km/week now` }
     }
   }
 
-  // Each week against the last week that was meant to progress.
+  // Each week against the last week that was meant to progress. Where a plan
+  // switches from minutes to kilometres, the first kilometre week is held to
+  // the km the last minutes week covered.
   let last = null
   for (const w of result.weeks) {
     if (hasRaceDay(w) || w.phase === 'taper') continue
+    const u = w.unit ?? unit
     const load = weekLoad(w, unit)
-    if (last !== null && load > limit(last.load) + 0.01) {
+    const prev = last && (last.unit === u ? last.load : u === 'distance' ? last.km : null)
+    if (prev && load > limit(prev) + 0.01) {
       return {
         ok: false,
-        detail: `week ${w.week_number}: ${load} ${unit === 'time' ? 'min' : 'km'} after ${last.load} in week ${last.week} (+${Math.round((load / last.load - 1) * 100)}%)`,
+        detail: `week ${w.week_number}: ${load} ${u === 'time' ? 'min' : 'km'} after ${prev} in week ${last.week} (+${Math.round((load / prev - 1) * 100)}%)`,
       }
     }
-    if (!w.is_recovery) last = { load, week: w.week_number }
+    if (!w.is_recovery) last = { load, unit: u, km: weekLoad({ ...w, unit: 'distance' }), week: w.week_number }
   }
   return { ok: true }
 }
@@ -314,5 +319,41 @@ export const SPECIFIC = {
   raceWalkBreaks: (r) => {
     const race = r.weeks.flatMap((w) => w.days).find(isRace)
     return race?.walk_breaks ? { ok: true } : { ok: false, detail: race ? 'race without walk breaks' : 'no race day' }
+  },
+
+  /** Every week from now to race day is in the plan, and the last one holds the race. */
+  reachesRaceDay: (r, p) => {
+    const event = p.profile.event_date
+    const start = new Date(r.startDate + 'T00:00:00')
+    const weeksToEvent = Math.floor((new Date(event + 'T00:00:00') - start) / (7 * 86_400_000)) + 1
+    const gap = r.weeks.findIndex((w, i) => w.week_number !== i + 1)
+    if (gap !== -1) return { ok: false, detail: `week ${gap + 1} is numbered ${r.weeks[gap].week_number}` }
+    if (r.weeks.length !== weeksToEvent) {
+      return { ok: false, detail: `${r.weeks.length} weeks, race day is in week ${weeksToEvent}` }
+    }
+    const last = r.weeks[r.weeks.length - 1]
+    return hasRaceDay(last) ? { ok: true } : { ok: false, detail: `last week (${last.week_number}) has no race` }
+  },
+
+  /**
+   * Walk-run in minutes first; once the long session is ~30 minutes non-stop,
+   * kilometres — switching exactly once, and never back.
+   */
+  walkRunThenDistance: (r) => {
+    const units = r.weeks.map((w) => w.unit)
+    const switchAt = units.indexOf('distance')
+    if (units[0] !== 'time' || switchAt === -1) return { ok: false, detail: `units ${[...new Set(units)].join(' → ')}` }
+    if (units.slice(switchAt).some((u) => u !== 'distance')) return { ok: false, detail: 'goes back to minutes after kilometres' }
+    const lastTime = r.weeks[switchAt - 1]
+    const continuous = Math.max(0, ...lastTime.days.map((d) => d.walk_run?.continuous_min || 0))
+    return continuous >= 30
+      ? { ok: true }
+      : { ok: false, detail: `switches in week ${switchAt + 1} after only ${continuous} min non-stop` }
+  },
+
+  /** The weeks before the race block are labelled as their own phase. */
+  foundationFirst: (r, p, weeks) => {
+    const lead = r.weeks.findIndex((w) => w.phase !== 'foundation')
+    return lead === weeks ? { ok: true } : { ok: false, detail: `${lead === -1 ? r.weeks.length : lead} foundation weeks, expected ${weeks}` }
   },
 }

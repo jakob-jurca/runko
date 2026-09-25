@@ -55,6 +55,25 @@ export const PERSONAS = [
       maxWeeklyIncreasePct: 10, maxRunDays: 3,
     },
   },
+  // Complete beginners with a race far enough away to get there properly:
+  // walk-run in minutes, then kilometres all the way to race day.
+  ...[
+    { id: 'zero-to-5k-race-26w', km: 5, weeks: 26 },
+    { id: 'zero-to-10k-race-36w', km: 10, weeks: 36 },
+    { id: 'zero-to-half-race-52w', km: 21.1, weeks: 52 },
+  ].map(({ id, km, weeks }) => ({
+    id,
+    who: `Never ran, ${km} km race ${weeks} weeks away`,
+    profile: {
+      age: 34, fitness_level: 'beginner', experience_months: 0, weekly_volume_km: 0,
+      target_distance_km: km, event_date: sundayIn(weeks), days_per_week: 3,
+    },
+    expect: {
+      scenario: 'complete_beginner', verdict: 'feasible',
+      walkRun: true, walkRunThenDistance: true, noHardSessions: true, noBackToBack: true, maxRunDays: 3,
+      reachesRaceDay: true, raceOnEventDay: true, noEarlyRace: true, taper: true,
+    },
+  })),
   {
     id: 'student-zero-half-5w',
     who: '20-year-old student, zero experience, half marathon in 5 weeks',
@@ -293,6 +312,18 @@ export const PERSONAS = [
     expect: {
       scenario: 'long_race', verdict: 'feasible',
       maxWeeklyIncreasePct: 10, raceOnEventDay: true, noEarlyRace: true,
+    },
+  },
+  {
+    id: 'beginner-marathon-45w',
+    who: 'Beginner on 12 km/week, marathon 45 weeks away (beyond one 30-week block)',
+    profile: {
+      age: 30, fitness_level: 'beginner', experience_months: 6, weekly_volume_km: 12,
+      longest_run_km: 6, target_distance_km: 42.2, event_date: sundayIn(45), days_per_week: 4,
+    },
+    expect: {
+      scenario: 'long_race', maxWeeklyIncreasePct: 10, reachesRaceDay: true,
+      raceOnEventDay: true, noEarlyRace: true, taper: true, foundationFirst: 15,
     },
   },
 

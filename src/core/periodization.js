@@ -467,6 +467,7 @@ export const PHASES = ['base', 'build', 'sharpen', 'taper']
 
 /** What each phase is for — surfaced on the dashboard and fed to the AI. */
 export const PHASE_INTENT = {
+  foundation: 'stabilen, varen obseg do začetka priprav na tekmo',
   base: 'gradnjo aerobne osnove in navajanje telesa na reden tek',
   build: 'dvig vzdržne hitrosti s pragovnim delom, medtem ko obseg raste',
   sharpen: 'tekmovalno hitrost in vadbo ciljnega tempa',
