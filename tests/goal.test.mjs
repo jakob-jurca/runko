@@ -1,7 +1,8 @@
 // Distance-based goals: any km target, optional target time, realism check.
 // Pure functions, no API calls.
 import {
-  parseDuration, formatDuration, raceTimeForVdot, assessGoal, peakLongRunKm,
+  parseDuration, formatDuration, raceTimeForVdot,
+  targetTimeFromParts, targetTimeToParts, targetTimeHasSeconds, targetPaceCheck, assessGoal, peakLongRunKm,
   buildPlanSkeleton, mergeProfileConstraints, currentWeeklyVolume, DAYS,
 } from '../src/core/periodization.js'
 import { check, near, summary } from './harness.mjs'
@@ -17,6 +18,24 @@ for (const bad of ['', '   ', 'abc', 'soon', null, undefined])
   check(`"${bad}" → null`, parseDuration(bad) === null)
 check('round-trips through formatDuration', formatDuration(parseDuration('1:45:00')) === '1:45:00')
 check('under an hour drops the hour part', formatDuration(45.5) === '45:30')
+
+console.log('\n=== TARGET TIME FIELDS ===')
+// "4:00" for a marathon used to parse as four minutes (0:06/km).
+check('4 h 0 min → 240 min', targetTimeFromParts({ hours: '4', minutes: '0' }) === 240)
+check('minutes only → 45 min', targetTimeFromParts({ minutes: '45' }) === 45)
+check('seconds count → 22:30', near(targetTimeFromParts({ minutes: '22', seconds: '30' }), 22.5, 0.001))
+check('all empty → null', targetTimeFromParts({ hours: '', minutes: '', seconds: '' }) === null)
+check('zero → null', targetTimeFromParts({ hours: '0', minutes: '0' }) === null)
+check('junk → null', targetTimeFromParts({ hours: '-1', minutes: '30' }) === null)
+check('round-trips to fields', JSON.stringify(targetTimeToParts(105.5)) === JSON.stringify({ hours: '1', minutes: '45', seconds: '30' }))
+check('no time → empty fields', targetTimeToParts(null).hours === '')
+check('seconds field under 10 km only', targetTimeHasSeconds(5) && !targetTimeHasSeconds(10) && !targetTimeHasSeconds(42.2))
+const marathon4h = targetPaceCheck(240, 42.2)
+check(`4:00 marathon → 5:41/km (${marathon4h.label})`, marathon4h.label === '5:41' && marathon4h.warning === null)
+check('4 minutes for a marathon → too fast', targetPaceCheck(4, 42.2).warning === 'too_fast')
+check('2:50/km itself is allowed', targetPaceCheck(2 + 50 / 60, 1).warning === null)
+check('3 h for 10 km → too slow', targetPaceCheck(180, 10).warning === 'too_slow')
+check('no distance → null', targetPaceCheck(240, 0) === null)
 
 console.log('\n=== RACE TIME PREDICTION (inverse VDOT) ===')
 // Anchors from the Daniels tables.

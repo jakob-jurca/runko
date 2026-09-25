@@ -268,6 +268,49 @@ export function parseDuration(text) {
   return null
 }
 
+/**
+ * The target time is typed as separate hours / minutes / seconds fields: a
+ * single "4:00" box was read as four minutes for a marathon. Seconds only
+ * matter below 10 km; above that the field is not shown.
+ */
+export const targetTimeHasSeconds = (distanceKm) => Number(distanceKm) > 0 && Number(distanceKm) < 10
+
+/** {hours, minutes, seconds} as typed → MINUTES, or null if empty or invalid. */
+export function targetTimeFromParts({ hours = '', minutes = '', seconds = '' } = {}) {
+  const parts = [hours, minutes, seconds].map((v) => String(v ?? '').trim())
+  if (parts.every((p) => p === '')) return null
+  if (!parts.every((p) => p === '' || /^\d+$/.test(p))) return null
+  const [h, m, s] = parts.map((p) => Number(p || 0))
+  const total = h * 60 + m + s / 60
+  return total > 0 ? total : null
+}
+
+/** Minutes → {hours, minutes, seconds} as strings, for prefilling the fields. */
+export function targetTimeToParts(minutes) {
+  const total = Math.round(Number(minutes) * 60)
+  if (!Number.isFinite(total) || total <= 0) return { hours: '', minutes: '', seconds: '' }
+  return {
+    hours: String(Math.floor(total / 3600)),
+    minutes: String(Math.floor((total % 3600) / 60)),
+    seconds: String(total % 60),
+  }
+}
+
+/** Implied paces outside this range are almost certainly a typing slip. */
+export const TARGET_PACE_LIMITS = { fastest: 2 + 50 / 60, slowest: 12 }
+
+/**
+ * The pace a target time implies, and whether it looks mistyped.
+ * @returns {{paceMin: number, label: string, warning: 'too_fast'|'too_slow'|null}|null}
+ */
+export function targetPaceCheck(timeMin, distanceKm) {
+  if (!(timeMin > 0) || !(Number(distanceKm) > 0)) return null
+  const paceMin = timeMin / Number(distanceKm)
+  const warning = paceMin < TARGET_PACE_LIMITS.fastest ? 'too_fast'
+    : paceMin > TARGET_PACE_LIMITS.slowest ? 'too_slow' : null
+  return { paceMin, label: formatPace(paceMin), warning }
+}
+
 /** Minutes → "1:45:00" (or "45:30" under an hour). */
 export function formatDuration(minutes) {
   if (!Number.isFinite(minutes) || minutes <= 0) return null

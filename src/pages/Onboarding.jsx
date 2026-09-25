@@ -3,7 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { saveProfile, addWorkout, addDaysISO, todayISO } from '../core/db'
 import { createInitialPlan, previewPlan, ClarificationNeededError } from '../core/plan'
-import { parseDuration, formatPace } from '../core/periodization'
+import {
+  parseDuration, targetTimeFromParts, targetTimeToParts, targetTimeHasSeconds, targetPaceCheck,
+} from '../core/periodization'
 import { FullScreenSpinner } from '../components/Spinner'
 import { t } from '../core/strings'
 
@@ -60,16 +62,14 @@ export function clearOnboardingProgress() {
  * onboarding — or who is rebuilding their plan months later — pick up from
  * everything they have already told us instead of retyping it.
  */
-/** Minutes → "1:45:00" for prefilling the target-time input. */
-function formatDurationInput(minutes) {
-  const total = Math.round(Number(minutes) * 60)
-  if (!Number.isFinite(total) || total <= 0) return ''
-  const h = Math.floor(total / 3600)
-  const m = Math.floor((total % 3600) / 60)
-  const sec = total % 60
-  return h > 0
-    ? `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
-    : `${m}:${String(sec).padStart(2, '0')}`
+/**
+ * The target-time fields to start from: the draft's, else a draft saved
+ * before the fields were split (one "1:45:00" string), else the profile's.
+ */
+function initialTargetTime(saved, prof) {
+  if (saved.targetTimeParts) return saved.targetTimeParts
+  if (saved.targetTime) return targetTimeToParts(parseDuration(saved.targetTime))
+  return targetTimeToParts(prof.target_time_min)
 }
 
 function prefill(draftValue, profileValue, fallback = '') {
@@ -128,9 +128,9 @@ export default function Onboarding() {
   const [hasDate, setHasDate] = useState(
     saved.hasDate ?? Boolean(prof.event_date)
   )
-  const [targetTime, setTargetTime] = useState(
-    prefill(saved.targetTime, prof.target_time_min ? formatDurationInput(prof.target_time_min) : '')
-  )
+  // Hours / minutes / seconds as separate fields — see targetTimeFromParts.
+  const [targetTimeParts, setTargetTimeParts] = useState(() => initialTargetTime(saved, prof))
+  const setTargetTimePart = (key) => (e) => setTargetTimeParts((p) => ({ ...p, [key]: e.target.value }))
   const [experienceMonths, setExperienceMonths] = useState(
     prefill(saved.experienceMonths, prof.experience_months)
   )
@@ -160,13 +160,13 @@ export default function Onboarding() {
       STORAGE_KEY,
       JSON.stringify({
         step, path, name, age, weight, level, eventDate,
-        targetDistance, hasDate, targetTime, experienceMonths, weeklyVolume,
+        targetDistance, hasDate, targetTimeParts, experienceMonths, weeklyVolume,
         longestRun, daysPerWeek, availableDays,
         hasRun, runs, testRun, notes, answers,
       })
     )
   }, [step, path, name, age, weight, level, eventDate, targetDistance, hasDate,
-      targetTime, experienceMonths, weeklyVolume, longestRun, daysPerWeek,
+      targetTimeParts, experienceMonths, weeklyVolume, longestRun, daysPerWeek,
       availableDays, hasRun, runs, testRun, notes, answers])
 
   const stepOrder = useMemo(() => {
@@ -183,14 +183,16 @@ export default function Onboarding() {
 
   // --- derived goal values -------------------------------------------------
   const targetDistanceValid = Number(targetDistance) > 0 && Number(targetDistance) <= 200
-  const targetTimeMin = targetTime.trim() ? parseDuration(targetTime) : null
+  // Seconds only count where the field is shown (under 10 km).
+  const showSeconds = targetTimeHasSeconds(targetDistance)
+  const targetTimeMin = targetTimeFromParts({
+    ...targetTimeParts,
+    seconds: showSeconds ? targetTimeParts.seconds : '',
+  })
   /** A date on the calendar makes it an 'event' plan; otherwise 'general'. */
   const goalKind = hasDate && eventDate ? 'event' : 'general'
-  /** Live pace feedback as the runner types a target time. */
-  const requiredPace =
-    targetTimeMin && targetDistanceValid
-      ? formatPace(targetTimeMin / Number(targetDistance))
-      : null
+  /** Live pace feedback, and a nudge when the pace looks mistyped. */
+  const paceCheck = targetDistanceValid ? targetPaceCheck(targetTimeMin, Number(targetDistance)) : null
 
   const stepIdx = Math.max(0, stepOrder.indexOf(step))
   const go = (dir) => setStep(stepOrder[Math.min(stepOrder.length - 1, Math.max(0, stepIdx + dir))])
@@ -554,25 +556,45 @@ export default function Onboarding() {
           {/* optional target time, with live pace */}
           <div className="mt-6">
             <label className="label">{t.onboarding.targetTime}</label>
-            <input
-              className="input mt-1"
-              placeholder={t.onboarding.targetTimePlaceholder}
-              value={targetTime}
-              onChange={(e) => setTargetTime(e.target.value)}
-            />
-            {targetTime.trim() !== '' && (
-              <p className="mt-2 text-xs">
-                {requiredPace ? (
-                  <span className="text-primary">
-                    {t.onboarding.requiredPace(requiredPace, Number(targetDistance))}
-                  </span>
-                ) : (
-                  <span className="text-zinc-500">
-                    {targetDistanceValid
-                      ? t.onboarding.timeHint
-                      : t.onboarding.pickDistanceFirst}
-                  </span>
-                )}
+            <div className="mt-1 flex items-center gap-2">
+              {[
+                { key: 'hours', max: 99, placeholder: '0', label: t.onboarding.hours },
+                { key: 'minutes', max: 59, placeholder: '00', label: t.onboarding.minutes },
+                ...(showSeconds
+                  ? [{ key: 'seconds', max: 59, placeholder: '00', label: t.onboarding.seconds }]
+                  : []),
+              ].map((f) => (
+                <div key={f.key} className="flex min-w-0 flex-1 items-center gap-2">
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min="0"
+                    max={f.max}
+                    step="1"
+                    className="input"
+                    placeholder={f.placeholder}
+                    aria-label={f.label}
+                    value={targetTimeParts[f.key]}
+                    onChange={setTargetTimePart(f.key)}
+                  />
+                  <span className="text-sm text-zinc-500">{f.label}</span>
+                </div>
+              ))}
+            </div>
+            <p className="mt-2 text-xs">
+              {!targetTimeMin ? (
+                <span className="text-zinc-500">{t.onboarding.targetTimeHint}</span>
+              ) : !paceCheck ? (
+                <span className="text-zinc-500">{t.onboarding.pickDistanceFirst}</span>
+              ) : (
+                <span className="text-primary">{t.onboarding.requiredPace(paceCheck.label)}</span>
+              )}
+            </p>
+            {paceCheck?.warning && (
+              <p className="mt-1 text-xs text-amber-400">
+                {paceCheck.warning === 'too_fast'
+                  ? t.onboarding.paceTooFast(paceCheck.label)
+                  : t.onboarding.paceTooSlow(paceCheck.label)}
               </p>
             )}
           </div>

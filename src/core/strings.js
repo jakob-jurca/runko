@@ -307,9 +307,15 @@ export const t = {
     onADate: 'Na določen datum',
     noDate: 'Brez datuma, samo trening',
     targetTime: 'Ciljni čas (neobvezno)',
-    targetTimePlaceholder: 'npr. 1:45:00 — pusti prazno, če želiš samo priteči',
-    requiredPace: (pace, km) => `To je ${pace}/km za ${km} km.`,
-    timeHint: 'Poskusi 1:45:00, 45:30 ali 1h45.',
+    targetTimeHint: 'Pusti prazno, če želiš samo priteči do cilja.',
+    hours: 'ur',
+    minutes: 'min',
+    seconds: 's',
+    requiredPace: (pace) => `To je ${pace}/km.`,
+    paceTooFast: (pace) =>
+      `Hm, ${pace}/km je hitreje od svetovnih rekorderjev. Preveri, prosim, ali so ure in minute v pravih poljih.`,
+    paceTooSlow: (pace) =>
+      `${pace}/km je bolj hoja kot tek. Preveri, prosim, ali si čas vpisal/a prav — če je, je čisto v redu.`,
     pickDistanceFirst: 'Najprej izberi ciljno razdaljo.',
 
     experienceTitle: 'Od kod začenjaš?',
