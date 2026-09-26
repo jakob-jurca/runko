@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { PLANS, startCheckout } from '../core/subscription'
+import { Check, LockKey } from '@phosphor-icons/react'
 import { t } from '../core/strings'
 
 /**
@@ -17,31 +18,23 @@ export default function Paywall({ feature = t.paywall.featureDefault }) {
     setNotice(result.message)
   }
   return (
-    <div className="mx-auto flex max-w-md flex-col items-center px-6 py-16 text-center animate-fade-up">
-      <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary-faint">
-        <svg viewBox="0 0 24 24" fill="none" stroke="#F97316" strokeWidth="2" className="h-8 w-8">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-          />
-        </svg>
+    <div className="mx-auto flex max-w-md flex-col px-4 py-12 animate-fade-up sm:px-6">
+      <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-faint text-primary">
+        <LockKey size={28} />
       </div>
 
-      <h1 className="text-2xl font-extrabold">{t.paywall.title}</h1>
-      <p className="mt-2 text-zinc-400">{t.paywall.body(feature, plan.name)}</p>
+      <h1 className="text-2xl font-bold tracking-tight">{t.paywall.title}</h1>
+      <p className="mt-2 max-w-[60ch] leading-relaxed text-zinc-400">{t.paywall.body(feature, plan.name)}</p>
 
       <div className="card mt-8 w-full text-left">
         <div className="flex items-baseline justify-between">
-          <h2 className="font-bold">{plan.name}</h2>
-          <span className="text-lg font-extrabold text-primary">{plan.price}</span>
+          <h2 className="font-semibold">{plan.name}</h2>
+          <span className="font-mono text-lg font-semibold text-primary-light">{plan.price}</span>
         </div>
         <ul className="mt-4 space-y-2">
           {plan.features.map((f) => (
-            <li key={f} className="flex items-center gap-2 text-sm text-zinc-300">
-              <svg viewBox="0 0 24 24" fill="none" stroke="#F97316" strokeWidth="2.5" className="h-4 w-4 shrink-0">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
+            <li key={f} className="flex items-start gap-2.5 text-sm leading-relaxed text-zinc-300">
+              <Check size={16} weight="bold" className="mt-0.5 shrink-0 text-primary" />
               {f}
             </li>
           ))}
@@ -50,7 +43,7 @@ export default function Paywall({ feature = t.paywall.featureDefault }) {
           {t.paywall.subscribe}
         </button>
         {notice ? (
-          <p className="mt-3 text-center text-xs text-primary animate-fade-in">{notice}</p>
+          <p className="mt-3 text-center text-xs text-primary-light animate-fade-in">{notice}</p>
         ) : (
           <p className="mt-3 text-center text-xs text-zinc-500">
             {t.paywall.freeNote}
