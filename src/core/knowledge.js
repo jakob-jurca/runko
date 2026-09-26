@@ -13,85 +13,17 @@
  */
 import { IS_DEV } from './env'
 import { scenarioSection, documentForScenario } from './knowledge-scenarios.js'
+import { parseFrontmatter, contentOf, estimateTokens } from './frontmatter.js'
+import { SITUATIONS, detectSituations } from './situations.js'
+import {
+  parseResearchDoc, selectPlanResearch, selectChatResearch, RESEARCH_BUDGETS,
+} from './research-select.js'
 
-// ---------------------------------------------------------------------------
-// Situations — the vocabulary a `load_when:` list draws from
-// ---------------------------------------------------------------------------
+export { estimateTokens }
 
-export const SITUATIONS = [
-  'always',
-  'chat',
-  'plan_generation',
-  'onboarding',
-  'injury_mention',
-  'nutrition_question',
-  'pace_question',
-  'workout_question',
-  'motivation',
-]
-
-/**
- * Keywords that infer a situation from what the runner actually wrote.
- * English and Slovenian, because the coach answers in both. Matching is
- * accent- and case-insensitive (see `normalize`), so "bolecina" finds
- * "bolečina" and a runner who types without diacritics is still understood.
- */
-const SITUATION_KEYWORDS = {
-  injury_mention: [
-    // en
-    'pain', 'painful', 'hurt', 'hurts', 'sore', 'soreness', 'injury', 'injured',
-    'knee', 'ankle', 'achilles', 'shin', 'splints', 'plantar', 'fascia',
-    'it band', 'itb', 'calf', 'hamstring', 'quad', 'hip', 'groin', 'foot',
-    'heel', 'strain', 'sprain', 'niggle', 'swollen', 'swelling', 'stress fracture',
-    'tendon', 'tendinitis', 'tendinopathy', 'limp',
-    // sl
-    'bolecina', 'bolecine', 'boli', 'bolece', 'poskodba', 'poskodoval',
-    'koleno', 'kolena', 'glezen', 'ahilova', 'golen', 'meca',
-    'misica', 'misice', 'stegno', 'stopalo', 'peta', 'kolk', 'dimlje', 'hrbet',
-    'oteklina', 'otekel', 'zvin', 'nateg',
-  ],
-  nutrition_question: [
-    // en
-    'eat', 'eating', 'ate', 'food', 'diet', 'nutrition', 'fuel', 'fuelling',
-    'fueling', 'gel', 'gels', 'carb', 'carbs', 'carbohydrate', 'protein',
-    'hydration', 'hydrate', 'water', 'drink', 'drinking', 'electrolyte',
-    'breakfast', 'dinner', 'lunch', 'snack', 'caffeine', 'supplement',
-    // sl
-    'hrana', 'hrano', 'jesti', 'jem', 'pojesti', 'prehrana', 'prehrano',
-    'gorivo', 'ogljikovi', 'hidrati', 'beljakovine', 'hidracija', 'piti',
-    'voda', 'vodo', 'zajtrk', 'kosilo', 'vecerja', 'elektroliti', 'kofein',
-  ],
-  pace_question: [
-    // en
-    'pace', 'paces', 'vdot', 'how fast', 'too fast', 'too slow', 'speed',
-    'min/km', 'per km', 'threshold', 'race time', 'personal best', 'pb',
-    'splits', 'heart rate', 'hr zone', 'zone 2', 'target time', 'finish time',
-    // sl
-    'tempo', 'tempu', 'hitrost', 'hitro', 'pocasi', 'pocasneje', 'cas',
-    'osebni rekord', 'rekord', 'prag', 'srcni utrip', 'utrip', 'cona',
-    'minut na kilometer',
-  ],
-  workout_question: [
-    // en
-    'workout', 'session', 'interval', 'intervals', 'rep', 'reps', 'repetition',
-    'long run', 'tempo run', 'fartlek', 'track', 'hill', 'hills', 'strides',
-    'warm up', 'warm-up', 'cool down', 'cross training', 'easy run',
-    // sl
-    'trening', 'treningu', 'intervali', 'intervale', 'ponovitve', 'serija',
-    'dolgi tek', 'lahkoten tek', 'klanec', 'klanci', 'ogrevanje', 'raztezanje',
-    'vaja', 'vaje',
-  ],
-  motivation: [
-    // en
-    'motivation', 'motivated', 'unmotivated', 'lazy', 'skipped', 'missed',
-    'give up', 'quitting', 'burnt out', 'burned out', 'consistency',
-    "can't be bothered", 'no energy', 'demotivated',
-    // sl
-    'motivacija', 'motivacije', 'volja', 'nimam volje', 'preskocil',
-    'izpustil', 'obupal', 'obupujem', 'lenoba', 'utrujen', 'izgorel',
-    'vztrajnost',
-  ],
-}
+// Situations (the vocabulary and the keyword matching) live in situations.js so
+// they can be tested without the bundler.
+export { SITUATIONS, detectSituations }
 
 // ---------------------------------------------------------------------------
 // Loading + parsing
@@ -105,62 +37,6 @@ const RAW_FILES = import.meta.glob('../../knowledge/*.md', {
 })
 
 const PRIORITY_RANK = { high: 0, medium: 1, low: 2 }
-
-/** ~4 characters per token. Deliberately conservative. */
-export function estimateTokens(text) {
-  return Math.ceil((text || '').length / 4)
-}
-
-/** Strip diacritics and case so "bolečina" and "bolecina" both match. */
-function normalize(text) {
-  return (text || '')
-    .toLowerCase()
-    .normalize('NFD')
-    // \p{M} = every combining mark, i.e. exactly what NFD just split off.
-    .replace(/\p{M}/gu, '')
-}
-
-/**
- * Minimal YAML frontmatter reader — only the three shapes our format uses:
- * `key: value`, and a `key:` followed by `  - item` lines. Deliberately not a
- * general YAML parser; the format is documented and enforced by review.
- */
-function parseFrontmatter(raw) {
-  const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(raw)
-  if (!match) return { meta: {}, body: raw }
-
-  const meta = {}
-  let currentListKey = null
-
-  for (const line of match[1].split(/\r?\n/)) {
-    if (!line.trim()) continue
-    const listItem = /^\s+-\s+(.*)$/.exec(line)
-    if (listItem && currentListKey) {
-      meta[currentListKey].push(listItem[1].trim())
-      continue
-    }
-    const pair = /^([A-Za-z_][\w-]*):\s*(.*)$/.exec(line)
-    if (!pair) continue
-    const [, key, value] = pair
-    if (value === '') {
-      currentListKey = key
-      meta[key] = []
-    } else {
-      currentListKey = null
-      meta[key] = value.trim()
-    }
-  }
-  return { meta, body: raw.slice(match[0].length) }
-}
-
-/**
- * The document body with HTML comments removed. The templates ship with a
- * comment explaining what to write, and that must not reach the model or
- * count as content.
- */
-function contentOf(body) {
-  return body.replace(/<!--[\s\S]*?-->/g, '').trim()
-}
 
 /** Parse every bundled file once, at module load. */
 const DOCUMENTS = Object.entries(RAW_FILES)
@@ -187,6 +63,16 @@ const DOCUMENTS = Object.entries(RAW_FILES)
     (a, b) => PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority] || a.topic.localeCompare(b.topic)
   )
 
+// The 35 runtime summaries of the research files (knowledge/research/). They
+// are not part of the ordinary documents above: plan generation and chat pick
+// from them with the rules in research-select.js.
+const RESEARCH_FILES = import.meta.glob('../../knowledge/research/*.md', {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+})
+const RESEARCH = Object.entries(RESEARCH_FILES).map(([path, raw]) => parseResearchDoc(raw, path.split('/').pop()))
+
 /** Every parsed document, including the empty ones. For diagnostics/tests. */
 export function allDocuments() {
   return DOCUMENTS.map((d) => ({ ...d }))
@@ -207,32 +93,6 @@ export function knowledgeStats() {
 // ---------------------------------------------------------------------------
 // Selection
 // ---------------------------------------------------------------------------
-
-/**
- * Keywords are matched at a WORD BOUNDARY but allowed to run on past the end,
- * so "knee" finds "knees" and "bolecina" finds "bolecine" — while "ate" no
- * longer fires on "water" and "rep" no longer fires on "prepare". Compiled
- * once at module load.
- */
-const SITUATION_MATCHERS = Object.entries(SITUATION_KEYWORDS).map(([situation, keywords]) => [
-  situation,
-  keywords.map((k) => new RegExp('\\b' + normalize(k).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))),
-])
-
-/**
- * Infer situations from free text (the runner's message). Always additive —
- * callers pass the situations they know for certain, this finds the rest.
- * @returns {string[]}
- */
-export function detectSituations(text) {
-  if (!text) return []
-  const haystack = normalize(text)
-  const found = []
-  for (const [situation, matchers] of SITUATION_MATCHERS) {
-    if (matchers.some((re) => re.test(haystack))) found.push(situation)
-  }
-  return found
-}
 
 /**
  * Token budgets per call site. A plan generation prompt can carry far more
@@ -321,7 +181,12 @@ export function buildScenarioKnowledgeBlock(scenario, { budgetTokens = KNOWLEDGE
  * @returns {string}
  */
 export function buildKnowledgeBlock(opts = {}) {
-  const { docs, skipped, tokens } = selectKnowledge(opts)
+  const { docs, skipped, tokens, situations } = selectKnowledge(opts)
+  // Chat also gets the research summaries that match what the runner wrote
+  // (at most two, their own budget); other call sites get none.
+  const research = (opts.situations || []).includes('chat')
+    ? selectChatResearch(RESEARCH, situations).docs
+    : []
 
   if (IS_DEV) {
     if (docs.length) {
@@ -339,7 +204,7 @@ export function buildKnowledgeBlock(opts = {}) {
     }
   }
 
-  if (!docs.length) return ''
+  if (!docs.length && !research.length) return ''
 
   return [
     '# COACHING KNOWLEDGE BASE',
@@ -348,5 +213,27 @@ export function buildKnowledgeBlock(opts = {}) {
     'runner — use it to be specific and correct.',
     '',
     ...docs.map((d) => `## ${d.topic}\n\n${d.content}`),
+    ...research.map((d) => `## ${d.source}\n\n${d.content}`),
+  ].join('\n')
+}
+
+/**
+ * The research block for the plan call: the summary of the runner's scenario
+ * plus at most two population notes (age and schedule only; health data never
+ * goes to the AI). Pure text: the plan call stays ONE request.
+ *
+ * @param {{scenario: string, populations?: string[]}} opts
+ * @returns {string} '' when the scenario has no summary
+ */
+export function buildResearchPlanBlock({ scenario, populations = [] } = {}) {
+  const { docs, tokens } = selectPlanResearch(RESEARCH, { scenario, populations }, { budgetTokens: RESEARCH_BUDGETS.plan })
+  if (!docs.length) return ''
+  if (IS_DEV) console.log(`[knowledge] plan research: ${docs.map((d) => d.source).join(', ')} (~${tokens} tokens)`)
+  return [
+    '# RESEARCH BEHIND THE ENGINE',
+    'Short summaries of the training research the app follows. The plan is already calculated by',
+    'these rules; use them to explain it correctly. Do not quote them and do not contradict the plan.',
+    '',
+    ...docs.map((d) => `## ${d.source}\n\n${d.content}`),
   ].join('\n')
 }

@@ -128,3 +128,33 @@ need it to load on a situation that does not exist yet, add the situation to
 - **Safety belongs in the file.** `injuries.md` and `nutrition.md` are
   injected verbatim, so the "refer to a professional" lines must be written
   into the content itself.
+
+## Research summaries (`knowledge/research/`)
+
+35 short runtime summaries, one per runko-research file (b01-b08, m01-m11,
+p01-p08, s01-s08), at most 350 tokens each. They live in a subfolder, so the
+ordinary loader above never sees them; `src/core/research-select.js` picks
+from them.
+
+```markdown
+---
+topic: research-p04
+source: p04-masters-runners
+role: population        # scenario | population | reference
+priority: high
+populations:            # who it is about
+  - masters
+situations:             # what a runner may bring up in chat (src/core/situations.js)
+  - masters_question
+---
+```
+
+- `role: scenario` files also declare `scenarios:`; every runner scenario has
+  exactly one. The plan call loads that summary plus at most two population
+  notes (teen, masters, time_crunched: age and schedule only; health data such
+  as BMI, pregnancy or injury never goes to the AI in the plan call), and is
+  still ONE request.
+- Chat loads at most two summaries whose `situations` match what the runner
+  wrote (`detectSituations`).
+- `tests/research.test.mjs` checks size, frontmatter, which files load for
+  which scenario, population and message, and the single plan call.

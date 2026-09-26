@@ -23,7 +23,7 @@ import {
   detectLanguage,
   sanitizeChatReply,
 } from './coach-prompt'
-import { buildKnowledgeBlock, buildScenarioKnowledgeBlock, KNOWLEDGE_BUDGETS } from './knowledge'
+import { buildKnowledgeBlock, buildScenarioKnowledgeBlock, buildResearchPlanBlock, KNOWLEDGE_BUDGETS } from './knowledge'
 import { buildExtractionPrompt, parseExtractedMemories } from './memory'
 
 /**
@@ -897,8 +897,13 @@ export async function describePlanSkeleton(skeleton, { profile = {}, memories = 
 
   // Only the guidance for THIS runner's scenario — one file's section, not
   // the whole library — keeps the single call cheap.
+  // Plus the research summary behind that scenario and at most two population
+  // notes (age and schedule only). Still text in the same single request.
   const knowledge = skeleton.scenario
-    ? buildScenarioKnowledgeBlock(skeleton.scenario, { budgetTokens: KNOWLEDGE_BUDGETS.plan_generation })
+    ? [
+        buildScenarioKnowledgeBlock(skeleton.scenario, { budgetTokens: KNOWLEDGE_BUDGETS.plan_generation }),
+        buildResearchPlanBlock({ scenario: skeleton.scenario, populations: skeleton.populations || [] }),
+      ].filter(Boolean).join('\n\n')
     : buildKnowledgeBlock({ situations: ['plan_generation'], budgetTokens: KNOWLEDGE_BUDGETS.plan_generation })
 
   const prompt = `You are writing the words for a training plan that has ALREADY been calculated.

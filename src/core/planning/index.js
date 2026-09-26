@@ -28,6 +28,7 @@ import { computeLimits } from './limits.js'
 import { safetyGate } from './gate.js'
 import { formatPace } from '../periodization.js'
 import { maxHeartRate, heartRateZones, formulaAge } from '../heart-rate.js'
+import { planPopulations } from '../research-select.js'
 
 export const PIPELINE_VERSION = 1
 
@@ -197,6 +198,11 @@ export function runPlanningPipeline({ profile = {}, runs = [], memories = [], an
       hr_max: maxHeartRate(formulaAge(inputs.age, inputs.health?.sex)),
       hr_zones: heartRateZones(formulaAge(inputs.age, inputs.health?.sex)),
       constraints: { ...inputs.constraints, noBackToBack: plan.no_back_to_back },
+      // Which research population notes the plan call may load: age and
+      // schedule only, never health data (research-select.js).
+      populations: planPopulations({
+        age: inputs.age, daysPerWeek: inputs.constraints?.maxRunDays ?? inputs.daysPerWeek ?? null,
+      }),
       weeks,
     },
   }
