@@ -63,3 +63,41 @@ Status: Group A done (returning.js, gating, min weeks, marathon prediction; test
 Group B done (planning/intensity.js post-pass: quality caps, gaps by age, low-intensity floor, race week, easy-run limits, strides, MP long runs, strength notes, post-race clocks in plan.post_race; tests/intensity.test.mjs + intensityRulesKept property).
 Group C done (masters 40-49 + 60+ beginner rules, time-crunched p07, Gulati via heart-rate.js formulaAge, teen growth-spurt cap, caesarean week 16 / tear / pelvic-floor gates, few-days notice). The bmi_40 block screen: Onboarding.jsx has no bmi_40-specific screen (its generic "blocked" step is still reachable for other reasons), so nothing to remove. NEEDS supabase/migration_v8.sql (pelvic_floor_symptoms, severe_tear, height_gain_cm_3mo on health_profiles) — run it in the SQL Editor; saving works without it until one of the three new answers is given.
 Group D done (knowledge/research/*.md x35, situations.js, frontmatter.js, research-select.js, knowledge.js buildResearchPlanBlock + chat, ai.js plan prompt; tests/research.test.mjs). Plan-call populations are age/schedule only (teen, masters, time_crunched): BMI, postpartum and injury notes are chat-only so no health data reaches the AI.
+
+## Landing page (phase 1: layout, structure, routing)
+Public marketing page at "/" for logged-out visitors. Signed-in runners still get the dashboard at "/".
+- Routing: src/main.jsx now decides which bundle to load. Guest on "/" with no saved session and no auth
+  params in the URL -> src/landing/entry.jsx (no router, no Supabase, no app code). Everyone else ->
+  src/app-entry.jsx (the old main.jsx, unchanged). A stale saved session boots the app, which shows the
+  landing through Home in App.jsx. Recovery / failed email links (tokens or error_code in the URL) always boot
+  the app, so password reset, Supabase Site URL and every navigate('/') work as before. Nothing in src/core touched.
+- Buttons: "Prijava" -> /auth, "Začni brezplačno" -> /auth?mode=signup (Auth.jsx opens the signup tab for that).
+- Styles: separate Tailwind build (tailwind.landing.config.js + src/landing/landing.css), same tokens as the app.
+  The app config now excludes src/landing so neither bundle carries the other's CSS.
+- All copy and mock data: src/landing/content.js (Slovenian, one export per section, prices "€ X").
+- Sections in src/landing/sections/, shared bits in src/landing/ui/ (Reveal, Buttons, Logo, PhoneFrame, screens).
+- index.html: lang="sl", Slovenian title/description, Open Graph placeholders (TODO: /og-image.png, production URL).
+- Phase 2 hooks: data-anim="hero-copy|hero-phone|hero-input" (Hero), data-msg (chat messages), data-screen (pinned
+  phone screens), <Reveal> wrapper (swap for Motion whileInView), data-menu (mobile menu).
+- Placeholders to replace: legal links and social URLs in footer, image slots in Audience (`image: null`), real
+  screenshots for the phone (PhoneFrame children), prices, the og image.
+- Motion: CSS only, everything under prefers-reduced-motion: no-preference. The marquee is the page's only one.
+
+## Landing page (phase 2: fixes, motion, mockups)
+Content: no coaches, authors, books or "VDOT" anywhere; trust strip is now "Temelji na športni znanosti" /
+"Od prvega kilometra do maratona" / "1 mesec brezplačno". Audience is five cards (Začetniki, Rekreativci, Prvi
+polmaraton ali maraton, Tekmovalci, Po premoru), each ending in a concrete "Primer tedna". No pregnancy, postpartum,
+birth or midwife wording on the page (safety note and FAQ are a neutral "Runko ne nadomešča zdravnika"). App logic and
+safety rules untouched.
+Layout: Kako deluje on desktop is one pinned stage (text column + phone, 42vh of scroll per step, was ~78vh); the
+mobile list is unchanged (markup verified identical). Hero cards on small screens sit above/below the phone instead of
+over it. Audience shows all five at lg with no arrows; below lg it stays a swipe row (arrows only at md).
+Motion (no library, CSS + IntersectionObserver, all under prefers-reduced-motion: no-preference, one easing --ease):
+hero cards enter, drift, send a data packet into the phone and the plan rows fill in; step screens cross-fade; plan
+chapter bars grow / gauge draws and the needle swings / week days tick in; chat plays once (typing dots, messages one
+by one, memory lines light up); Napredek count-ups, growing bars, filling ring; card lift + press states; marquee
+pauses on hover/focus. Toolkit: src/landing/ui/motion.jsx (useSeen, Play, CountUp).
+Fixed a phase-1 bug: the weekly bars in Napredek had zero height and never showed.
+Phase 3 slots: content.js `slots` (hero phone + four step phones: set a path in /public and it replaces the drawn
+screen), Audience `image`.
+Size: landing JS 138 kB (37 kB gzip), CSS 45 kB (8.8 kB gzip); app bundle unchanged.

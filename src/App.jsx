@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useSearchParams } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { isSupabaseConfigured } from './core/supabase'
@@ -13,6 +14,11 @@ import Settings from './pages/Settings'
 import NavBar from './components/NavBar'
 import { FullScreenSpinner } from './components/Spinner'
 
+// Only reached when the app booted for a guest on "/" (a stale saved session,
+// or a stray URL redirected home). Normally main.jsx serves the landing page
+// without the app at all.
+const Landing = lazy(() => import('./landing/Landing'))
+
 /** Requires a session AND a completed onboarding profile. */
 function Protected({ children }) {
   const { session, profile, loading, recovery } = useAuth()
@@ -27,6 +33,27 @@ function Protected({ children }) {
       <NavBar />
       {children}
     </div>
+  )
+}
+
+/**
+ * "/" is the dashboard for a signed-in runner and the landing page for
+ * everyone else. Recovery still wins: Protected diverts it to /reset-password.
+ */
+function Home() {
+  const { session, loading, recovery } = useAuth()
+  if (loading) return <FullScreenSpinner />
+  if (!session && !recovery) {
+    return (
+      <Suspense fallback={<FullScreenSpinner />}>
+        <Landing />
+      </Suspense>
+    )
+  }
+  return (
+    <Protected>
+      <Dashboard />
+    </Protected>
   )
 }
 
@@ -84,14 +111,7 @@ export default function App() {
               </OnboardingGate>
             }
           />
-          <Route
-            path="/"
-            element={
-              <Protected>
-                <Dashboard />
-              </Protected>
-            }
-          />
+          <Route path="/" element={<Home />} />
           <Route
             path="/plan"
             element={

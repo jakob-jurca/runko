@@ -1,6 +1,8 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  content: ['./index.html', './src/**/*.{js,jsx}'],
+  // The landing page has its own build (tailwind.landing.config.js) so its
+  // classes never ship in the app's CSS.
+  content: ['./index.html', './src/**/*.{js,jsx}', '!./src/landing/**'],
   theme: {
     extend: {
       colors: {

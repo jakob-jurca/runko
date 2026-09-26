@@ -1,0 +1,348 @@
+@config "../../tailwind.landing.config.js";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Landing page styles. Built separately from the app (see
+ * tailwind.landing.config.js), so nothing here reaches the app bundle.
+ *
+ * Shape system: interactive things (buttons, chips, nav) are full pills;
+ * containers are double-bezel shells, 2rem outside and 2rem - padding inside;
+ * the phone is 2.75rem. Nothing else.
+ *
+ * Z-index scale: 10 floating mock cards, 20 grain, 40 nav, 50 mobile menu.
+ */
+
+@layer base {
+  .landing {
+    /* The one easing curve for the whole page: a heavy, springy settle. */
+    --ease: cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  html:has(.landing) {
+    color-scheme: dark;
+    scroll-padding-top: 6rem;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    @apply bg-canvas font-sans text-zinc-100 antialiased;
+    font-feature-settings: 'ss01', 'cv11';
+  }
+  .landing h1,
+  .landing h2,
+  .landing h3 {
+    text-wrap: balance;
+    letter-spacing: -0.03em;
+  }
+  .landing p {
+    text-wrap: pretty;
+  }
+  .landing .font-mono {
+    font-variant-numeric: tabular-nums;
+  }
+  .landing :focus-visible {
+    @apply outline-none ring-2 ring-primary/70 ring-offset-2 ring-offset-canvas;
+  }
+}
+
+@layer components {
+  /* Primary CTA: orange pill with the arrow nested in its own circle. */
+  .l-btn-primary {
+    @apply inline-flex min-h-[48px] items-center gap-3 whitespace-nowrap rounded-full bg-primary py-1.5 pl-6 pr-1.5
+      font-semibold text-white transition duration-500 ease-out
+      hover:bg-primary-dark active:scale-[0.98];
+  }
+  .l-btn-primary-icon {
+    @apply flex h-9 w-9 items-center justify-center rounded-full bg-black/15 transition duration-500 ease-out
+      group-hover:-translate-y-px group-hover:translate-x-0.5 group-hover:scale-105;
+  }
+  .l-btn-ghost {
+    @apply inline-flex min-h-[48px] items-center justify-center gap-2 whitespace-nowrap rounded-full px-6 font-semibold
+      text-zinc-200 ring-1 ring-inset ring-white/15 transition duration-500 ease-out
+      hover:bg-white/[0.06] hover:text-white active:scale-[0.98];
+  }
+  /* Double bezel: a tray (outer) holding a plate (inner). */
+  .l-shell {
+    @apply rounded-[2rem] bg-white/[0.025] p-1.5 ring-1 ring-inset ring-white/[0.06];
+  }
+  .l-core {
+    @apply h-full rounded-[calc(2rem-0.375rem)] bg-surface shadow-[inset_0_1px_0_rgba(255,255,255,0.06)];
+  }
+  .l-section {
+    @apply mx-auto w-full max-w-page px-4 py-24 sm:px-6 md:py-32 lg:px-10;
+  }
+  .l-h2 {
+    @apply text-4xl font-semibold leading-[1.05] tracking-tight text-zinc-50 md:text-5xl lg:text-6xl;
+  }
+  .l-lead {
+    @apply mt-5 max-w-[52ch] text-lg leading-relaxed text-zinc-400;
+  }
+  /* Pill eyebrow, used only on the three chapter openers. */
+  .l-eyebrow {
+    @apply mb-6 inline-flex rounded-full bg-primary-faint px-3 py-1 text-[11px] font-medium uppercase tracking-[0.2em]
+      text-primary-light ring-1 ring-inset ring-primary/20;
+  }
+}
+
+/* Fixed film grain: gives the flat dark canvas a physical surface. Fixed and
+   pointer-events-none so it never repaints with scrolling content. */
+.l-grain {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Gauge needle: --r is its final angle. Motion rules below start it at 0. */
+.l-needle {
+  transform: rotate(var(--r, 0deg));
+  transform-origin: 100px 100px;
+}
+/* Progress ring: --p is the finished share of the circle (pathLength 1). */
+.l-ring {
+  stroke-dasharray: var(--p, 1) 1;
+}
+/* Typing dots: only ever shown by the motion rules below. */
+.l-typing {
+  opacity: 0;
+}
+/* Marquee edges fade out instead of being cut. */
+.l-marquee {
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+}
+
+/* Hide scrollbars on the horizontal card rail (it keeps its own buttons). */
+.l-rail {
+  scrollbar-width: none;
+}
+.l-rail::-webkit-scrollbar {
+  display: none;
+}
+
+/* ---- Motion ------------------------------------------------------------ */
+/* Everything below runs only when the visitor has not asked for less motion.
+   With reduced motion, content is simply there and nothing loops. */
+@media (prefers-reduced-motion: no-preference) {
+  html:has(.landing) {
+    scroll-behavior: smooth;
+  }
+
+  /* Scroll reveal (ui/Reveal.jsx toggles data-reveal). */
+  [data-reveal] {
+    transition:
+      opacity 0.9s cubic-bezier(0.32, 0.72, 0, 1),
+      transform 0.9s cubic-bezier(0.32, 0.72, 0, 1);
+    transition-delay: var(--reveal-delay, 0ms);
+  }
+  [data-reveal='out'] {
+    opacity: 0;
+    transform: translateY(2.5rem);
+  }
+
+  /* Final CTA band. The track holds the text twice and slides by half. */
+  .l-marquee-track {
+    animation: l-marquee 40s linear infinite;
+  }
+
+  /* Hero: first paint settles in. Phase 2 replaces this with choreography;
+     the hooks are the data-anim attributes in Hero.jsx. */
+  [data-anim='hero-copy'] > * {
+    animation: l-rise 1s cubic-bezier(0.32, 0.72, 0, 1) both;
+    animation-delay: calc(var(--i, 0) * 90ms);
+  }
+  [data-anim='hero-phone'] {
+    animation: l-rise 1.2s cubic-bezier(0.32, 0.72, 0, 1) 0.25s both;
+  }
+  [data-anim='hero-input'] {
+    animation: l-pop 0.9s cubic-bezier(0.32, 0.72, 0, 1) both;
+    animation-delay: calc(0.6s + var(--i, 0) * 120ms);
+  }
+
+
+  /* ---- Charts: play once when scrolled into view (ui/motion.jsx Play) ---- */
+  [data-seen] .l-grow {
+    transform-origin: bottom;
+    transition: transform 1.1s var(--ease) calc(var(--i, 0) * 35ms + var(--d, 0ms));
+  }
+  [data-seen='false'] .l-grow {
+    transform: scaleY(0);
+  }
+  [data-seen] .l-draw {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 0;
+    transition: stroke-dashoffset 1.2s var(--ease) calc(var(--i, 0) * 260ms);
+  }
+  [data-seen='false'] .l-draw {
+    stroke-dashoffset: 1;
+  }
+  [data-seen] .l-needle {
+    transition: transform 1.5s var(--ease) 0.7s;
+  }
+  [data-seen='false'] .l-needle {
+    transform: rotate(0deg);
+  }
+  [data-seen] .l-ring {
+    transition: stroke-dasharray 1.6s var(--ease) 0.2s;
+  }
+  [data-seen='false'] .l-ring {
+    stroke-dasharray: 0.001 1;
+  }
+  [data-seen] .l-tick {
+    transition:
+      opacity 0.7s var(--ease) calc(var(--i, 0) * 80ms + var(--d, 0ms)),
+      transform 0.7s var(--ease) calc(var(--i, 0) * 80ms + var(--d, 0ms));
+  }
+  [data-seen='false'] .l-tick {
+    opacity: 0;
+    transform: translateY(0.75rem) scale(0.9);
+  }
+
+  /* ---- Hero: cards drift, send a data packet into the plan, plan fills in ---- */
+  [data-anim='hero-float'] {
+    animation: l-float calc(6s + var(--i, 0) * 0.9s) cubic-bezier(0.37, 0, 0.63, 1) 1.8s infinite alternate both;
+  }
+  .l-packet {
+    animation: l-flow 1.2s var(--ease) calc(1.5s + var(--i, 0) * 0.35s) both;
+  }
+  [data-anim='hero-row'] {
+    animation: l-row 0.8s var(--ease) calc(2s + var(--i, 0) * 110ms) both;
+  }
+  [data-anim='hero-ping'] {
+    animation: l-ping 1.6s var(--ease) 3.4s both;
+  }
+
+  /* ---- Chat: bubbles settle in, typing dots bounce ---- */
+  [data-msg-state='hidden'] .l-bubble,
+  [data-msg-state='typing'] .l-bubble,
+  [data-msg-state='hidden'] .l-tag,
+  [data-msg-state='typing'] .l-tag {
+    opacity: 0;
+    transform: translateY(0.75rem) scale(0.97);
+  }
+  [data-msg-state] .l-bubble,
+  [data-msg-state] .l-tag {
+    transition:
+      opacity 0.6s var(--ease),
+      transform 0.6s var(--ease);
+  }
+  [data-msg-state='typing'] .l-typing {
+    opacity: 1;
+  }
+  .l-typing {
+    transition: opacity 0.3s var(--ease);
+  }
+  .l-dot {
+    animation: l-bounce 1s var(--ease) infinite;
+    animation-delay: calc(var(--i, 0) * 140ms);
+  }
+  [data-lit='false'] {
+    opacity: 0.35;
+    transform: translateX(-0.25rem);
+  }
+  [data-lit] {
+    transition:
+      opacity 0.7s var(--ease),
+      transform 0.7s var(--ease);
+  }
+
+  /* ---- Hover and press (only where hovering exists) ---- */
+  .l-lift {
+    transition:
+      transform 0.6s var(--ease),
+      box-shadow 0.6s var(--ease);
+  }
+  @media (hover: hover) {
+    .l-lift:hover {
+      transform: translateY(-4px);
+    }
+    .l-shell:hover {
+      background-color: rgba(255, 255, 255, 0.04);
+    }
+  }
+  .l-lift:active {
+    transform: translateY(-1px) scale(0.99);
+  }
+
+  /* ---- Marquee pauses under the pointer or keyboard focus ---- */
+  .l-marquee:hover .l-marquee-track,
+  .l-marquee:focus-within .l-marquee-track {
+    animation-play-state: paused;
+  }
+
+  /* Mobile menu links slide up one after another. */
+  [data-menu='open'] [data-menu-item] {
+    animation: l-rise 0.7s cubic-bezier(0.32, 0.72, 0, 1) both;
+    animation-delay: calc(80ms + var(--i, 0) * 60ms);
+  }
+}
+
+@keyframes l-float {
+  to {
+    transform: translate3d(var(--fx, 0px), var(--fy, -9px), 0);
+  }
+}
+@keyframes l-flow {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(0.6);
+  }
+  15% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(var(--dx, 0px), var(--dy, 0px)) scale(0.4);
+  }
+}
+@keyframes l-row {
+  from {
+    opacity: 0;
+    transform: translateY(0.6rem);
+  }
+}
+@keyframes l-ping {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  30%,
+  60% {
+    opacity: 1;
+  }
+}
+@keyframes l-bounce {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+@keyframes l-marquee {
+  to {
+    transform: translateX(-50%);
+  }
+}
+@keyframes l-rise {
+  from {
+    opacity: 0;
+    transform: translateY(1.5rem);
+  }
+}
+@keyframes l-pop {
+  from {
+    opacity: 0;
+    transform: translateY(0.75rem) scale(0.96);
+  }
+}

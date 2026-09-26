@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../core/supabase'
 import Spinner from '../components/Spinner'
 import { t } from '../core/strings'
@@ -13,7 +13,9 @@ export const RESET_REDIRECT_PATH = '/reset-password'
  * pages/ResetPassword.jsx when the runner follows the link.
  */
 export default function Auth() {
-  const [mode, setMode] = useState('login') // 'login' | 'signup' | 'forgot'
+  const [params] = useSearchParams()
+  // The landing page's signup buttons link here with ?mode=signup.
+  const [mode, setMode] = useState(params.get('mode') === 'signup' ? 'signup' : 'login') // 'login' | 'signup' | 'forgot'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
