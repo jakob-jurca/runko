@@ -41,3 +41,22 @@ migration is in), push to main.
 ## Open questions
 - The injured 62-year-old half: comfortable readiness computes to 55 weeks
   (5%/wk, holds, 2:1 cycles, 45% share) — literal rules, may be worth a look.
+
+## Second batch (items from the original plan that Phases 3-6 missed)
+Group A: assessment and scenario selection — returning by break length
+(<=5, 6-28, 29-56, >56 days; Daniels), injury return (p06 walk-run, Z1-Z2 to
+50% of pre-injury volume), beginner race gating (half/marathon after 6 months
+running; marathon only run-walk and >= 26 weeks), minimum plan weeks (b03 r9),
+marathon prediction by volume.
+Group B: intensity and placement — quality sessions by level/phase and
+population caps, phase content (b03 r18-21), polarized/pyramidal, MP segments
+(<=110 min), low-intensity floor 75%/70%, race-week last quality 4/6 days out,
+easy run 20 min..0.75 long, strides, optional strength notes, post-race
+recovery clocks, 72 h between hard sessions at 60+.
+Group C: masters 40-49/50-59, time-crunched p07, Gulati HRmax, teen quality
+limit + growth-spurt cap, caesarean week 16 / pelvic-floor gates, remove the
+bmi_40 block screen in Onboarding.jsx.
+Group D: 35 runtime summaries in knowledge/research/ (<=350 tokens, frontmatter
+scenarios/populations/situations), plan call loads scenario + <=2 population
+notes (one AI call), chat via detectSituations, tests.
+Status: (update below as groups finish)
