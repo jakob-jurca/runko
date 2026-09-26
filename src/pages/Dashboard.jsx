@@ -18,7 +18,9 @@ import { phaseStyle } from './Plan'
 import { hasPremium, trialDaysLeft, isTrialActive } from '../core/subscription'
 import ProgressRing from '../components/ProgressRing'
 import WorkoutCard from '../components/WorkoutCard'
-import { FullScreenSpinner } from '../components/Spinner'
+import {
+  ArrowsClockwise, CaretLeft, CaretRight, CheckCircle, Info, LockSimple, MapTrifold, Plus, WarningCircle,
+} from '@phosphor-icons/react'
 import { t } from '../core/strings'
 
 const FALLBACK_QUOTES = [
@@ -202,106 +204,92 @@ export default function Dashboard() {
     return (done / planned) * 100
   }, [plans, currentWeek, currentPlan, loggedDates])
 
-  if (loading) return <FullScreenSpinner />
+  if (loading) return <DashboardSkeleton />
 
   return (
-    <main className="mx-auto max-w-2xl px-5 py-8">
+    <main className="mx-auto max-w-2xl px-4 pb-10 pt-[max(1.5rem,env(safe-area-inset-top))] sm:px-6">
       {/* header */}
-      <header className="animate-fade-up">
-        <p className="text-sm font-medium text-zinc-500">{greeting()},</p>
-        <h1 className="text-3xl font-extrabold tracking-tight">
-          {profile.name?.split(' ')[0] || t.dashboard.runnerFallback} 🏃
-        </h1>
-        {isTrialActive(profile) ? (
-          <p className="mt-1 text-xs font-medium text-primary">
-            {t.dashboard.trialLeft(trialDaysLeft(profile))}
-          </p>
-        ) : (
-          // The trial countdown's slot, once it has run out. Without this the
-          // free tier is indistinguishable from a broken premium one.
-          !premium && (
-            <Link to="/chat" className="mt-1 inline-block text-xs font-medium text-zinc-500 underline">
-              {t.paywall.ended}
-            </Link>
-          )
-        )}
+      <header className="flex items-start justify-between gap-4 animate-fade-up">
+        <div className="min-w-0">
+          <p className="text-sm text-zinc-500">{greeting()},</p>
+          <h1 className="mt-0.5 truncate text-[1.75rem] font-bold leading-tight tracking-tight">
+            {profile.name?.split(' ')[0] || t.dashboard.runnerFallback}
+          </h1>
+          {isTrialActive(profile) ? (
+            <p className="mt-1 text-xs font-medium text-primary-light">
+              {t.dashboard.trialLeft(trialDaysLeft(profile))}
+            </p>
+          ) : (
+            // The trial countdown's slot, once it has run out. Without this the
+            // free tier is indistinguishable from a broken premium one.
+            !premium && (
+              <Link to="/chat" className="mt-1 inline-block text-xs font-medium text-zinc-500 underline underline-offset-4">
+                {t.paywall.ended}
+              </Link>
+            )
+          )}
+        </div>
+        <img src="/runko.svg" alt="Runko" className="mt-1 h-9 w-9 shrink-0 md:hidden" />
       </header>
 
       {/* coach message + progress ring */}
-      <section className="card mt-6 flex items-center gap-5 animate-fade-up" style={{ animationDelay: '80ms' }}>
-        <ProgressRing percent={percent} />
+      <section className="card mt-5 flex items-center gap-5 animate-fade-up" style={{ animationDelay: '60ms' }}>
+        <ProgressRing percent={percent} size={92} stroke={8} />
         <div className="min-w-0 flex-1">
           {/* A free user gets a static quote here. Labelling it "Coach Runko
               says" would pass it off as the AI coach and make the tier look
               broken rather than free, so the kicker tells the truth. */}
-          <p className="text-[10px] font-bold uppercase tracking-widest text-primary">
+          <p className="text-xs font-semibold text-primary-light">
             {premium ? t.dashboard.coachSays : t.paywall.thoughtOfDay}
           </p>
-          <p className="mt-1.5 text-sm leading-relaxed text-zinc-200">
+          <p className="mt-1 text-[15px] leading-relaxed text-zinc-100">
             {message || <span className="animate-pulse-dot text-zinc-500">{t.common.thinking}</span>}
           </p>
-          {!premium && (
-            <p className="mt-2 text-xs text-zinc-500">{t.paywall.dashboardLocked}</p>
-          )}
+          {!premium && <p className="mt-2 text-xs text-zinc-500">{t.paywall.dashboardLocked}</p>}
         </div>
       </section>
 
       {logError && (
-        <p className="mt-3 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-300 animate-fade-in">
+        <Notice tone="error" icon={WarningCircle}>
           {logError}
-        </p>
+        </Notice>
       )}
 
       {planEnded && (
-        <p className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-200 animate-fade-up">
+        <Notice tone="warn" icon={Info}>
           {t.dashboard.planEnded}
-        </p>
+        </Notice>
       )}
 
       {todaysRunUnshown && (
-        <p className="mt-3 rounded-xl border border-zinc-700 bg-zinc-900/60 p-3 text-xs leading-relaxed text-zinc-300 animate-fade-in">
-          ✓ {t.dashboard.loggedOutsidePlan(`${todaysRun.distance} km`)}
-        </p>
+        <Notice tone="neutral" icon={CheckCircle}>
+          {t.dashboard.loggedOutsidePlan(`${todaysRun.distance} km`)}
+        </Notice>
       )}
 
-      {adaptedNote && (
-        <p className="mt-3 text-xs text-primary animate-fade-up">
-          {t.dashboard.adaptedNote}
-        </p>
-      )}
+      {adaptedNote && <p className="mt-3 text-xs text-primary-light animate-fade-up">{t.dashboard.adaptedNote}</p>}
 
       {/* Which phase the runner is in, and what it is for */}
       {currentPlan?.plan_json?.phase && (
-        <section
-          className="card mt-4 animate-fade-up"
-          style={{ animationDelay: '100ms' }}
-        >
-          <div className="flex items-center justify-between gap-3">
+        <section className="mt-3 rounded-card bg-surface/60 p-5 ring-1 ring-inset ring-surface-line animate-fade-up" style={{ animationDelay: '100ms' }}>
+          <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <span
-                  className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
-                    phaseStyle(currentPlan.plan_json.phase).chip
-                  }`}
-                >
+              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                <span className={`text-sm font-semibold ${phaseStyle(currentPlan.plan_json.phase).text}`}>
                   {t.plan.phases[currentPlan.plan_json.phase]} {t.dashboard.phaseSuffix}
                 </span>
                 {currentPlan.plan_json.is_recovery && (
-                  <span className="rounded-full bg-zinc-700/40 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-zinc-400">
+                  <span className="rounded-md bg-zinc-800 px-1.5 py-0.5 text-[11px] font-medium text-zinc-300">
                     {t.dashboard.recoveryWeek}
                   </span>
                 )}
-                <span className="text-[10px] text-zinc-600">
-                  {t.dashboard.weekOf(currentWeek, lastWeek).toLowerCase()}
-                </span>
+                <span className="text-xs text-zinc-500">{t.dashboard.weekOf(currentWeek, lastWeek).toLowerCase()}</span>
               </div>
-              <p className="mt-1.5 text-sm leading-relaxed text-zinc-300">
-                {currentPlan.plan_json.intent ||
-                  PHASE_INTENT[currentPlan.plan_json.phase] ||
-                  ''}
+              <p className="mt-1.5 max-w-[60ch] text-sm leading-relaxed text-zinc-300">
+                {currentPlan.plan_json.intent || PHASE_INTENT[currentPlan.plan_json.phase] || ''}
               </p>
               {currentPlan.plan_json.target_volume_km > 0 && (
-                <p className="mt-1 text-xs text-zinc-600">
+                <p className="mt-1.5 font-mono text-xs text-zinc-500">
                   {currentPlan.plan_json.unit === 'time'
                     ? t.dashboard.targetThisWeekTime(currentPlan.plan_json.target_minutes)
                     : t.dashboard.targetThisWeek(currentPlan.plan_json.target_volume_km)}
@@ -310,9 +298,10 @@ export default function Dashboard() {
             </div>
             <Link
               to="/plan"
-              className="shrink-0 rounded-full bg-zinc-800 px-3 py-1.5 text-xs font-semibold text-zinc-300 transition hover:bg-zinc-700"
+              className="flex min-h-[36px] shrink-0 items-center gap-1 rounded-full bg-surface-raised px-3 text-xs font-medium text-zinc-300 ring-1 ring-inset ring-white/10 transition hover:text-white"
             >
               {t.dashboard.fullPlan}
+              <CaretRight size={12} />
             </Link>
           </div>
         </section>
@@ -321,147 +310,169 @@ export default function Dashboard() {
       {/* No plan yet — the runner skipped onboarding. Logging still works. */}
       {plans.length === 0 ? (
         <section className="mt-8 animate-fade-up" style={{ animationDelay: '120ms' }}>
-          <div className="card flex flex-col items-center px-6 py-10 text-center">
-            <p className="text-4xl">🗺️</p>
-            <h2 className="mt-4 text-xl font-bold">{t.dashboard.noPlanTitle}</h2>
-            <p className="mt-2 max-w-sm text-sm leading-relaxed text-zinc-400">
-              {t.dashboard.noPlanBody}
-            </p>
+          <div className="card px-6 py-9">
+            <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary-faint text-primary">
+              <MapTrifold size={26} />
+            </span>
+            <h2 className="mt-5 text-xl font-semibold">{t.dashboard.noPlanTitle}</h2>
+            <p className="mt-2 max-w-sm text-sm leading-relaxed text-zinc-400">{t.dashboard.noPlanBody}</p>
 
-            <button
-              onClick={() => navigate('/onboarding?rebuild=1')}
-              className="btn-primary mt-6 w-full max-w-xs"
-            >
+            <button onClick={() => navigate('/onboarding?rebuild=1')} className="btn-primary mt-6 w-full sm:w-auto">
               {t.dashboard.createPlan}
             </button>
 
-            <Link to="/log" className="mt-3 text-xs text-zinc-500 underline underline-offset-4 hover:text-zinc-300">
+            <Link
+              to="/log"
+              className="mt-4 block text-sm text-zinc-500 underline underline-offset-4 hover:text-zinc-300"
+            >
               {t.dashboard.orLogRun}
             </Link>
           </div>
 
           {workouts.length > 0 && (
-            <div className="mt-6">
-              <h3 className="mb-3 text-sm font-bold uppercase tracking-widest text-zinc-500">
-                {t.dashboard.recentRuns}
-              </h3>
-              <div className="space-y-2">
+            <div className="mt-8">
+              <h3 className="section-title mb-3">{t.dashboard.recentRuns}</h3>
+              <ul className="overflow-hidden rounded-card bg-surface ring-1 ring-inset ring-surface-line">
                 {workouts.slice(0, 5).map((w) => (
-                  <div
+                  <li
                     key={w.id}
-                    className="card flex items-center justify-between gap-4 py-3 text-sm"
+                    className="flex items-center justify-between gap-4 border-b border-surface-line px-5 py-3.5 text-sm last:border-b-0"
                   >
                     <span className="text-zinc-400">{shortDate(w.date)}</span>
-                    <span className="font-medium">
-                      {Number(w.distance) > 0
-                        ? `${w.distance} km · ${w.duration} min`
-                        : t.dashboard.missedWorkout}
+                    <span className="font-mono font-medium">
+                      {Number(w.distance) > 0 ? `${w.distance} km · ${w.duration} min` : t.dashboard.missedWorkout}
                     </span>
-                  </div>
+                  </li>
                 ))}
-              </div>
+              </ul>
             </div>
           )}
         </section>
       ) : (
-      /* weekly plan */
-      <section className="mt-8">
-        <div className="mb-2 flex items-center justify-between gap-3">
-          <h2 className="text-lg font-bold">{isCurrentWeek ? t.dashboard.thisWeek : t.dashboard.trainingPlan}</h2>
-          {plans.length > 0 && (
-            <div className="flex items-center gap-2">
+        /* weekly plan */
+        <section className="mt-8">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-xl font-semibold">{isCurrentWeek ? t.dashboard.thisWeek : t.dashboard.trainingPlan}</h2>
+            <div className="flex items-center gap-1">
               <button
                 onClick={() => setSelectedWeek(Math.max(1, viewWeek - 1))}
                 disabled={viewWeek <= 1}
-                className="flex h-7 w-7 items-center justify-center rounded-full border border-zinc-700 text-zinc-300 transition enabled:hover:border-primary enabled:hover:text-primary disabled:opacity-30"
+                className="flex h-10 w-10 items-center justify-center rounded-full text-zinc-300 transition enabled:hover:bg-surface-raised enabled:hover:text-primary enabled:active:scale-90 disabled:opacity-30"
                 aria-label={t.common.back}
               >
-                ‹
+                <CaretLeft size={18} />
               </button>
-              <span className="min-w-[7rem] text-center text-xs text-zinc-400">
+              <span className="min-w-[6.5rem] text-center text-xs text-zinc-400">
                 {t.dashboard.weekOf(viewWeek, lastWeek)}
-                {isCurrentWeek && <span className="text-primary"> · {t.common.current}</span>}
+                {isCurrentWeek && <span className="block text-[11px] text-primary-light">{t.common.current}</span>}
               </span>
               <button
                 onClick={() => setSelectedWeek(Math.min(lastWeek, viewWeek + 1))}
                 disabled={viewWeek >= lastWeek}
-                className="flex h-7 w-7 items-center justify-center rounded-full border border-zinc-700 text-zinc-300 transition enabled:hover:border-primary enabled:hover:text-primary disabled:opacity-30"
+                className="flex h-10 w-10 items-center justify-center rounded-full text-zinc-300 transition enabled:hover:bg-surface-raised enabled:hover:text-primary enabled:active:scale-90 disabled:opacity-30"
                 aria-label={t.common.continue}
               >
-                ›
+                <CaretRight size={18} />
               </button>
             </div>
-          )}
-        </div>
+          </div>
 
-        <div className="mb-4 flex items-center justify-between gap-3 text-sm text-zinc-500">
-          <span>
-            {shortDate(viewWeekStart)} – {shortDate(dayDates[6])}
-            {plan?.plan_json?.focus ? ` · ${plan.plan_json.focus}` : ''}
-          </span>
-          {isFutureWeek && (
-            <span className="shrink-0 rounded-full bg-zinc-800 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-zinc-400">
-              {t.dashboard.unlocks(shortDate(viewWeekStart))}
+          <div className="mb-4 mt-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 text-sm text-zinc-500">
+            <span className="min-w-0">
+              <span className="font-mono text-xs">
+                {shortDate(viewWeekStart)} - {shortDate(dayDates[6])}
+              </span>
+              {plan?.plan_json?.focus ? <span className="block text-zinc-400">{plan.plan_json.focus}</span> : null}
             </span>
+            {isFutureWeek && (
+              <span className="flex shrink-0 items-center gap-1.5 rounded-md bg-surface-raised px-2 py-1 text-xs text-zinc-400">
+                <LockSimple size={12} />
+                {t.dashboard.unlocks(shortDate(viewWeekStart))}
+              </span>
+            )}
+          </div>
+
+          {days.length === 0 ? (
+            <div className="card text-center text-sm text-zinc-400">{t.dashboard.emptyWeek}</div>
+          ) : (
+            <div className="space-y-2.5">
+              {days.map((day, i) => (
+                <WorkoutCard
+                  key={`${viewWeek}-${day.day}`}
+                  day={day}
+                  date={dayDates[i]}
+                  index={i}
+                  completed={!isFutureWeek && completedFlags[i]}
+                  isToday={dayDates[i] === today}
+                  locked={isFutureWeek}
+                  canLog={isCurrentWeek}
+                  onQuickLog={quickLog}
+                  quickLogging={quickLoggingDay === day.day}
+                />
+              ))}
+            </div>
           )}
-        </div>
 
-        {days.length === 0 ? (
-          <div className="card text-center text-zinc-400">
-            {t.dashboard.emptyWeek}
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {days.map((day, i) => (
-              <WorkoutCard
-                key={`${viewWeek}-${day.day}`}
-                day={day}
-                date={dayDates[i]}
-                index={i}
-                completed={!isFutureWeek && completedFlags[i]}
-                isToday={dayDates[i] === today}
-                locked={isFutureWeek}
-                canLog={isCurrentWeek}
-                onQuickLog={quickLog}
-                quickLogging={quickLoggingDay === day.day}
-              />
-            ))}
-          </div>
-        )}
+          {!isCurrentWeek && days.length > 0 && (
+            <button onClick={() => setSelectedWeek(currentWeek)} className="btn-ghost mt-4 w-full text-sm">
+              {t.dashboard.backToThisWeek}
+            </button>
+          )}
 
-        {!isCurrentWeek && days.length > 0 && (
-          <button
-            onClick={() => setSelectedWeek(currentWeek)}
-            className="btn-ghost mt-4 w-full text-sm"
-          >
-            {t.dashboard.backToThisWeek}
+          {/* Something that was not in the plan. */}
+          <button onClick={() => navigate('/log')} className="btn-ghost mt-3 w-full text-sm">
+            <Plus size={16} weight="bold" />
+            {t.dashboard.logSomethingElse}
           </button>
-        )}
 
-        {/* Something that was not in the plan. */}
-        <button
-          onClick={() => navigate('/log')}
-          className="btn-ghost mt-4 w-full text-sm"
-        >
-          + {t.dashboard.logSomethingElse}
-        </button>
-
-        {/* Rebuilding is a first-class action, not something buried in
-            Settings — goals and circumstances change often. */}
-        <div className="mt-8 rounded-2xl border border-zinc-800 bg-zinc-950/60 p-5 text-center">
-          <p className="text-sm font-semibold">{t.dashboard.goalChanged}</p>
-          <p className="mx-auto mt-1 max-w-sm text-xs leading-relaxed text-zinc-500">
-            {t.dashboard.goalChangedBody}
-          </p>
-          <button
-            onClick={() => navigate('/onboarding?rebuild=1')}
-            className="btn-primary mt-4 w-full max-w-xs"
-          >
-            {t.dashboard.createNewPlan}
-          </button>
-        </div>
-      </section>
+          {/* Rebuilding is a first-class action, not something buried in
+              Settings — goals and circumstances change often. */}
+          <div className="mt-10 border-t border-surface-line pt-6">
+            <p className="text-sm font-semibold">{t.dashboard.goalChanged}</p>
+            <p className="mt-1 max-w-sm text-sm leading-relaxed text-zinc-500">{t.dashboard.goalChangedBody}</p>
+            <button
+              onClick={() => navigate('/onboarding?rebuild=1')}
+              className="mt-4 inline-flex min-h-[44px] items-center gap-2 rounded-full px-1 text-sm font-semibold text-primary-light transition hover:text-primary"
+            >
+              <ArrowsClockwise size={16} />
+              {t.dashboard.createNewPlan}
+            </button>
+          </div>
+        </section>
       )}
+    </main>
+  )
+}
+
+const NOTICE_TONES = {
+  error: 'bg-rose-500/10 text-rose-200 ring-rose-500/25',
+  warn: 'bg-amber-500/10 text-amber-100 ring-amber-500/25',
+  neutral: 'bg-surface text-zinc-300 ring-surface-line',
+}
+
+/** An inline message under the summary: an icon and one short paragraph. */
+function Notice({ tone, icon: Icon, children }) {
+  return (
+    <p className={`mt-3 flex items-start gap-2.5 rounded-xl p-3.5 text-sm leading-relaxed ring-1 ring-inset animate-fade-in ${NOTICE_TONES[tone]}`}>
+      <Icon size={18} className="mt-0.5 shrink-0" />
+      <span>{children}</span>
+    </p>
+  )
+}
+
+/** The dashboard's shape while it loads, instead of a spinner. */
+function DashboardSkeleton() {
+  return (
+    <main className="mx-auto max-w-2xl px-4 pt-[max(1.5rem,env(safe-area-inset-top))] sm:px-6" aria-busy="true">
+      <div className="skeleton h-4 w-24" />
+      <div className="skeleton mt-2 h-8 w-40" />
+      <div className="skeleton mt-5 h-[124px] rounded-card" />
+      <div className="skeleton mt-8 h-6 w-32" />
+      <div className="mt-4 space-y-2.5">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="skeleton h-40 rounded-card" />
+        ))}
+      </div>
     </main>
   )
 }

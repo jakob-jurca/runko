@@ -16,7 +16,7 @@ export default function ProgressRing({ percent = 0, size = 120, stroke = 10 }) {
           cy={size / 2}
           r={radius}
           fill="none"
-          stroke="#27272A"
+          stroke="#26262B"
           strokeWidth={stroke}
         />
         <circle
@@ -33,8 +33,8 @@ export default function ProgressRing({ percent = 0, size = 120, stroke = 10 }) {
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-2xl font-extrabold">{Math.round(clamped)}%</span>
-        <span className="text-[10px] uppercase tracking-widest text-zinc-500">this week</span>
+        <span className="font-mono text-xl font-semibold tracking-tight">{Math.round(clamped)}%</span>
+        <span className="text-[11px] text-zinc-500">this week</span>
       </div>
     </div>
   )
