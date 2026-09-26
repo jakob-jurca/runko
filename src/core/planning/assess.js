@@ -11,6 +11,7 @@
  */
 import { estimateVdot, pacesFromVdot } from '../periodization.js'
 import { EXPERIENCE_LEVELS } from './limits.js'
+import { breakCategory, fvdot } from './returning.js'
 
 const DAY_MS = 86_400_000
 const round1 = (n) => Math.round(n * 10) / 10
@@ -115,7 +116,13 @@ export function assessFitness(inputs) {
   const history = historyFrom(inputs.experienceMonths, inputs.fitnessLevel, neverRan)
   const band = neverRan && (weeklyKm ?? 0) <= 5 ? 'none' : bandFrom(weeklyKm)
 
-  const { vdot, source: vdotSource, basedOn } = estimateVdot(inputs.runs, inputs.fitnessLevel || 'beginner')
+  const est = estimateVdot(inputs.runs, inputs.fitnessLevel || 'beginner')
+  const { source: vdotSource, basedOn } = est
+  // b07 r8-9: after a break of more than five days the VDOT the paces come
+  // from is the pre-break one times Daniels' fitness-loss factor.
+  const breakDays = inputs.safety?.breakDays ?? null
+  const fitnessLoss = breakDays > 5 && band !== 'none' ? fvdot(breakDays) : 1
+  const vdot = fitnessLoss < 1 ? Math.round(est.vdot * fitnessLoss * 10) / 10 : est.vdot
   const easyPace = pacesFromVdot(vdot).easy
 
   const experience = experienceLevel({
@@ -147,6 +154,10 @@ export function assessFitness(inputs) {
     running_now: band !== 'none' && band !== 'unknown',
     continuous_min: band === 'none' ? 0 : longestKm ? Math.round(longestKm * easyPace) : null,
     vdot,
+    pre_break_vdot: fitnessLoss < 1 ? est.vdot : null,
+    fitness_loss_factor: fitnessLoss,
+    break_days: breakDays,
+    break_category: breakCategory(breakDays),
     vdot_source: vdotSource,
     vdot_based_on: basedOn,
     easy_pace_min_per_km: round1(easyPace),

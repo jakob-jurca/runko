@@ -235,6 +235,32 @@ export const WALK_BASE_35 = { sessions: 4, minutes: [20, 25, 30, 35, 45, 45] }
 /** p05 r4: the walking-only programme (BMI 40+, no clinician agreement yet). */
 export const WALKING_PLAN = { sessions: 4, minutes: [20, 20, 25, 30, 30, 35, 40, 40, 45, 45, 45, 45], longWalkFrom: 9, longWalkExtra: 15 }
 
+/**
+ * b03 r9: the shortest plan for a distance. 5 km: 9 weeks from none, 6 else;
+ * 10 km: 8; half: 10 for novices (none, beginner, novice), 8 above;
+ * marathon: 16 for novices, 12 above.
+ */
+export function minPlanWeeks(distanceKm, level) {
+  const novice = ['none', 'beginner', 'novice'].includes(level)
+  if (distanceKm <= 5) return level === 'none' ? 9 : 6
+  if (distanceKm <= 10) return 8
+  if (distanceKm <= 21.1) return novice ? 10 : 8
+  return novice ? 16 : 12
+}
+
+/**
+ * p01 r29, b02 (marathon row): a beginner's first half comes after six months
+ * of running; a marathon needs 26 weeks or more and run-walk. Weeks from now.
+ */
+export function beginnerRaceGateWeeks(distanceKm, level, experienceMonths) {
+  if (!(distanceKm > 10)) return 0
+  // Unknown history counts from the level: none and beginner start at zero.
+  const months = experienceMonths ?? (['none', 'beginner'].includes(level) ? 0 : 6)
+  const toSixMonths = Math.max(0, Math.ceil((6 - months) * 4.345))
+  const marathonBeginner = distanceKm > 21.1 && ['none', 'beginner'].includes(level)
+  return marathonBeginner ? Math.max(26, toSixMonths) : toSixMonths
+}
+
 export const WALK_BREAK_LONG_SHARE = 0.4
 export const WALK_BREAK_MAX_KM = 10
 /** A completion goal (no target time) may be met run-walk up to a half marathon. */

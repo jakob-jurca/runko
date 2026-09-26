@@ -396,7 +396,8 @@ function race(ctx, assessment, feasibility, kind) {
   const taper = ctx.taper(d)
   const total = planLength(ctx, feasibility, 12)
   const phases = racePhases(ctx, total, taper.weeks)
-  const raceWeek = raceFor(ctx, total)
+  // b02: a beginner's marathon is run-walk (walk breaks on race day).
+  const raceWeek = raceFor(ctx, total, d >= 42 && ['none', 'beginner'].includes(assessment.experience_level))
   const level = assessment.history === 'experienced' ? 'advanced'
     : assessment.history === 'developing' ? 'intermediate' : 'beginner'
   const volumeCap = Math.max(ctx.current, peakVolumeCap(level, d))
@@ -462,12 +463,13 @@ function race(ctx, assessment, feasibility, kind) {
  * 30 the gentle ladder stands in for its "half the running time" version (r25).
  */
 function postpartumLadder(inputs) {
-  if (inputs.safety?.pregnancyStatus !== 'postpartum') return 'returning'
+  if (inputs.safety?.pregnancyStatus !== 'postpartum') return inputs.signals?.injury ? 'injury' : 'returning'
   return (inputs.health?.bmi ?? 0) > 30 ? 'gentle' : 'postpartum'
 }
 
 function returning(ctx, assessment, feasibility, inputs) {
-  const noIntensity = SCENARIO_RULES.returning.noIntensityWeeks
+  // b07 r15 / p06 r28: no quality until the return period is over.
+  const noIntensity = ctx.limits.noIntensityWeeks ?? SCENARIO_RULES.returning.noIntensityWeeks
   const d = ctx.goal.distanceKm
 
   if (ctx.current < RETURN_TIME_BASED_BELOW_KM) {

@@ -59,4 +59,4 @@ bmi_40 block screen in Onboarding.jsx.
 Group D: 35 runtime summaries in knowledge/research/ (<=350 tokens, frontmatter
 scenarios/populations/situations), plan call loads scenario + <=2 population
 notes (one AI call), chat via detectSituations, tests.
-Status: (update below as groups finish)
+Status: Group A done (returning.js, gating, min weeks, marathon prediction; tests/returning.test.mjs).

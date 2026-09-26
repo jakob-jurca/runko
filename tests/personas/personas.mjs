@@ -726,6 +726,55 @@ export const PERSONAS = [
     // p05 r12, r15, r17: +10% at most, three days, no intensity for 26 weeks.
     expect: { scenario: 'beginner_with_deadline', maxRunDays: 3, noHardSessions: true, walkRun: true, walkBase: 3 },
   },
+  // ------------------------------------------------ Group A: returning, gating
+  {
+    id: 'returning-6-weeks-off',
+    who: 'Runs 30 km/week normally, 6 weeks off, half marathon in 24 weeks',
+    profile: {
+      age: 35, fitness_level: 'intermediate', experience_months: 60, weekly_volume_km: 30,
+      longest_run_km: 12, target_distance_km: 21.1, event_date: sundayIn(24), days_per_week: 4,
+      pregnancy_status: 'none', pain_at_rest: false, injury_last_12m: false, break_days: 42,
+      coach_notes: 'Šest tednov nisem tekel.',
+    },
+    // b07 r12: category III restarts at 33% of the pre-break week; b07 r15:
+    // easy running only until the volume is back to half.
+    expect: { scenario: 'returning', firstWeekMaxKm: 10, noQualityUntilWeek: 6 },
+  },
+  {
+    id: 'four-days-off',
+    who: 'Runs 30 km/week, missed four days, 10 km race in 12 weeks',
+    profile: {
+      age: 35, fitness_level: 'intermediate', experience_months: 60, weekly_volume_km: 30,
+      longest_run_km: 12, target_distance_km: 10, event_date: sundayIn(12), days_per_week: 4,
+      pregnancy_status: 'none', pain_at_rest: false, injury_last_12m: false, break_days: 4,
+      coach_notes: 'Štiri dni nisem tekel, ker sem bil bolan.',
+    },
+    // b07 r8: five days or fewer changes nothing.
+    expect: { scenario: 'short_race' },
+  },
+  {
+    id: 'beginner-half-after-3-months',
+    who: '3 months of running, 12 km/week, half marathon in 12 weeks',
+    profile: {
+      age: 30, fitness_level: 'beginner', experience_months: 3, weekly_volume_km: 12,
+      longest_run_km: 6, target_distance_km: 21.1, event_date: sundayIn(12), days_per_week: 3,
+      pregnancy_status: 'none', pain_at_rest: false, injury_last_12m: false,
+    },
+    // p01 r29: a first half comes after six months of running (14 more weeks).
+    expect: { verdict: 'unsafe', proposesSaferGoal: true, originalGoalNotBuilt: true },
+  },
+  {
+    id: 'strong-10k-in-6w',
+    who: '3 years running, 25 km/week, 10 km race in 6 weeks',
+    profile: {
+      age: 32, fitness_level: 'intermediate', experience_months: 36, weekly_volume_km: 25,
+      longest_run_km: 10, target_distance_km: 10, event_date: sundayIn(6), days_per_week: 4,
+      pregnancy_status: 'none', pain_at_rest: false, injury_last_12m: false,
+    },
+    // b03 r9-11: shorter than the usual 8 weeks, but at 80% of the base it
+    // is a warning, not a refusal.
+    expect: { verdict: 'stretch' },
+  },
 ]
 
 export { ALL_DAYS }

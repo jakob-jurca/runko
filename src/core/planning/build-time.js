@@ -63,6 +63,21 @@ export const LADDERS = {
     { repeats: 2, run: 540, walk: 120 },
     { continuous: 20 },
   ],
+  // p06 section 4.1 (return from injury), levels 1-8, with rungs added where
+  // three sessions a week would add more than +10 running minutes (decision
+  // 6): 5, 8, 10, 12, 15, 18, 20 running minutes, then 20 non-stop. The table
+  // is walked from level 1 — skipping levels 1-3 needs a soft-tissue injury,
+  // under 14 days off and passed readiness tests, none of which is known.
+  injury: [
+    { repeats: 10, run: 30, walk: 60 },
+    { repeats: 8, run: 60, walk: 60 },
+    { repeats: 5, run: 120, walk: 75 },
+    { repeats: 6, run: 120, walk: 60 },
+    { repeats: 5, run: 180, walk: 60 },
+    { repeats: 3, run: 360, walk: 60 },
+    { repeats: 2, run: 600, walk: 60 },
+    { continuous: 20 },
+  ],
   // A comeback from nothing: the lungs remember, tendons have detrained.
   // Close to injuries.md's return-to-run protocol (1-2 min bouts, walk
   // between), but quicker up the ladder than a first-time beginner.

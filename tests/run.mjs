@@ -25,6 +25,7 @@ const SUITES = [
   './logging.test.mjs',
   './plan-rows.test.mjs',
   './limits.test.mjs',
+  './returning.test.mjs',
   './gate.test.mjs',
   './personas.test.mjs',
   './knowledge-scenarios.test.mjs',

@@ -20,6 +20,7 @@
  *
  * Pure data. See ../README.md for the core rules.
  */
+import { breakCategory, returnStartFactor, easyOnlyWeeks } from './returning.js'
 import { SAFE, WEEKLY_FLOOR_KM, longRunMaxMinutes, WALK_BASE_30, WALK_BASE_35 } from './rules.js'
 
 /** Precedence levels, highest first (_RULE-PRECEDENCE section 1). */
@@ -138,6 +139,20 @@ export function computeLimits(inputs, assessment) {
   addLimit(set, 'startVolumeFactor', assessment.weekly_source === 'stated' ? SAFE.statedVolumeFactor : 1, {
     rule: 'b04 r2', level: LEVEL.PLAN,
   })
+
+  // --- coming back (b07 r11-15, p06 r27-28) ----------------------------------------
+  const breakDays = assessment.break_days ?? null
+  const comingBack = (inputs.signals?.returning || (breakDays ?? 0) > 28) && breakCategory(breakDays) !== 'I'
+  if (comingBack) {
+    addLimit(set, 'startVolumeFactor', returnStartFactor(breakDays), { rule: 'b07 r11-13', level: LEVEL.PLAN })
+  }
+  if (inputs.signals?.returning && (comingBack || inputs.signals.injury)) {
+    // Z1-Z2 only, strides at most, until the return period is over (b07 r15) or
+    // the volume is back to 50% of before an injury (p06 r28).
+    addLimit(set, 'noIntensityWeeks', easyOnlyWeeks(breakDays, { injury: Boolean(inputs.signals.injury) }), {
+      rule: inputs.signals.injury ? 'p06 r28' : 'b07 r15', level: LEVEL.PLAN,
+    })
+  }
 
   // --- long run duration (decision 1, b04 r20, p04 r21) --------------------------
   addLimit(set, 'longRunMaxMin', longRunMaxMinutes(distance), { rule: 'b04 r20', level: LEVEL.PLAN })

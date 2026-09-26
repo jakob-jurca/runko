@@ -330,6 +330,19 @@ export function formatDuration(minutes) {
  * inverts it cleanly for ANY distance — which is the point: 15 km and 30 km
  * are just numbers here, exactly like 5 or 42.2.
  */
+/**
+ * b01 r24: a marathon is predicted from the half-marathon time with an
+ * exponent that depends on the weekly volume — 1.06 from 90 km, 1.08 from 60,
+ * 1.10 from 40, 1.12 below — because the pure VDOT equivalence flatters runners
+ * who do little mileage. Other distances use VDOT directly.
+ */
+export function predictRaceTime(vdot, distanceKm, weeklyKm = null) {
+  if (!(distanceKm > 30) || weeklyKm === null || weeklyKm === undefined) return raceTimeForVdot(vdot, distanceKm)
+  const k = weeklyKm >= 90 ? 1.06 : weeklyKm >= 60 ? 1.08 : weeklyKm >= 40 ? 1.1 : 1.12
+  const half = raceTimeForVdot(vdot, 21.0975)
+  return half === null ? null : round2(half * (distanceKm / 21.0975) ** k)
+}
+
 export function raceTimeForVdot(vdot, distanceKm) {
   if (!(vdot > 0) || !(distanceKm > 0)) return null
   let lo = 1
@@ -372,10 +385,10 @@ const GOAL_BANDS = [
  * @param {number|null} [opts.targetTimeMin]
  * @returns {object|null} null when there is no target distance
  */
-export function assessGoal({ vdot, targetDistanceKm, targetTimeMin = null }) {
+export function assessGoal({ vdot, targetDistanceKm, targetTimeMin = null, weeklyKm = null }) {
   if (!(targetDistanceKm > 0)) return null
 
-  const predictedMin = raceTimeForVdot(vdot, targetDistanceKm)
+  const predictedMin = predictRaceTime(vdot, targetDistanceKm, weeklyKm)
   const achievableMin = round2(predictedMin * (1 - REALISTIC_IMPROVEMENT))
 
   if (!(targetTimeMin > 0)) {

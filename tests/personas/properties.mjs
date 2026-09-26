@@ -240,6 +240,19 @@ export const SPECIFIC = {
       : { ok: false, detail: `first walk-run is ${d ? `${d.repeats} x ${d.run_sec} s` : 'missing'}` }
   },
 
+  firstWeekMaxKm: (r, p, max) => {
+    const km = weekLoad(r.weeks[0], 'distance')
+    return km <= max + 0.01 ? { ok: true } : { ok: false, detail: `week 1 is ${km} km, at most ${max}` }
+  },
+
+  noQualityUntilWeek: (r, p, n) => {
+    for (const w of r.weeks.slice(0, n)) {
+      const hard = w.days.find((d) => HARD_TYPES.has(d.type))
+      if (hard) return { ok: false, detail: `week ${w.week_number}: ${hard.type}` }
+    }
+    return { ok: true }
+  },
+
   walkingOnly: (r) => {
     const types = new Set(r.weeks.flatMap((w) => w.days.map((d) => d.type)))
     const bad = [...types].filter((x) => !['walk', 'rest'].includes(x))

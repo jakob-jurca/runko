@@ -9,9 +9,10 @@
  * too soon for a beginner?) and feasibility use this, so they can never
  * disagree — and the builder uses the same helpers.
  */
+import { levelAtLeast } from './limits.js'
 import {
   DEFAULT_LOAD, nextWeeklyLoad, nextLongRun, longShareFor, readinessFor, taperFor, longRunDurationCapKm,
-  longRunMaxMinutes, raceFloorWeeks, WALK_BREAK_LONG_SHARE, WALK_BREAK_MAX_KM, WALK_RUN_MAX_KM,
+  longRunMaxMinutes, raceFloorWeeks, minPlanWeeks, beginnerRaceGateWeeks, WALK_BREAK_LONG_SHARE, WALK_BREAK_MAX_KM, WALK_RUN_MAX_KM,
 } from './rules.js'
 
 /** Weeks of walk-run before a complete beginner runs 20 minutes non-stop. */
@@ -129,12 +130,21 @@ export function weeksNeeded({
   const comfortable = ladder + build(comfReq) + taper
 
   // p05 r29: a heavier beginner's earliest race, whatever the arithmetic says.
-  const floor = L.raceFloor ? raceFloorWeeks(distanceKm) : 0
+  const gate = beginnerRaceGateWeeks(distanceKm, level, assessment.experience_months)
+  // b03 r9-11: no plan shorter than the minimum — unless it is an intermediate
+  // or better runner already at 80% of what the distance asks (then it is a
+  // warning, not a refusal), or a walk-run completion of a short event.
+  const planFloor = minPlanWeeks(distanceKm, level)
+  const softFloor = levelAtLeast(level, 'intermediate') && (assessment.weekly_km ?? 0) >= 0.8 * req.weeklyMin
+  const hardPlanFloor = walkable || softFloor ? 0 : planFloor
+  const floor = Math.max(L.raceFloor ? raceFloorWeeks(distanceKm) : 0, gate, hardPlanFloor)
   min = Math.max(min, floor)
 
   return {
     min,
-    comfortable: Math.max(min, comfortable, floor),
+    comfortable: Math.max(min, comfortable, floor, planFloor),
+    soft_floor_weeks: softFloor && !walkable ? planFloor : null,
+    gate_weeks: gate || null,
     requirements: {
       long_run_min_km: round1(minReq.long),
       long_run_comfortable_km: round1(comfReq.long),

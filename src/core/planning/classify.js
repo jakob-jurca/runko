@@ -48,7 +48,11 @@ export function classifyRunner(inputs, assessment, limits) {
 
   // 1. Returning: has a running past, and is coming back from a break or injury.
   const hasPast = months === null ? assessment.history !== 'none' : months >= 6
-  if (signals.returning && hasPast) {
+  // b07 r8: five days off or fewer changes nothing (an injury still does).
+  const shortBreak = assessment.break_days !== null && assessment.break_days <= 5 &&
+    !signals.injury && inputs.safety?.pregnancyStatus !== 'postpartum'
+  const longBreak = (assessment.break_days ?? 0) > 28
+  if ((signals.returning || longBreak) && hasPast && !shortBreak) {
     reasons.push(
       signals.injury
         ? 'Has a running history and is coming back from an injury.'

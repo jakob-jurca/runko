@@ -14,7 +14,7 @@
  *             (shorter distance on the date, or the distance on a later
  *             date) and the plan is built for that instead.
  */
-import { assessGoal, raceTimeForVdot, DAYS } from '../periodization.js'
+import { assessGoal, raceTimeForVdot, predictRaceTime, DAYS } from '../periodization.js'
 import { SCENARIO_RULES, GENTLE_START_AGE } from './rules.js'
 import { weeksNeeded } from './progression.js'
 import { effectiveRunDays, isFirstMarathon } from './classify.js'
@@ -104,6 +104,10 @@ export function checkFeasibility(inputs, assessment, classification, limits) {
         `${available} weeks available; safely reaching minimum readiness ` +
           `(long run ${req.long_run_min_km} km, ${req.weekly_min_km} km/week) takes at least ${need.min === Infinity ? 'far more' : need.min}.`
       )
+    } else if (need.soft_floor_weeks && available < need.soft_floor_weeks) {
+      // b03 r11: a strong runner may go short of the minimum, with a warning.
+      distanceStretch = true
+      reasons.push(`${available} weeks is shorter than the usual ${need.soft_floor_weeks} for a ${goal.distanceKm} km; your base makes it possible but tight.`)
     } else if (available < need.comfortable) {
       distanceStretch = true
       reasons.push(
@@ -127,6 +131,7 @@ export function checkFeasibility(inputs, assessment, classification, limits) {
   if (goal.targetTimeMin && assessment.band !== 'none') {
     timeGoal = assessGoal({
       vdot: assessment.vdot, targetDistanceKm: goal.distanceKm, targetTimeMin: goal.targetTimeMin,
+      weeklyKm: assessment.weekly_km,
     })
     if (timeGoal && (timeGoal.verdict === 'ambitious' || timeGoal.verdict === 'unrealistic')) {
       timeStretch = true
@@ -222,7 +227,9 @@ export function checkFeasibility(inputs, assessment, classification, limits) {
     weeks_needed_comfortable: Number.isFinite(need.comfortable) ? need.comfortable : null,
     requirements: req,
     time_goal: timeGoal,
-    predicted_time_min: assessment.band !== 'none' ? raceTimeForVdot(assessment.vdot, goal.distanceKm) : null,
+    predicted_time_min: assessment.band !== 'none' ? predictRaceTime(assessment.vdot, goal.distanceKm, assessment.weekly_km) : null,
+    // b01 r25: a beginner's marathon time is shown as a range of +/- 8%.
+    predicted_range_pct: ['none', 'beginner'].includes(assessment.experience_level) && goal.distanceKm > 30 ? 8 : null,
     fallback_target: fallback,
     alternatives,
     original_goal: original,
