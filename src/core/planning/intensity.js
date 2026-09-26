@@ -116,6 +116,7 @@ const restOf = (d) => ({
  * @param {number|null} [ctx.qualityCapOverride] - a population cap (time-crunched)
  * @param {boolean} [ctx.injuryFree] - no running injury in the last 12 months
  * @param {boolean} [ctx.strength] - add optional strength notes
+ * @param {boolean} [ctx.strides] - false: none (a goal block that wants no pick-ups)
  * @returns {Array} weeks
  */
 export function applyIntensityRules(weeks, ctx) {
@@ -237,7 +238,7 @@ export function applyIntensityRules(weeks, ctx) {
 
     // -- 6. strides: 1-2 easy runs once the base is under way (b03 r18, b05 r17) ---------
     const startWeek = ['none', 'beginner'].includes(level) ? 4 : 1
-    if (['base', 'build', 'foundation', 'consistency'].includes(week.phase) && !week.is_recovery && !isRace && wi >= startWeek) {
+    if (ctx.strides !== false && ['base', 'build', 'foundation', 'consistency'].includes(week.phase) && !week.is_recovery && !isRace && wi >= startWeek) {
       const want = ctx.runDays >= 4 ? 2 : 1
       const hardIdx = days.filter((x) => HARD_TYPES.has(x.type) || x.type === 'long').map(dayIndex)
       let have = days.filter((x) => x.variant === 'strides').length

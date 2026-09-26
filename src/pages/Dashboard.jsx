@@ -18,6 +18,8 @@ import { phaseStyle } from './Plan'
 import { hasPremium, trialDaysLeft, isTrialActive } from '../core/subscription'
 import ProgressRing from '../components/ProgressRing'
 import WorkoutCard from '../components/WorkoutCard'
+import { GoalProgressCard, BlockEndCard } from '../components/GoalProgress'
+import { goalProgress, repeatParams } from '../core/goal-progress'
 import {
   ArrowsClockwise, CaretLeft, CaretRight, CheckCircle, Info, LockSimple, MapTrifold, Plus, WarningCircle,
 } from '@phosphor-icons/react'
@@ -195,6 +197,14 @@ export default function Dashboard() {
   const todaysRun = workouts.find((w) => w.date === today && Number(w.distance) > 0)
   const todaysRunUnshown = Boolean(todaysRun) && !dayDates.includes(today)
 
+  // A goal block (no race) is measured on its own metric; null for a race plan.
+  const progress = useMemo(() => (plans.length ? goalProgress({ plans, workouts }) : null), [plans, workouts])
+  const showBlockEnd = progress && (progress.inLastWeek || progress.ended)
+  const nextBlock = (choice) => {
+    const extra = choice === 'repeat' ? repeatParams(progress.goal) : `next=${choice}`
+    navigate(`/onboarding?rebuild=1&${extra}`)
+  }
+
   const percent = useMemo(() => {
     const currentDays = currentPlan?.plan_json?.days ?? []
     const start = weekStartISO(plans, currentWeek)
@@ -269,6 +279,8 @@ export default function Dashboard() {
 
       {adaptedNote && <p className="mt-3 text-xs text-primary-light animate-fade-up">{t.dashboard.adaptedNote}</p>}
 
+      {showBlockEnd && <BlockEndCard progress={progress} onNext={nextBlock} />}
+
       {/* Which phase the runner is in, and what it is for */}
       {currentPlan?.plan_json?.phase && (
         <section className="mt-3 rounded-card bg-surface/60 p-5 ring-1 ring-inset ring-surface-line animate-fade-up" style={{ animationDelay: '100ms' }}>
@@ -306,6 +318,8 @@ export default function Dashboard() {
           </div>
         </section>
       )}
+
+      {progress && <GoalProgressCard progress={progress} />}
 
       {/* No plan yet — the runner skipped onboarding. Logging still works. */}
       {plans.length === 0 ? (

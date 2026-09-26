@@ -8,6 +8,7 @@
  * so a plan is never missing its explanation.
  */
 import { t } from '../strings.js'
+import { adjustmentText } from './goals.js'
 
 const P = t.planning
 
@@ -32,7 +33,39 @@ function alternativeText(a) {
 /**
  * @returns {object} explanation, stored with the plan (plan_json.planning.explain)
  */
-export function explainPlan({ classification, feasibility, plan, notices = [] }) {
+function explainGoalPlan({ goalPlan, classification, feasibility, plan, notices }) {
+  const G = t.goals
+  const main = G.items[goalPlan.main]
+  const priorities = main.priorities
+  const adjustments = goalPlan.adjustments.map(adjustmentText)
+  const parts = [G.opening(main.label, plan.weeks.length), main.intro]
+  if (goalPlan.secondary) parts.push(G.secondary(G.items[goalPlan.secondary].label))
+  parts.push(...adjustments)
+  if (plan.walk_only) parts.push(P.intro.walkOnly)
+  if (plan.walk_base_weeks) parts.push(P.intro.walkBase(plan.walk_base_weeks))
+  parts.push(P.intro.priorities(priorities))
+  for (const n of notices) parts.push(n.text)
+  return {
+    scenario: classification.scenario,
+    scenario_label: main.label,
+    verdict: feasibility.verdict,
+    verdict_label: null,
+    priorities,
+    original_goal: feasibility.original_goal,
+    adopted_goal: feasibility.adopted_goal,
+    original_goal_text: null,
+    adopted_goal_text: main.desc,
+    fallback_text: null,
+    other_options: [],
+    notices: notices.map((n) => ({ id: n.id, text: n.text })),
+    reasons: [...classification.reasons, ...feasibility.reasons],
+    goal_plan: { main: goalPlan.main, secondary: goalPlan.secondary, adjustments: adjustments },
+    intro: parts.join(' '),
+  }
+}
+
+export function explainPlan({ classification, feasibility, plan, notices = [], goalPlan = null }) {
+  if (goalPlan) return explainGoalPlan({ goalPlan, classification, feasibility, plan, notices })
   const scenario = classification.scenario
   const verdict = feasibility.verdict
   const priorities = P.priorities[scenario] || []

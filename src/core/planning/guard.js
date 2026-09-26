@@ -34,8 +34,8 @@ export function enforceWeekRules(original, proposed) {
 
   let days = proposed.map((d, i) => {
     const orig = base.find((b) => b.day === d.day) || base[i]
-    // The race is fixed.
-    if (orig?.type === 'race') return orig
+    // The race and a time trial are fixed.
+    if (orig?.type === 'race' || orig?.type === 'time_trial') return orig
     // Rest days stay rest days: they are the runner's unavailable days, or
     // the spacing the scenario requires.
     if (d.type !== 'rest' && !runDays.has(d.day)) {

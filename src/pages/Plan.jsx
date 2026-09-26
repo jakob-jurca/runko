@@ -130,7 +130,9 @@ export default function Plan() {
         </p>
         {/* An unsafe goal is never built: show the goal this plan is for. */}
         <p className="mt-1 text-sm font-medium text-primary">
-          {explain?.verdict === 'unsafe' ? explain.adopted_goal_text : goalLabel(profile)}
+          {explain?.goal_plan
+            ? explain.adopted_goal_text
+            : explain?.verdict === 'unsafe' ? explain.adopted_goal_text : goalLabel(profile)}
         </p>
       </header>
 
@@ -362,10 +364,12 @@ function VerdictCard({ explain }) {
       <p>
         <span className="font-semibold text-zinc-300">{t.plan.scenarioLabel}:</span> {explain.scenario_label}
       </p>
-      <p>
-        <span className="font-semibold text-zinc-300">{t.plan.verdictLabel}:</span>{' '}
-        <span className={`font-semibold ${VERDICT_STYLES[explain.verdict] || ''}`}>{explain.verdict_label}</span>
-      </p>
+      {explain.verdict_label && (
+        <p>
+          <span className="font-semibold text-zinc-300">{t.plan.verdictLabel}:</span>{' '}
+          <span className={`font-semibold ${VERDICT_STYLES[explain.verdict] || ''}`}>{explain.verdict_label}</span>
+        </p>
+      )}
       {explain.verdict === 'unsafe' && explain.original_goal_text && (
         <>
           <p>

@@ -22,6 +22,8 @@ import { isFirstMarathon } from './classify.js'
 import { pickRunDays } from './days.js'
 import { buildTimePlan, buildWalkingPlan } from './build-time.js'
 import { buildDistancePlan } from './build-distance.js'
+import { insertTimeTrials, markStridesOptional } from './build-goal.js'
+import { goalModifiers, trialWeeksFor } from './goals.js'
 import { withGoal } from './collect.js'
 import { applyIntensityRules, postRaceClocks } from './intensity.js'
 import { formulaAge } from '../heart-rate.js'
@@ -79,7 +81,12 @@ function context(scenario, inputs, assessment, feasibility, limits) {
   const level = assessment.experience_level
   const firstMarathon = isFirstMarathon(inputs, g.distanceKm)
   const longMaxMinutes = L.longRunMaxMin ?? longRunMaxMinutes(g.distanceKm ?? 0)
+  // A goal instead of a race: how far the block may push, and how long it is.
+  const goalPlan = inputs.goalPlan ?? null
   return {
+    goalPlan,
+    goalMods: goalPlan ? goalModifiers(goalPlan) : null,
+    blockWeeks: goalPlan?.blockWeeks ?? null,
     rules, adopted, goal: g, runDays, available, noBackToBack, paces, needed,
     hasEvent,
     raceBlockWeeks,
@@ -193,6 +200,7 @@ function foundationPlan(ctx, totalWeeks, {
 function completeBeginner(ctx) {
   const runPace = Math.max(ctx.paces.easy, BEGINNER_RUN_PACE)
   const ladder = (ctx.age ?? 0) >= GENTLE_START_AGE ? 'gentle' : 'standard'
+  if (ctx.goalPlan) return goalBeginner(ctx, { runPace, ladder })
   if (ctx.hasEvent && ctx.goal.distanceKm) {
     const toRace = beginnerToRace(ctx, { runPace, ladder })
     if (toRace) return toRace
@@ -210,6 +218,24 @@ function completeBeginner(ctx) {
     w.days.some((d) => d.type === 'long' && d.walk_run?.continuous_min >= targetLongMin))
   const weeks = done === -1 ? draft.weeks : draft.weeks.slice(0, Math.min(draft.weeks.length, done + 2))
   return { unit: 'time', weeks }
+}
+
+/**
+ * A complete beginner with a goal instead of a race: the walk-run ladder for
+ * exactly the length of the block, as far up as it gets. Wherever it ends, the
+ * runner has not failed a target: the block is its own length.
+ */
+function goalBeginner(ctx, { runPace, ladder }) {
+  const total = ctx.blockWeeks
+  const target = ctx.goalMods.continuousTargetMin
+  const base = ctx.walkBase
+  // A walking base longer than the block still comes first (p05 r8-9).
+  const asked = base && total <= base.minutes.length ? base.minutes.length + 1 : total
+  const draft = buildTimePlan({
+    totalWeeks: asked, ladder, runDayCount: ctx.runDays.length, available: ctx.runDays,
+    runPace, age: ctx.hrAge, targetLongMin: target, targetEasyMin: Math.min(30, target), walkBase: base,
+  })
+  return { unit: 'time', weeks: draft.weeks.slice(0, total) }
 }
 
 /**
@@ -335,26 +361,47 @@ function deadlineBeginner(ctx, assessment, feasibility) {
 }
 
 function recreational(ctx) {
-  const total = SCENARIO_RULES.recreational.weeks
+  const mod = ctx.goalMods
+  const total = ctx.blockWeeks ?? SCENARIO_RULES.recreational.weeks
   const start = Math.max(ctx.weekly, 6)
   const now = Math.max(ctx.current, 6)
-  const peak = Math.max(now + 2, Math.min(round(now * 1.25), now + 10))
+  // Without a goal the block grows 25% (10 km at most); a goal sets how far.
+  const growth = mod?.peakWeekly ?? 1.25
+  const peak = Math.max(now + 2, Math.min(round(now * growth), now + round(8 * growth)))
   const longStart = Math.max(3, ctx.longest || round(start * 0.35))
-  const phases = Array(total).fill('consistency')
+  let peakLong = Math.min(16, Math.max(longStart, round(longStart * 1.3)))
+  let targetContinuousMin = null
+  if (mod) {
+    peakLong = Math.min(mod.longCapKm ?? 16, Math.max(longStart, round(longStart * mod.peakLong)))
+    if (mod.longRunKey) {
+      // Longer without stopping: from the minutes they last ran non-stop, up a
+      // quarter for every four weeks of the block (and more in a harder block).
+      const nowMin = longStart * ctx.paces.easy
+      const level = ctx.goalPlan.level ?? 1
+      targetContinuousMin = Math.min(
+        ctx.longMaxMinutes,
+        Math.max(30, round(nowMin * (1 + 0.25 * (total / 4) + 0.15 * (level - 1)))),
+      )
+      peakLong = Math.min(ctx.longMaxKm, Math.max(longStart, Math.floor(targetContinuousMin / ctx.paces.easy)))
+    }
+  }
+  const phases = Array(total).fill(mod?.base ? 'base' : 'consistency')
+  const share = mod?.longShareMax ? (v) => Math.min(ctx.share()(v), mod.longShareMax) : ctx.share()
   return {
     unit: 'distance',
+    target_continuous_min: targetContinuousMin,
     weeks: buildDistancePlan({
       longMaxKm: ctx.longMaxKm, limits: ctx.limits,
       totalWeeks: total, phases, recoveryWeeks: ctx.recovery(phases),
       runDays: ctx.runDays, paces: ctx.paces, age: ctx.hrAge,
-      startWeeklyKm: start, peakWeeklyKm: peak, progression: 'rolling',
-      startLongKm: longStart, peakLongKm: Math.min(16, Math.max(longStart, round(longStart * 1.3))),
-      longShare: ctx.share(),
+      startWeeklyKm: start, peakWeeklyKm: peak, progression: mod?.base ? 'build' : 'rolling',
+      startLongKm: longStart, peakLongKm: peakLong,
+      longShare: share,
       taperFactors: [], qualityFor: () => [], race: null, goalPaceKey: 'easy', intentFor,
       // Optional variety: strides on one easy run in normal weeks. Still easy
       // running — a few 20-second pick-ups, not a workout.
       decorate: (days, i, phase, isRecovery) => {
-        if (isRecovery) return days
+        if (isRecovery || mod?.strides === false) return days
         const easy = days.filter((d) => d.type === 'easy')
         const pick = easy[Math.floor((easy.length - 1) / 2)]
         return days.map((d) =>
@@ -364,8 +411,43 @@ function recreational(ctx) {
   }
 }
 
+/**
+ * The speed goal: a 5 km block on the short-race scenario's rules, with no
+ * race and no taper. It is bracketed by two time trials (build-goal.js), so
+ * the last week is a normal loading week, not a taper.
+ */
+function speed(ctx, assessment) {
+  const total = ctx.blockWeeks
+  const phases = assignPhases(total, { hasEvent: true, taperWeeks: 0 })
+  const level = assessment.history === 'experienced' ? 'advanced'
+    : assessment.history === 'developing' ? 'intermediate' : 'beginner'
+  const volumeCap = Math.max(ctx.current, peakVolumeCap(level, 5))
+  const growth = ctx.goalMods.peakWeekly
+  const peakWeekly = clamp(round(ctx.current * growth), ctx.current, volumeCap)
+  const maxQuality = level === 'beginner' ? 1 : 2
+  const q = {
+    base: [{ type: 'repetition', paceKey: 'repetition' }],
+    build: [{ type: 'interval', paceKey: 'interval' }, { type: 'tempo', paceKey: 'threshold' }],
+    sharpen: [{ type: 'repetition', paceKey: 'repetition' }, { type: 'interval', paceKey: 'interval' }],
+  }
+  return {
+    unit: 'distance',
+    weeks: buildDistancePlan({
+      longMaxKm: ctx.longMaxKm, limits: ctx.limits,
+      totalWeeks: total, phases, recoveryWeeks: ctx.recovery(phases),
+      runDays: ctx.runDays, paces: ctx.paces, age: ctx.hrAge,
+      startWeeklyKm: Math.max(ctx.weekly, 5), peakWeeklyKm: Math.max(peakWeekly, 5), progression: 'build',
+      startLongKm: ctx.longest, peakLongKm: Math.min(18, Math.max(ctx.longest, 11)),
+      longShare: (v) => Math.min(ctx.share()(v), 0.35),
+      taperFactors: [],
+      qualityFor: (i, phase) => (q[phase] || []).slice(0, maxQuality),
+      race: null, goalPaceKey: 'threshold', intentFor,
+    }).weeks,
+  }
+}
+
 function maintenance(ctx, assessment) {
-  const total = SCENARIO_RULES.maintenance.weeks
+  const total = ctx.blockWeeks ?? SCENARIO_RULES.maintenance.weeks
   const volume = Math.max(ctx.weekly, 10)
   const share = ctx.share()
   const long = Math.max(3, Math.min(ctx.longest || round(volume * 0.3), round(volume * share(volume)), ctx.longMaxKm))
@@ -383,6 +465,8 @@ function maintenance(ctx, assessment) {
       // Enough quality to keep what they have: threshold every week, and a
       // faster session alternating with repetitions for bigger weeks.
       qualityFor: (i) => {
+        // A goal that is about health or habit holds the volume and nothing else.
+        if (ctx.goalMods?.easyOnly) return []
         const q = [{ type: 'tempo', paceKey: 'threshold' }]
         if (experienced && ctx.runDays.length >= 5) {
           q.push(i % 2 === 0 ? { type: 'interval', paceKey: 'interval' } : { type: 'repetition', paceKey: 'repetition' })
@@ -482,7 +566,8 @@ function returning(ctx, assessment, feasibility, inputs) {
     // ladder is its own foundation, so it runs all the way to race day.
     const runPace = Math.max(ctx.paces.easy, 7)
     const plan = buildTimePlan({
-      totalWeeks: ctx.hasEvent ? ctx.goal.weeksToEvent : SCENARIO_RULES.returning.weeks, ladder: postpartumLadder(inputs),
+      totalWeeks: ctx.hasEvent ? ctx.goal.weeksToEvent : ctx.blockWeeks ?? SCENARIO_RULES.returning.weeks,
+      ladder: postpartumLadder(inputs),
       runDayCount: Math.min(ctx.runDays.length, 4), available: ctx.runDays,
       runPace, age: ctx.hrAge, targetLongMin: d ? clamp(round(d * runPace * 0.8), 30, 90) : 45, targetEasyMin: 35,
       race: ctx.hasEvent && d ? { distanceKm: d, walkBreaks: false, day: ctx.goal.eventWeekday } : null,
@@ -491,7 +576,7 @@ function returning(ctx, assessment, feasibility, inputs) {
     return { unit: 'time', weeks: plan.weeks }
   }
 
-  const total = ctx.raceBlockWeeks ?? SCENARIO_RULES.returning.weeks
+  const total = ctx.raceBlockWeeks ?? ctx.blockWeeks ?? SCENARIO_RULES.returning.weeks
   const req = d ? readinessFor(d) : null
   const taper = d ? ctx.taper(d) : { weeks: 0, factors: [], longFactors: [], preTaperLong: null }
   const raceWeek = raceFor(ctx, total)
@@ -520,7 +605,7 @@ function returning(ctx, assessment, feasibility, inputs) {
       // Intensity only once the body has had six weeks to re-adapt, and then
       // one short threshold session at most.
       qualityFor: (i, phase) =>
-        i >= noIntensity && phase === 'build' ? [{ type: 'tempo', paceKey: 'threshold' }] : [],
+        i >= noIntensity && phase === 'build' && !ctx.goalMods?.easyOnly ? [{ type: 'tempo', paceKey: 'threshold' }] : [],
       race: raceWeek, goalPaceKey: ctx.goalPaceKey, intentFor,
     }).weeks,
   }
@@ -559,16 +644,19 @@ export function buildPlan(scenario, inputs, assessment, feasibility, restriction
   let built
   if (restrictions.walkOnly) {
     // p05 r4: walking only until a clinician agrees.
-    built = { unit: 'time', weeks: buildWalkingPlan({
+    const walking = buildWalkingPlan({
       available: inputs.constraints.availableDays ?? inputs.availableDays, age: ctx.hrAge,
       days: inputs.constraints.maxRunDays ?? inputs.daysPerWeek ?? undefined,
-    }).weeks }
+    }).weeks
+    built = { unit: 'time', weeks: ctx.blockWeeks ? walking.slice(0, ctx.blockWeeks) : walking }
   } else switch (scenario) {
     case 'complete_beginner': built = completeBeginner(ctx); break
     case 'beginner_with_deadline': built = deadlineBeginner(ctx, assessment, feasibility); break
     case 'recreational': built = recreational(ctx); break
     case 'maintenance': built = maintenance(ctx, assessment); break
-    case 'short_race': built = race(ctx, assessment, feasibility, 'short'); break
+    case 'short_race':
+      built = ctx.goalPlan?.main === 'hitrost' ? speed(ctx, assessment) : race(ctx, assessment, feasibility, 'short')
+      break
     case 'long_race': built = race(ctx, assessment, feasibility, 'long'); break
     case 'returning': built = returning(ctx, assessment, feasibility, inputs); break
     default: throw new Error(`Unknown scenario: ${scenario}`)
@@ -603,13 +691,31 @@ export function buildPlan(scenario, inputs, assessment, feasibility, restriction
     level: assessment.experience_level, age: inputs.age, hrAge: ctx.hrAge, runDays: ctx.runDays.length,
     distanceKm: ctx.goal.distanceKm, paces: ctx.paces, hardGapHours: ctx.limits.hardGapHours, strength: true,
     injuryFree: inputs.safety?.injuryLast12m === false,
+    strides: ctx.goalMods?.strides !== false,
   }).map((w, i) => ({ ...w, allow_hard: Boolean(shaped[i].allow_hard) && w.allow_hard }))
-  const noIntensityWeeks = restrictions.noHardSessions ? Infinity : ctx.limits.noIntensityWeeks ?? 0
-  const weeks = noIntensityWeeks ? withoutHardSessions(intense, ctx.paces, ctx.hrAge, noIntensityWeeks) : intense
+  const noIntensityWeeks = restrictions.noHardSessions || ctx.goalMods?.easyOnly ? Infinity : ctx.limits.noIntensityWeeks ?? 0
+  let weeks = noIntensityWeeks ? withoutHardSessions(intense, ctx.paces, ctx.hrAge, noIntensityWeeks) : intense
+  if (ctx.goalMods?.strides === 'optional') weeks = markStridesOptional(weeks)
+
+  // The speed goal's two time trials. A block that cannot hold them inside
+  // its own limits is not built: the pipeline adjusts the goal instead.
+  if (ctx.goalMods?.timeTrials) {
+    const placed = restrictions.walkOnly || built.unit !== 'distance'
+      ? { ok: false }
+      : insertTimeTrials(weeks, { paces: ctx.paces, age: ctx.hrAge, hardGapHours: ctx.limits.hardGapHours, runDays: ctx.runDays.length })
+    if (!placed.ok) return { trial_failed: true, unit: built.unit, weeks: [] }
+    weeks = placed.weeks
+  }
 
   return {
     unit: built.unit,
     weeks,
+    goal_meta: ctx.goalPlan
+      ? {
+          trial_weeks: ctx.goalMods.timeTrials ? trialWeeksFor(weeks.length) : [],
+          target_continuous_min: built.target_continuous_min ?? (built.unit === 'time' ? ctx.goalMods.continuousTargetMin : null),
+        }
+      : null,
     run_days: ctx.runDays,
     no_back_to_back: ctx.noBackToBack,
     paces: ctx.paces,

@@ -30,6 +30,7 @@ const SUITES = [
   './research.test.mjs',
   './gate.test.mjs',
   './personas.test.mjs',
+  './goals.test.mjs',
   './knowledge-scenarios.test.mjs',
   './plan-guard.test.mjs',
   './rls-schema.test.mjs',

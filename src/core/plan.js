@@ -296,6 +296,7 @@ function pipelineProfile(profile, intake, health = null) {
     ...profile,
     ...healthFields,
     ...(intake?.hasRunBefore === false ? { hasRunBefore: false } : {}),
+    ...(intake?.goalPlan ? { goal_plan: intake.goalPlan } : {}),
   }
 }
 
@@ -462,11 +463,14 @@ function mergeAdapted(original = {}, adapted = {}, profile = {}) {
     scenario: original.scenario,
     feasibility_verdict: original.feasibility_verdict,
     planning: original.planning,
+    goal_plan: original.goal_plan,
     allow_hard: original.allow_hard,
     unit: original.unit,
     adapted: true,
   }
 }
+
+const isHabitGoal = (plans) => plans?.[0]?.plan_json?.goal_plan?.main === 'navada'
 
 /**
  * Immediate adaptation hook — called after every workout log.
@@ -482,6 +486,8 @@ export async function maybeAdaptPlan(profile, plans, workout, recentWorkouts) {
   const missed = Number(workout.distance) === 0
   const hard = Number(workout.effort) >= 4
   if (!missed && !hard) return null
+  // A habit goal never answers a missed session with a changed week.
+  if (missed && isHabitGoal(plans)) return null
 
   const week = currentWeekNumber(plans)
   const nextWeek = week + 1
@@ -514,6 +520,8 @@ export async function maybeAdaptPlan(profile, plans, workout, recentWorkouts) {
  */
 export async function adaptCurrentWeekIfNeeded(profile, plans, recentWorkouts) {
   if (!hasPremium(profile) || !plans?.length) return null
+  // The weekly rewrite eases a week after missed sessions; a habit goal has no such thing.
+  if (isHabitGoal(plans)) return null
 
   const week = currentWeekNumber(plans)
   if (week <= 1) return null

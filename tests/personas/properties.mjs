@@ -502,7 +502,70 @@ export const SPECIFIC = {
     const lead = r.weeks.findIndex((w) => w.phase !== 'foundation')
     return lead === weeks ? { ok: true } : { ok: false, detail: `${lead === -1 ? r.weeks.length : lead} foundation weeks, expected ${weeks}` }
   },
+
+  // --- goal blocks (no race) ------------------------------------------------
+  // The goal the block was built for, after any adjustment.
+  goalMain: (r, p, want) => {
+    const got = r.weeks[0]?.goal_plan?.main
+    return got === want ? { ok: true } : { ok: false, detail: `goal ${got ?? 'none'}, expected ${want}` }
+  },
+
+  // The block is exactly this long, numbered 1..n.
+  blockWeeks: (r, p, n) => {
+    const gap = r.weeks.findIndex((w, i) => w.week_number !== i + 1)
+    if (r.weeks.length !== n) return { ok: false, detail: `${r.weeks.length} weeks, expected ${n}` }
+    return gap === -1 ? { ok: true } : { ok: false, detail: `week ${gap + 1} is numbered ${r.weeks[gap].week_number}` }
+  },
+
+  goalAdjusted: (r, p, id) => {
+    const ids = (r.weeks[0]?.goal_plan?.adjustments || []).map((a) => a.id)
+    return ids.includes(id) && r.explain?.intro
+      ? { ok: true }
+      : { ok: false, detail: `adjustments [${ids.join(', ')}], expected ${id}` }
+  },
+
+  goalMetric: (r, p, kind) => {
+    const metrics = r.weeks[0]?.goal_plan?.metrics || []
+    return metrics[0] === kind ? { ok: true } : { ok: false, detail: `metrics [${metrics.join(', ')}], expected ${kind} first` }
+  },
+
+  // A block without a race has no race day, no taper and no event date.
+  noRaceInPlan: (r) => {
+    const bad = r.weeks.find((w) => w.phase === 'taper' || hasRaceDay(w))
+    return bad || r.goal?.event_date ? { ok: false, detail: `week ${bad?.week_number}: race or taper in a block without one` } : { ok: true }
+  },
+
+  // The speed goal: one 5 km time trial in the first week and one in the last, and no other.
+  timeTrials: (r) => {
+    const trialWeeks = r.weeks.filter((w) => w.days.some((d) => d.type === 'time_trial')).map((w) => w.week_number)
+    const want = [1, r.weeks.length]
+    if (trialWeeks.join() !== want.join()) return { ok: false, detail: `trials in weeks [${trialWeeks.join(', ')}], expected [${want.join(', ')}]` }
+    const each = r.weeks.flatMap((w) => w.days.filter((d) => d.type === 'time_trial'))
+    const bad = each.find((d) => d.trial_km !== 5 || d.distance_km < 5)
+    return bad ? { ok: false, detail: `a trial of ${bad.trial_km} km (session ${bad.distance_km} km)` } : { ok: true }
+  },
+
+  noStrides: (r) => {
+    const w = r.weeks.find((x) => x.days.some((d) => d.variant === 'strides'))
+    return w ? { ok: false, detail: `strides in week ${w.week_number}` } : { ok: true }
+  },
+
+  // The weight goal never puts a weight or a calorie in front of the runner.
+  noBodyTargets: (r) => {
+    const found = []
+    const walk = (value, path) => {
+      if (typeof value === 'string') {
+        if (BODY_TARGET.test(value)) found.push(`${path}: ${value.slice(0, 60)}`)
+      } else if (Array.isArray(value)) value.forEach((v, i) => walk(v, `${path}[${i}]`))
+      else if (value && typeof value === 'object') for (const [k, v] of Object.entries(value)) walk(v, `${path}.${k}`)
+    }
+    walk({ intro: r.explain, weeks: r.weeks.map(({ planning, ...w }) => w) }, 'plan')
+    return found.length ? { ok: false, detail: found[0] } : { ok: true }
+  },
 }
+
+/** A weight in kg, a calorie figure, or the words for losing weight or dieting. */
+const BODY_TARGET = /\d\s*(kg|kilogram|kcal|kalorij)|kalorij|kcal|hujš|shujš|izgub\w* (teže|kil)|tehtnic|\bdiet/i
 
 /**
  * Walk-run rules (decision 6): in a minutes plan, running minutes grow by at

@@ -20,6 +20,7 @@ const TYPE_STYLES = {
   rest: { rail: 'bg-zinc-700', text: 'text-zinc-500' },
   walk_run: { rail: 'bg-amber-400/70', text: 'text-amber-300' },
   walk: { rail: 'bg-teal-400/70', text: 'text-teal-300' },
+  time_trial: { rail: 'bg-rose-400/80', text: 'text-rose-300' },
 }
 
 /** "12 km" -> ["12", "km"], "5:25-5:40/km" -> ["5:25-5:40", "/km"]. Text without a unit stays whole. */
@@ -117,6 +118,7 @@ export default function WorkoutCard({
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const isRest = day.type === 'rest'
+  const isTrial = day.type === 'time_trial'
   const style = TYPE_STYLES[day.type] || TYPE_STYLES.easy
 
   // "Mon" + "14 Jul" from the ISO date; falls back to the plan's weekday name.
@@ -202,7 +204,7 @@ export default function WorkoutCard({
                 className="flex min-h-[36px] shrink-0 items-center gap-1.5 rounded-full bg-surface-raised px-3 text-xs font-medium text-zinc-300 ring-1 ring-inset ring-white/10 transition hover:text-white active:scale-95"
               >
                 <PencilSimple size={14} />
-                {t.workout.adjust}
+                {isTrial ? t.goals.trial.logIt : t.workout.adjust}
               </button>
             )
           )}
@@ -240,7 +242,7 @@ export default function WorkoutCard({
         {/* One tap logs the session exactly as prescribed — no form, no typing.
             This is the path almost everyone wants; "Prilagodi" opens the form
             pre-filled for the days that did not go to plan. */}
-        {canLog && !completed && !locked && onQuickLog && (
+        {canLog && !completed && !locked && onQuickLog && !isTrial && (
           <button
             onClick={() => onQuickLog(day, date)}
             disabled={quickLogging}
@@ -258,6 +260,17 @@ export default function WorkoutCard({
                 {t.workout.doneAsPlanned}
               </>
             )}
+          </button>
+        )}
+
+        {/* A trial's result is typed in, never assumed. */}
+        {canLog && !completed && !locked && isTrial && (
+          <button
+            onClick={openPrefilledForm}
+            className="mt-4 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-white transition hover:bg-primary-dark active:scale-[0.99]"
+          >
+            <PencilSimple size={18} weight="bold" />
+            {t.goals.trial.logIt}
           </button>
         )}
 

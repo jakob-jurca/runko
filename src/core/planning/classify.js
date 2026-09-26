@@ -10,6 +10,7 @@
  */
 import { SCENARIO_RULES, GENTLE_START_AGE } from './rules.js'
 import { weeksNeeded } from './progression.js'
+import { goalScenario, goalRunDayCap } from './goals.js'
 
 /** Weekly km at which a runner with no goal counts as "already fit". */
 export const FIT_WEEKLY_KM = 25
@@ -29,8 +30,11 @@ export const SHORT_RACE_MAX_KM = 10
 export function effectiveRunDays(inputs, scenario = null, limits = null) {
   const offered = inputs.constraints.maxRunDays ?? inputs.daysPerWeek ?? null
   const available = inputs.constraints.availableDays?.length ?? inputs.availableDays?.length ?? 7
-  const cap = Math.min(scenario ? SCENARIO_RULES[scenario].maxRunDays : 7, limits?.maxRunDays ?? 7)
-  const fallback = scenario === 'complete_beginner' ? 3 : 4
+  // A goal may cap the run days further (fewest sessions that still work) or
+  // ask for at least three when frequency is the point.
+  const goal = goalRunDayCap(inputs.goalPlan)
+  const cap = Math.min(scenario ? SCENARIO_RULES[scenario].maxRunDays : 7, limits?.maxRunDays ?? 7, goal.cap)
+  const fallback = goal.fallback ?? (scenario === 'complete_beginner' ? 3 : 4)
   return Math.max(1, Math.min(offered ?? fallback, available, cap))
 }
 
@@ -92,6 +96,13 @@ export function classifyRunner(inputs, assessment, limits) {
   // 3. No distance and no date: health, consistency, or holding fitness.
   if (!goal.distanceKm && !hasEvent) {
     const fit = (assessment.weekly_km ?? 0) >= FIT_WEEKLY_KM && assessment.history === 'experienced'
+    // The runner named what they want to improve: the goal picks the scenario
+    // (the returning and beginner checks above still come first).
+    if (inputs.goalPlan) {
+      const scenario = goalScenario(inputs.goalPlan, { fit })
+      reasons.push(`Goal "${inputs.goalPlan.main}" instead of a race: built on the ${scenario} scenario.`)
+      return { scenario, reasons, pending }
+    }
     if (fit && signals.maintain) {
       reasons.push(`Already fit (${assessment.weekly_km} km/week) and wants to hold that fitness.`)
       return { scenario: 'maintenance', reasons, pending }

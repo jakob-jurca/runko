@@ -167,6 +167,7 @@ export const t = {
       rest: 'počitek',
       walk_run: 'hoja-tek',
       walk: 'hitra hoja',
+      time_trial: 'preizkus 5 km',
     },
   },
 
@@ -637,6 +638,184 @@ export const t = {
       more_days: (goal, days) => `${goal}, če lahko tečeš vsaj ${days}-krat na teden`,
       no_event: 'najprej začetni program hoje-teka, tekma pa ob naslednji priložnosti',
     },
+  },
+
+  // -------------------------------------------------------------------------
+  // Goal blocks — a plan for a runner with a goal instead of a race
+  // (core/planning/goals.js). No text here ever names a weight or a calorie
+  // figure: the "teza" goal is measured in sessions done, nothing else.
+  // -------------------------------------------------------------------------
+  goals: {
+    aimTitle: 'Na kaj se pripravljaš?',
+    aimSubtitle: 'Izberi, kar ti je bližje. Kasneje lahko izbereš drugače.',
+    aimRace: 'Tekma',
+    aimRaceDesc: 'Imam razdaljo in običajno datum.',
+    aimGoal: 'Samo tečem, imam svoj cilj',
+    aimGoalDesc: 'Brez tekme: izboljšati želim nekaj določenega.',
+
+    mainTitle: 'Kaj želiš izboljšati?',
+    mainSubtitle: 'Izberi en glavni cilj. Načrt je zgrajen okoli njega.',
+    secondaryTitle: 'Še kaj drugega? (neobvezno)',
+    secondaryHint: 'Glavni cilj ima vedno prednost.',
+    noSecondary: 'Brez drugega cilja',
+
+    blockTitle: 'Kako dolg naj bo blok?',
+    blockSubtitle: 'Po koncu bloka se odločiš, kako naprej.',
+    blockWeeks: (n) => `${n} tednov`,
+    blockHints: { 4: 'Kratek začetek', 8: 'Za večino', 12: 'Za trajnejšo spremembo' },
+
+    items: {
+      kondicija: {
+        label: 'Kondicija',
+        desc: 'Teči dlje brez ustavljanja',
+        intro:
+          'Dolgi tek je ključni trening tedna in počasi raste. Napredek merimo z najdaljšim neprekinjenim tekom.',
+        priorities: [
+          'dolgi tek kot ključni trening tedna',
+          'postopen porast neprekinjenega teka',
+          'večinoma lahkoten tempo',
+          'lažji teden vsak 3. ali 4. teden',
+        ],
+      },
+      hitrost: {
+        label: 'Hitrost',
+        desc: 'Hitrejših 5 km',
+        intro:
+          'Prvi in zadnji teden opraviš preizkus na 5 km, vmes pa te hitrejši tek gradi v okviru tvoje ravni.',
+        priorities: [
+          'dva preizkusa na 5 km: prvi in zadnji teden',
+          'ena do dve kakovostni vadbi na teden, glede na tvojo raven',
+          'pragovni tempo, intervali in kratke ponovitve',
+          'večina teka ostane lahkotna',
+        ],
+      },
+      zdravje: {
+        label: 'Zdravje',
+        desc: 'Zdravje in dobro počutje',
+        intro: 'Večina teka je lahkotna (cone 1–2), rednost je pomembnejša od hitrosti.',
+        priorities: [
+          'rednost pred hitrostjo',
+          'lahkoten tek v conah 1–2',
+          'počasen porast obsega',
+          'počitek je del načrta',
+        ],
+      },
+      navada: {
+        label: 'Navada',
+        desc: 'Redno teči, brez pritiska',
+        intro:
+          'Načrt ima najmanj treningov, ki te še peljejo naprej. Izpuščen trening ni nikoli kazen: teden se ne spremeni.',
+        priorities: [
+          'najmanj treningov, ki še napredujejo',
+          'izpuščen trening ni nikoli kazen',
+          'lahkoten tek',
+          'počasen, prizanesljiv porast',
+        ],
+      },
+      glava: {
+        label: 'Glava',
+        desc: 'Manj stresa, boljše počutje',
+        intro: 'Tek je lahkoten, v pogovornem tempu (cone 1–2): pomembno je, da ti po teku odleže.',
+        priorities: [
+          'lahkoten tek, ki sprosti',
+          'pogovorni tempo (cone 1–2)',
+          'rednost brez pritiska',
+          'pospeški le po želji',
+        ],
+      },
+      teza: {
+        label: 'Teža',
+        desc: 'Teža in kondicija',
+        intro:
+          'Načrt gradi lahkoten obseg in pogostost teka, brez intenzivnih treningov. Napredek merimo z opravljenimi treningi.',
+        priorities: [
+          'lahkoten obseg in pogostost',
+          'brez naporov, ki bi te odvrnili',
+          'večinoma lahkoten tek',
+          'postopen porast obsega',
+        ],
+      },
+      baza: {
+        label: 'Osnova',
+        desc: 'Osnova za tekmo kasneje',
+        intro:
+          'Z rednim, postopno rastočim lahkotnim tekom gradiš aerobno osnovo, da boš ob koncu bloka pripravljen/a začeti načrt za tekmo.',
+        priorities: [
+          'aerobna osnova',
+          'postopna rast obsega in dolgega teka',
+          'večinoma lahkoten tek',
+          'na koncu blok pripravljen za priprave na tekmo',
+        ],
+      },
+    },
+
+    opening: (label, weeks) => `${label} — ${weeks}-tedenski blok brez tekme.`,
+    secondary: (label) => `Drugi cilj: ${label} (glavni cilj ima prednost).`,
+    adjustReasons: {
+      teza_age: 'ta cilj ni na voljo mlajšim od 18 let',
+      trial_conflict: 'preizkus na 5 km ne sodi k lahkotnemu glavnemu cilju',
+      trial_not_running: 'najprej moraš zmoči teči',
+      trial_no_intensity: 'zaradi previdnostnih pravil v načrtu zaenkrat ni trdih tekov',
+      trial_not_ready: 'preizkus zahteva, da že tečeš vsaj 5 km naenkrat in približno 17–20 km na teden',
+      trial_placement: 'tvoj teden preizkusa ne prenese znotraj varnih omejitev',
+    },
+    adjustText: (from, to, reason) =>
+      to
+        ? `Glavni cilj «${from}» je zamenjan s ciljem «${to}»: ${reason}.`
+        : `Cilj «${from}» ni del načrta: ${reason}.`,
+
+    // Dashboard
+    progressTitle: 'Napredek v bloku',
+    blockWeek: (n, total) => `Teden ${n} od ${total}`,
+    trial: {
+      title: 'Preizkus na 5 km',
+      first: 'Prvi preizkus',
+      last: 'Zadnji preizkus',
+      notYet: 'še ni vpisan',
+      logIt: 'Vpiši čas',
+      planned: (week) => `V ${week}. tednu`,
+      change: (faster, diff) => (faster ? `${diff} hitreje` : `${diff} počasneje`),
+      same: 'Enako kot na začetku',
+    },
+    longest: {
+      title: 'Najdaljši tek brez ustavljanja',
+      minutes: (m) => `${m} min`,
+      start: (m) => `na začetku ${m} min`,
+      target: (m) => `cilj bloka okoli ${m} min`,
+      none: 'Prvi tek te še čaka.',
+    },
+    completion: {
+      title: 'Opravljeni treningi',
+      of: (done, planned) => `${done} od ${planned}`,
+      none: 'Prvi trening te še čaka.',
+    },
+
+    // End of the block
+    endTitle: 'Zadnji teden bloka',
+    endSummaryTitle: 'Kako je šlo',
+    summary: {
+      trialBoth: (a, b, change) => `5 km: ${a} → ${b} (${change}).`,
+      trialFirstOnly: (a) => `Prvi preizkus na 5 km: ${a}. Zadnji še čaka.`,
+      trialNone: 'Preizkusa na 5 km še nista vpisana.',
+      longest: (start, best) => `Najdaljši tek brez ustavljanja: ${start} → ${best} min.`,
+      longestNow: (best) => `Najdaljši tek brez ustavljanja: ${best} min.`,
+      completion: (done, planned, pct) => `Opravil/a si ${done} od ${planned} načrtovanih treningov (${pct} %).`,
+      completionNone: 'V tem bloku še nisi vpisal/a treninga.',
+      ready: (km) => `Osnova je dovolj za začetek priprav na ${String(km).replace('.', ',')} km.`,
+      notReady: 'Osnova še raste: nov blok osnove je pameten korak.',
+    },
+    next: {
+      title: 'Kako naprej?',
+      repeat: 'Ponovi cilj s težjim blokom',
+      repeatHint: 'Isti cilj, malo več, začneš tam, kjer si zdaj.',
+      switch: 'Zamenjaj cilj',
+      switchHint: 'Izberi drugo, kar želiš izboljšati.',
+      race: 'Začni načrt za tekmo',
+      raceHint: 'Izbereš razdaljo in datum.',
+    },
+    logMinutes: 'min',
+    logSeconds: 's',
+    logTrialHint: 'Vpiši čas na sekundo natančno.',
   },
 
   // -------------------------------------------------------------------------

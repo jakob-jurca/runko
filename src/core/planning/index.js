@@ -18,7 +18,8 @@
  */
 import { collectInputs, inputsSummary, withGoal } from './collect.js'
 import { assessFitness } from './assess.js'
-import { classifyRunner } from './classify.js'
+import { classifyRunner, effectiveRunDays } from './classify.js'
+import { adjustGoalPlan, goalMetric, readyForKm } from './goals.js'
 import { checkFeasibility } from './feasibility.js'
 import { clarifyQuestions } from './clarify.js'
 import { buildPlan } from './build.js'
@@ -42,6 +43,55 @@ const DEFAULT_ANSWERS = {
   returning: () => 'break',
   longest_run: (inputs) => String(Math.max(3, Math.round((inputs.statedWeeklyKm ?? 10) * 0.35))),
   intent: () => 'maintain',
+}
+
+/**
+ * A goal the runner's safety rules or level do not allow as asked becomes the
+ * nearest one that they do (goals.js); the scenario is then classified again.
+ */
+function settleGoal(inputs, assessment, limits, classification, restrictions) {
+  if (!inputs.goalPlan) return { inputs, classification }
+  const { goalPlan, changed } = adjustGoalPlan({
+    goalPlan: inputs.goalPlan, assessment, limits: limits.values, restrictions, scenario: classification.scenario,
+    runDays: effectiveRunDays(inputs, classification.scenario, limits.values),
+  })
+  if (!changed) return { inputs, classification }
+  const next = { ...inputs, goalPlan }
+  return { inputs: next, classification: classifyRunner(next, assessment, limits.values) }
+}
+
+/** What the dashboard needs to measure and report a goal block; stored on every week. */
+function goalRecord(inputs, assessment, scenario, plan) {
+  const gp = inputs.goalPlan
+  if (!gp) return null
+  const meta = plan.goal_meta ?? {}
+  const runs = plan.weeks.flatMap((w) => w.days.filter((d) => d.type !== 'rest' && d.type !== 'time_trial'))
+  const metrics = [goalMetric(gp.main)]
+  const second = gp.secondary ? goalMetric(gp.secondary) : null
+  if (second && !metrics.includes(second) && (second !== 'time_trial' || meta.trial_weeks?.length)) metrics.push(second)
+  const usesBase = gp.main === 'baza' || gp.secondary === 'baza'
+  return {
+    main: gp.main,
+    secondary: gp.secondary,
+    block_weeks: plan.weeks.length,
+    level: gp.level,
+    scenario,
+    metrics,
+    trial_weeks: meta.trial_weeks ?? [],
+    target_continuous_min: meta.target_continuous_min ?? null,
+    baseline: {
+      continuous_min: assessment.continuous_min ?? 0,
+      weekly_km: assessment.weekly_km ?? 0,
+      longest_km: assessment.longest_km ?? 0,
+    },
+    ready_for_km: usesBase && plan.unit === 'distance'
+      ? readyForKm(
+          Math.max(0, ...plan.weeks.filter((w) => !w.is_recovery).map((w) => w.target_volume_km || 0)),
+          Math.max(0, ...runs.map((d) => d.distance_km || 0)),
+        )
+      : null,
+    adjustments: gp.adjustments.map(({ id, from, to }) => ({ id, from, to })),
+  }
 }
 
 /**
@@ -79,6 +129,7 @@ export function runPlanningPipeline({ profile = {}, runs = [], memories = [], an
   // feasibility and the builder all read the same values.
   let limits = computeLimits(inputs, assessment)
   let classification = classifyRunner(inputs, assessment, limits.values)
+  ;({ inputs, classification } = settleGoal(inputs, assessment, limits, classification, gate.restrictions))
 
   // 5 (before building anything): missing or contradictory essentials.
   const { questions, assumptions, unasked } = clarifyQuestions(inputs, assessment, classification)
@@ -99,6 +150,7 @@ export function runPlanningPipeline({ profile = {}, runs = [], memories = [], an
     assessment = assessFitness(inputs)
     limits = computeLimits(inputs, assessment)
     classification = classifyRunner(inputs, assessment, limits.values)
+    ;({ inputs, classification } = settleGoal(inputs, assessment, limits, classification, gate.restrictions))
   }
 
   // 4
@@ -137,9 +189,19 @@ export function runPlanningPipeline({ profile = {}, runs = [], memories = [], an
 
   // 6
   const plan = buildPlan(scenario, inputs, assessment, feasibility, gate.restrictions, buildLimits.values)
+  // A week that cannot hold the time trials inside its limits: ask again
+  // without them (the goal then becomes kondicija, and says so).
+  if (plan.trial_failed) {
+    return runPlanningPipeline({
+      profile: { ...profile, goal_plan: { ...profile.goal_plan, retry: 'no_trials' } }, runs, memories, answers, today,
+    })
+  }
+  const goal = goalRecord(inputs, assessment, scenario, plan)
 
   // 7
-  const explain = explainPlan({ classification: buildClassification, feasibility, plan, notices: gate.notices })
+  const explain = explainPlan({
+    classification: buildClassification, feasibility, plan, notices: gate.notices, goalPlan: inputs.goalPlan,
+  })
 
   const planning = {
     version: PIPELINE_VERSION,
@@ -152,6 +214,7 @@ export function runPlanningPipeline({ profile = {}, runs = [], memories = [], an
     gate: { restrictions: gate.restrictions, notices: gate.notices, rules: gate.rules },
     limits: { values: buildLimits.values, rules: Object.fromEntries(Object.entries(buildLimits.sources).map(([k, v]) => [k, v.rule])) },
     explain,
+    ...(goal ? { goal_plan: goal } : {}),
   }
 
   const adopted = feasibility.adopted_goal
@@ -159,6 +222,7 @@ export function runPlanningPipeline({ profile = {}, runs = [], memories = [], an
     ...w,
     scenario,
     feasibility_verdict: feasibility.verdict,
+    ...(goal ? { goal_plan: goal } : {}),
     planning,
   }))
 
@@ -192,6 +256,7 @@ export function runPlanningPipeline({ profile = {}, runs = [], memories = [], an
       target_distance_km: adopted.distance_km,
       event_date: adopted.event_date,
       race_day: plan.race_day,
+      goal_plan: goal,
       goal_assessment: adopted.distance_km === feasibility.original_goal.distance_km ? feasibility.time_goal : null,
       start_volume_km: assessment.weekly_km,
       peak_volume_km: Math.max(0, ...weeks.map((w) => w.target_volume_km || 0)),

@@ -820,6 +820,165 @@ export const PERSONAS = [
     // p08 r12: growth spurt, at most 5% a week.
     expect: { maxWeeklyIncreasePct: 5, maxWeeklyKm: 45 },
   },
+
+  // ------------------------------------------------- goal blocks (no race)
+  // A runner with a goal instead of an event: goal_plan on the profile, as
+  // onboarding sends it. Every generic property above still applies.
+  {
+    id: 'goal-kondicija-beginner',
+    who: 'Never ran, wants to run longer without stopping, 12-week block, 3 days a week',
+    profile: {
+      age: 33, fitness_level: 'beginner', experience_months: 0, weekly_volume_km: 0, days_per_week: 3,
+      goal_plan: { main: 'kondicija', blockWeeks: 12 },
+    },
+    expect: {
+      scenario: 'complete_beginner', verdict: 'feasible', goalMain: 'kondicija', blockWeeks: 12,
+      walkRun: true, timeBased: true, noHardSessions: true, noBackToBack: true, maxWeeklyIncreasePct: 10,
+      goalMetric: 'longest_run',
+    },
+  },
+  {
+    id: 'goal-kondicija-runner',
+    who: 'Runs 30 km a week, longest 12 km, wants to run longer without stopping, 8 weeks',
+    profile: {
+      age: 34, fitness_level: 'intermediate', experience_months: 36, weekly_volume_km: 30, longest_run_km: 12,
+      days_per_week: 4, goal_plan: { main: 'kondicija', blockWeeks: 8 },
+    },
+    expect: {
+      scenario: 'recreational', verdict: 'feasible', goalMain: 'kondicija', blockWeeks: 8,
+      noHardSessions: true, reachesLongRunKm: 14, noRaceInPlan: true, goalMetric: 'longest_run',
+    },
+  },
+  {
+    id: 'goal-hitrost-5k',
+    who: 'Runs 30 km a week, longest 12 km, wants a faster 5 km, 8 weeks',
+    profile: {
+      age: 34, fitness_level: 'intermediate', experience_months: 36, weekly_volume_km: 30, longest_run_km: 12,
+      days_per_week: 4, goal_plan: { main: 'hitrost', blockWeeks: 8 },
+    },
+    expect: {
+      scenario: 'short_race', verdict: 'feasible', goalMain: 'hitrost', blockWeeks: 8,
+      timeTrials: true, noRaceInPlan: true, goalMetric: 'time_trial', hasRepetitionWork: true,
+    },
+  },
+  {
+    id: 'goal-hitrost-12w',
+    who: 'Same kind of runner, 12-week speed block, five days a week',
+    profile: {
+      age: 29, fitness_level: 'intermediate', experience_months: 48, weekly_volume_km: 35, longest_run_km: 14,
+      days_per_week: 5, goal_plan: { main: 'hitrost', blockWeeks: 12 },
+    },
+    expect: { scenario: 'short_race', goalMain: 'hitrost', blockWeeks: 12, timeTrials: true, noRaceInPlan: true },
+  },
+  {
+    id: 'goal-zdravje',
+    who: '45-year-old, 15 km a week, running for health, 8 weeks',
+    profile: {
+      age: 45, fitness_level: 'intermediate', experience_months: 30, weekly_volume_km: 15, longest_run_km: 7,
+      days_per_week: 3, pain_at_rest: false, injury_last_12m: false, goal_plan: { main: 'zdravje', blockWeeks: 8 },
+    },
+    expect: {
+      scenario: 'recreational', goalMain: 'zdravje', blockWeeks: 8, noHardSessions: true, mostlyEasy: true,
+      noRaceInPlan: true, goalMetric: 'completion',
+    },
+  },
+  {
+    id: 'goal-zdravje-fit',
+    who: 'Already fit (40 km a week), running for health: the maintenance scenario, all easy',
+    profile: {
+      age: 41, fitness_level: 'advanced', experience_months: 96, weekly_volume_km: 40, longest_run_km: 16,
+      days_per_week: 4, pain_at_rest: false, injury_last_12m: false, goal_plan: { main: 'zdravje', blockWeeks: 4 },
+    },
+    expect: { scenario: 'maintenance', goalMain: 'zdravje', blockWeeks: 4, noHardSessions: true, mostlyEasy: true },
+  },
+  {
+    id: 'goal-navada',
+    who: 'Offers five days but only wants a habit: the fewest sessions that still progress',
+    profile: {
+      age: 38, fitness_level: 'beginner', experience_months: 8, weekly_volume_km: 10, longest_run_km: 5,
+      days_per_week: 5, goal_plan: { main: 'navada', blockWeeks: 8 },
+    },
+    expect: {
+      scenario: 'recreational', goalMain: 'navada', blockWeeks: 8, maxRunDays: 3, noHardSessions: true,
+      noStrides: true, noRaceInPlan: true,
+    },
+  },
+  {
+    id: 'goal-glava',
+    who: 'Running for less stress, 4-week block',
+    profile: {
+      age: 31, fitness_level: 'intermediate', experience_months: 24, weekly_volume_km: 20, longest_run_km: 8,
+      days_per_week: 3, goal_plan: { main: 'glava', blockWeeks: 4 },
+    },
+    expect: { scenario: 'recreational', goalMain: 'glava', blockWeeks: 4, noHardSessions: true, mostlyEasy: true },
+  },
+  {
+    id: 'goal-teza',
+    who: 'Adult running for weight and fitness, 12 weeks: easy volume, no body targets anywhere',
+    profile: {
+      age: 36, fitness_level: 'beginner', experience_months: 9, weekly_volume_km: 12, longest_run_km: 6,
+      days_per_week: 4, goal_plan: { main: 'teza', blockWeeks: 12 },
+    },
+    expect: {
+      scenario: 'recreational', goalMain: 'teza', blockWeeks: 12, noHardSessions: true, mostlyEasy: true,
+      noStrides: true, noBodyTargets: true, noRaceInPlan: true,
+    },
+  },
+  {
+    id: 'goal-teza-16',
+    who: '16-year-old asks for the weight goal: it is not offered, the block is built for health',
+    profile: {
+      age: 16, fitness_level: 'intermediate', experience_months: 18, weekly_volume_km: 20, longest_run_km: 8,
+      days_per_week: 4, pain_at_rest: false, injury_last_12m: false, goal_plan: { main: 'teza', blockWeeks: 8 },
+    },
+    expect: {
+      goalMain: 'zdravje', goalAdjusted: 'teza_age', blockWeeks: 8, noHardSessions: true, noBodyTargets: true,
+      maxWeeklyKm: 45,
+    },
+  },
+  {
+    id: 'goal-baza',
+    who: 'Runs 20 km a week, wants a base for a race later, 12 weeks',
+    profile: {
+      age: 32, fitness_level: 'intermediate', experience_months: 30, weekly_volume_km: 20, longest_run_km: 9,
+      days_per_week: 4, goal_plan: { main: 'baza', blockWeeks: 12 },
+    },
+    expect: {
+      scenario: 'recreational', goalMain: 'baza', blockWeeks: 12, noHardSessions: true, noRaceInPlan: true,
+      goalMetric: 'completion',
+    },
+  },
+  {
+    id: 'goal-hitrost-not-running',
+    who: 'Asks for speed but has never run: built as kondicija, and says why',
+    profile: {
+      age: 30, fitness_level: 'beginner', experience_months: 0, weekly_volume_km: 0, days_per_week: 3,
+      goal_plan: { main: 'hitrost', blockWeeks: 8 },
+    },
+    expect: {
+      scenario: 'complete_beginner', goalMain: 'kondicija', goalAdjusted: 'trial_not_running', blockWeeks: 8,
+      noHardSessions: true, timeBased: true,
+    },
+  },
+  {
+    id: 'goal-secondary-hitrost',
+    who: 'Kondicija first, hitrost second: the trials are in, the long run still leads',
+    profile: {
+      age: 34, fitness_level: 'intermediate', experience_months: 36, weekly_volume_km: 30, longest_run_km: 12,
+      days_per_week: 4, goal_plan: { main: 'kondicija', secondary: 'hitrost', blockWeeks: 8 },
+    },
+    expect: { scenario: 'recreational', goalMain: 'kondicija', blockWeeks: 8, timeTrials: true, noRaceInPlan: true },
+  },
+  {
+    id: 'goal-hitrost-returning',
+    who: 'Back after a long break and asks for speed: no hard effort in a return, so kondicija',
+    profile: {
+      age: 40, fitness_level: 'intermediate', experience_months: 72, weekly_volume_km: 12, longest_run_km: 6,
+      days_per_week: 3, pain_at_rest: false, injury_last_12m: false, break_days: 120,
+      goal_plan: { main: 'hitrost', blockWeeks: 8 },
+    },
+    expect: { scenario: 'returning', goalMain: 'kondicija', blockWeeks: 8, noHardSessions: true },
+  },
 ]
 
 export { ALL_DAYS }

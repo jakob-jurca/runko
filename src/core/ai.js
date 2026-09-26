@@ -16,6 +16,7 @@
 import { IS_DEV, SUPABASE_URL } from './env'
 import { supabase } from './supabase'
 import { t } from './strings'
+import { withoutBodyTargets, isBodyGoal } from './planning/goals.js'
 import {
   COACH_PERSONA,
   buildCoachSystemPrompt,
@@ -266,6 +267,8 @@ export function buildCoachContext(profile, plan, workouts = [], { totalWeeks } =
   if (profile?.age) lines.push(`- Age: ${profile.age}`)
   if (profile?.weight) lines.push(`- Weight: ${profile.weight} kg`)
   if (profile?.coach_notes) lines.push(`- Notes from the runner: "${profile.coach_notes}"`)
+  const goalPlan = plan?.plan_json?.goal_plan
+  if (goalPlan) lines.push(...goalContextLines(goalPlan))
   const planning = plan?.plan_json?.planning
   if (planning?.explain) {
     lines.push(
@@ -475,10 +478,42 @@ function compactWeek(week) {
   }
 }
 
+/**
+ * What each goal means for the words the model writes. The structure of a
+ * goal block is calculated; these lines only keep the prose true to it.
+ */
+const GOAL_RULES = {
+  kondicija: 'The long run is the key session; talk about running longer without stopping.',
+  hitrost: 'The block starts and ends with a 5 km time trial; talk about getting faster over 5 km.',
+  zdravje: 'Health and wellbeing: easy running in zones 1-2, consistency over speed.',
+  navada: 'Habit: the fewest sessions that still progress. A missed session is never a failure and never changes the plan; never guilt, never "catch up".',
+  glava: 'Mental wellbeing and less stress: easy, conversational running; how the runner feels after the run matters most.',
+  teza: 'Fitness and volume of easy running. NEVER mention weight, kilograms, calories, dieting, fat burning, body size or a target of any of these, not even positively; talk about energy, stamina and consistency.',
+  baza: 'Building an aerobic base for a race later: steady, easy volume, ending ready to start a race plan.',
+}
+
+/** Goal lines for the runner-context block of any prompt. */
+function goalContextLines(goalPlan) {
+  const lines = [`- No race: the goal is "${goalPlan.main}" (${GOAL_RULES[goalPlan.main]})`]
+  if (goalPlan.secondary) lines.push(`- Secondary goal (the main goal wins conflicts): "${goalPlan.secondary}".`)
+  if (isBodyGoal(goalPlan)) lines.push('- Never mention weight, calories or dieting.')
+  return lines
+}
+
+/** Goal rules for a week the AI may rewrite. */
+function goalRuleLines(goalPlan) {
+  return [
+    `- The goal is "${goalPlan.main}": ${GOAL_RULES[goalPlan.main]}`,
+    ...(isBodyGoal(goalPlan) ? ['- Never mention weight, calories or dieting.'] : []),
+    ...(goalPlan.main === 'navada' ? ['- Never make the week harder or easier because of missed sessions.'] : []),
+  ]
+}
+
 /** The scenario's rules for this week, in words the model will follow. */
 function weekRulesText(week) {
   const rules = ['RULES YOU MUST KEEP (the app enforces them and discards anything else):']
   if (week?.scenario) rules.push(`- This is a "${week.scenario}" plan.`)
+  if (week?.goal_plan) rules.push(...goalRuleLines(week.goal_plan))
   if (week?.allow_hard === false) rules.push('- NO tempo, interval or repetition sessions this week. Easy running only.')
   rules.push('- Runs only on the days that already have a run; rest days stay rest days.')
   rules.push('- Never more total distance than the original week, never a run longer than its longest run.')
@@ -626,6 +661,10 @@ function skeletonForPrompt(skeleton) {
  */
 export function mergeDescriptions(skeleton, ai = {}) {
   const warnings = []
+  // A body-composition goal never reads a weight or a calorie, whatever the model wrote.
+  const clean = isBodyGoal(skeleton.goal_plan)
+    ? (text, max) => withoutBodyTargets(cleanText(text, max))
+    : cleanText
   const aiWeeks = Array.isArray(ai?.weeks) ? ai.weeks : []
   const aiWorkouts = Array.isArray(ai?.workouts) ? ai.workouts : []
 
@@ -658,22 +697,22 @@ export function mergeDescriptions(skeleton, ai = {}) {
 
       return {
         ...day, // calculated values always win
-        title: cleanText(shape?.title, 40) || day.title,
-        purpose: cleanText(shape?.purpose, 90) || defaultPurpose(day),
+        title: clean(shape?.title, 40) || day.title,
+        purpose: clean(shape?.purpose, 90) || defaultPurpose(day),
         // "Kako izvesti" and "Zakaj ta trening" on the card.
-        how: cleanText(shape?.how, 300) || defaultHow(day),
-        why: withRecoveryNote(cleanText(shape?.why, 300) || defaultWhy(day, week), week),
+        how: clean(shape?.how, 300) || defaultHow(day),
+        why: withRecoveryNote(clean(shape?.why, 300) || defaultWhy(day, week), week),
       }
     })
 
     return {
       ...week,
-      focus: cleanText(aiWeek?.note, 200) || defaultWeekFocus(week),
+      focus: clean(aiWeek?.note, 200) || defaultWeekFocus(week),
       days,
     }
   })
 
-  return { weeks, warnings, intro: cleanText(ai?.intro, 600) || defaultIntro(skeleton) }
+  return { weeks, warnings, intro: clean(ai?.intro, 600) || defaultIntro(skeleton) }
 }
 
 /** Recovery weeks get one standard extra line, rather than their own prose. */
@@ -704,6 +743,7 @@ const TYPE_SL = {
   rest: 'počitek',
   walk_run: 'hoja-tek',
   walk: 'hitra hoja',
+  time_trial: 'preizkus na 5 km',
 }
 
 function defaultHow(day) {
@@ -713,6 +753,9 @@ function defaultHow(day) {
   }
   if (day.time_based && day.segments?.length) {
     return `${day.segments.map((g) => `${g.label.toLowerCase()}: ${g.text}`).join('; ')}. Tempo naj bo tak, da lahko govoriš v celih stavkih.`
+  }
+  if (day.type === 'time_trial') {
+    return 'Ogrej se z lahkotnim tekom, nato preteci 5 km enakomerno in čim hitreje: prvi kilometer ne prehitro. Čas vpiši po teku.'
   }
   if (day.variant === 'strides') {
     return 'Lahkoten tek, na koncu 4-6 kratkih pospeškov po 20 sekund, vmes hoja ali počasen tek.'
@@ -737,6 +780,7 @@ function defaultWhy(day, week) {
     interval: 'Intervali dvigujejo VO2 max in tekaško ekonomičnost.',
     repetition: 'Kratke ponovitve izboljšajo hitrost in tehniko teka.',
     race: 'Dan tekme — vse od tu naprej je izvedba.',
+    time_trial: 'Preizkus pokaže, kje si danes; ponovljen ob koncu bloka pokaže, koliko si napredoval/a.',
     walk: 'Hitra hoja v pogovornem tempu gradi aerobno osnovo in pripravi kite ter sklepe na obremenitev.',
     walk_run: 'Izmenjava hoje in teka nauči telo teka, ne da bi ga preobremenila — kite in kosti se prilagajajo počasneje kot pljuča.',
   }[day.type] || 'Gradi splošno tekaško pripravljenost.'
@@ -752,6 +796,7 @@ function defaultPurpose(day) {
     interval: 'izboljša VO2 max',
     repetition: 'izboljša hitrost',
     race: 'ciljna tekma',
+    time_trial: 'izmeri, kje si',
     cross: 'ohranja kondicijo brez obremenitve nog',
     walk: 'gradi aerobno osnovo brez udarne obremenitve',
     walk_run: 'postopno navajanje na tek',
@@ -828,6 +873,12 @@ function planTypeBlock(skeleton) {
   const e = skeleton.explain
   if (!e) return ''
   const lines = ['PLAN TYPE (decided by the app — explain it, do not second-guess it)']
+  if (skeleton.goal_plan) {
+    lines.push(`- This runner has NO race. ${GOAL_RULES[skeleton.goal_plan.main]}`)
+    if (skeleton.goal_plan.secondary) lines.push(`- Secondary goal (the main goal wins conflicts): ${skeleton.goal_plan.secondary}.`)
+    for (const a of e.goal_plan?.adjustments || []) lines.push(`- Say this plainly, kindly: ${a}`)
+    if (isBodyGoal(skeleton.goal_plan)) lines.push('- NEVER mention weight, kilograms, calories, dieting or body size anywhere in your output.')
+  }
   lines.push(`- Scenario: ${e.scenario} ("${e.scenario_label}")`)
   lines.push(`- Verdict on their goal: ${e.verdict} ("${e.verdict_label}")`)
   if (e.verdict === 'unsafe' && e.original_goal_text) {

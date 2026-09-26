@@ -7,6 +7,7 @@
  * plan was based on is always visible in one place.
  */
 import { DAYS, deriveConstraints, mergeProfileConstraints } from '../periodization.js'
+import { normalizeGoalPlan } from './goals.js'
 
 const pad = (n) => String(n).padStart(2, '0')
 export const isoDate = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
@@ -55,10 +56,13 @@ export function collectInputs({ profile = {}, runs = [], memories = [], answers 
   const todayIso = isoDate(today)
 
   // --- goal ----------------------------------------------------------------
-  let distanceKm = numberOrNull(profile.target_distance_km)
+  // A runner with a goal instead of a race: whatever race the profile row
+  // still holds from an earlier plan is not this plan's business.
+  const goalPlan = normalizeGoalPlan(profile.goal_plan, { age: numberOrNull(profile.age) })
+  let distanceKm = goalPlan ? null : numberOrNull(profile.target_distance_km)
   if (!(distanceKm > 0)) distanceKm = null
-  let eventDate = profile.event_date || null
-  const targetTimeMin = numberOrNull(profile.target_time_min) > 0 ? Number(profile.target_time_min) : null
+  let eventDate = goalPlan ? null : profile.event_date || null
+  const targetTimeMin = !goalPlan && numberOrNull(profile.target_time_min) > 0 ? Number(profile.target_time_min) : null
 
   // Answer to "your race date has passed": train without one, or a new date.
   if (answers.event_date === 'no_date') eventDate = null
@@ -182,6 +186,7 @@ export function collectInputs({ profile = {}, runs = [], memories = [], answers 
       weeksToEvent,
       eventWeekday,
     },
+    goalPlan,
     notes,
     signals,
     safety,
@@ -220,6 +225,7 @@ export function inputsSummary(inputs) {
     days_per_week: inputs.daysPerWeek,
     available_days: inputs.availableDays,
     goal: inputs.goal,
+    goal_plan: inputs.goalPlan,
     signals: inputs.signals,
     safety: inputs.safety,
     // Health data is stored only as far as the engine used it: the derived

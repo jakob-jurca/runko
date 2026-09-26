@@ -51,6 +51,7 @@ this folder.
 | `knowledge-scenarios.js` | Picks the one `## Scenario: <id>` section plan generation loads. Pure, tested. |
 | `periodization.js` | The training-plan maths: VDOT, paces, phases, volume, taper, week layout. |
 | `planning/` | The planning pipeline, one file per step: `collect` → `assess` → `gate` (safety: no plan, restrictions such as walking-only or no hard sessions, notices) → `classify` (seven runner scenarios) → `feasibility` (feasible / stretch / unsafe) → `clarify` (≤ 3 questions) → `build` (a builder per scenario) → `explain`. `rules.js` holds the safety limits every step shares; `limits.js` combines the research rules (runko-research) that apply to one runner into caps and gaps by the research's precedence order, recording the rule behind each value; `guard.js` keeps AI-adapted weeks inside them. Pure code, no AI; tested by `tests/personas.test.mjs`. |
+| `planning/goals.js`, `planning/build-goal.js`, `goal-progress.js` | The non-race path: a goal (kondicija, hitrost, zdravje, navada, glava, teza, baza) maps to an existing scenario plus modifiers, a block of 4, 8 or 12 weeks, and — for hitrost — a 5 km time trial in the first and the last week. `goal-progress.js` measures the goal on the dashboard and writes the end-of-block summary. Pure, tested by `tests/goals.test.mjs`. |
 | `plan.js` | The plan engine — runs the pipeline, has the AI describe the result (one call), persists it. |
 | `subscription.js` | Trial and premium gating. |
 

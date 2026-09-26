@@ -29,7 +29,9 @@ export default function Log() {
   const [effort, setEffort] = useState(Number(params.get('effort')) || DEFAULT_EFFORT)
   // Today by default, and never later than today — see validateLogDate.
   const [date, setDate] = useState(params.get('date') || todayISO())
-  const [notes, setNotes] = useState('')
+  const isTrial = params.get('type') === 'time_trial'
+  const [seconds, setSeconds] = useState('')
+  const [notes, setNotes] = useState(isTrial ? params.get('title') || '' : '')
   const [missed, setMissed] = useState(false)
 
   const [busy, setBusy] = useState(false)
@@ -54,7 +56,8 @@ export default function Log() {
         user_id: profile.id,
         date,
         distance: missed ? 0 : Number(distance),
-        duration: missed ? 0 : Number(duration),
+        // A time trial is typed as minutes and seconds.
+        duration: missed ? 0 : isTrial ? Math.round((Number(duration) + Number(seconds || 0) / 60) * 100) / 100 : Number(duration),
         effort: missed ? 1 : effort,
         notes: missed ? `Izpuščen trening${plannedDay ? ` (${plannedDay})` : ''}. ${notes}`.trim() : notes,
         source: 'manual',
@@ -191,16 +194,36 @@ export default function Log() {
                 </label>
                 <UnitInput
                   id="log-duration"
-                  unit="min"
+                  unit={isTrial ? t.goals.logMinutes : 'min'}
                   type="number"
                   inputMode="numeric"
                   min="1"
                   required
-                  placeholder="30"
+                  placeholder={isTrial ? '25' : '30'}
                   value={duration}
                   onChange={(e) => setDuration(e.target.value)}
                 />
               </div>
+              {isTrial && (
+                <div className="col-span-2">
+                  <label htmlFor="log-seconds" className="label">
+                    {t.goals.logSeconds}
+                  </label>
+                  <UnitInput
+                    id="log-seconds"
+                    unit={t.goals.logSeconds}
+                    type="number"
+                    inputMode="numeric"
+                    min="0"
+                    max="59"
+                    step="1"
+                    placeholder="30"
+                    value={seconds}
+                    onChange={(e) => setSeconds(e.target.value)}
+                  />
+                  <p className="mt-1.5 text-xs text-zinc-500">{t.goals.logTrialHint}</p>
+                </div>
+              )}
             </div>
 
             <fieldset>

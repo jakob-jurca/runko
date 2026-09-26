@@ -26,6 +26,7 @@ export const DEFAULT_EFFORT_BY_TYPE = {
   interval: 4,
   repetition: 4,
   race: 5,
+  time_trial: 5,
 }
 
 export const DEFAULT_EFFORT = 3
@@ -55,7 +56,8 @@ export function plannedDuration(day) {
  * @returns {object|null} null when the day is not something you can run
  */
 export function plannedWorkoutRow(day, { userId, date = todayISO() } = {}) {
-  if (!day || day.type === 'rest' || !(Number(day.distance_km) > 0)) return null
+  // A time trial has no "as planned": its result is the point, and it is typed in.
+  if (!day || day.type === 'rest' || day.type === 'time_trial' || !(Number(day.distance_km) > 0)) return null
   return {
     user_id: userId,
     date,
@@ -73,6 +75,9 @@ export function plannedWorkoutRow(day, { userId, date = todayISO() } = {}) {
  */
 export function prefillFromPlan(day, date = todayISO()) {
   if (!day) return { distance: '', duration: '', effort: DEFAULT_EFFORT, date }
+  if (day.type === 'time_trial') {
+    return { distance: String(day.trial_km ?? day.distance_km), duration: '', effort: defaultEffortFor(day.type), date }
+  }
   return {
     distance: Number(day.distance_km) > 0 ? String(day.distance_km) : '',
     duration: plannedDuration(day) ? String(plannedDuration(day)) : '',

@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { saveProfile, addWorkout, addDaysISO, todayISO } from '../core/db'
+import { saveProfile, addWorkout, getWorkouts, addDaysISO, todayISO } from '../core/db'
+import { GOALS, BLOCK_WEEKS, goalsOffered } from '../core/planning/goals'
+import { recentVolume } from '../core/goal-progress'
 import { createInitialPlan, previewPlan, ClarificationNeededError, PlanBlockedError } from '../core/plan'
 import {
   parseDuration, targetTimeFromParts, targetTimeToParts, targetTimeHasSeconds, targetPaceCheck,
@@ -40,6 +42,23 @@ const emptyRun = (daysAgo = 0) => ({
 })
 
 const runValid = (r) => Number(r.distance) > 0 && Number(r.duration) > 0
+
+/**
+ * "What next?" after a goal block arrives as ?next=repeat|switch|race (see the
+ * dashboard's end-of-block card); a repeat also carries the goal it repeats.
+ */
+function readSeed(params) {
+  const next = params.get('next')
+  if (!['repeat', 'switch', 'race'].includes(next)) return null
+  const weeks = Number(params.get('weeks'))
+  return {
+    next,
+    main: GOALS.includes(params.get('main')) ? params.get('main') : '',
+    secondary: GOALS.includes(params.get('secondary')) ? params.get('secondary') : '',
+    weeks: BLOCK_WEEKS.includes(weeks) ? weeks : null,
+    level: Math.max(1, Math.min(5, Number(params.get('level')) || 1)),
+  }
+}
 
 /** In-progress onboarding survives tab switches, reloads and auth hiccups. */
 const STORAGE_KEY = 'runko_onboarding_v1'
@@ -108,14 +127,25 @@ export default function Onboarding() {
   // The profile as it was when the flow opened; null on a first-time signup.
   const prof = useRef(profile).current || {}
   const rebuilding = Boolean(prof.id)
+  const [searchParams] = useSearchParams()
+  const seed = useRef(readSeed(searchParams)).current
 
-  const [step, setStep] = useState(saved.step || 'path')
+  const [step, setStep] = useState(seed ? { repeat: 'experience', switch: 'goals', race: 'goal' }[seed.next] : saved.step || 'aim')
   const [building, setBuilding] = useState(false)
   const [skipping, setSkipping] = useState(false)
   const [error, setError] = useState('')
 
   // collected data
-  const [path, setPath] = useState(saved.path || '') // 'quick' | 'thorough'
+  const [path, setPath] = useState(seed ? 'quick' : saved.path || '') // 'quick' | 'thorough'
+  // What the plan is for: 'race', or 'goal' (no race, something to improve).
+  // A draft saved before this question existed was a race plan.
+  const [aim, setAim] = useState(
+    seed ? (seed.next === 'race' ? 'race' : 'goal') : saved.aim || (saved.step && saved.step !== 'aim' ? 'race' : '')
+  )
+  const [goalMain, setGoalMain] = useState(seed ? seed.main : saved.goalMain || '')
+  const [goalSecondary, setGoalSecondary] = useState(seed ? seed.secondary : saved.goalSecondary || '')
+  const [blockWeeks, setBlockWeeks] = useState(seed?.weeks || saved.blockWeeks || 8)
+  const [blockLevel, setBlockLevel] = useState(seed?.next === 'repeat' ? seed.level : saved.blockLevel || 1)
   const [name, setName] = useState(prefill(saved.name, prof.name))
   const [age, setAge] = useState(prefill(saved.age, prof.age))
   const [weight, setWeight] = useState(prefill(saved.weight, prof.weight))
@@ -167,20 +197,36 @@ export default function Onboarding() {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
-        step, path, name, age, weight, level, eventDate,
+        step, path, aim, goalMain, goalSecondary, blockWeeks, blockLevel, name, age, weight, level, eventDate,
         targetDistance, hasDate, targetTimeParts, experienceMonths, weeklyVolume,
         longestRun, daysPerWeek, availableDays,
         hasRun, runs, testRun, notes, answers,
         pregnancyStatus, weeksPostpartum, painAtRest, injury12m, breakBand,
       })
     )
-  }, [step, path, name, age, weight, level, eventDate, targetDistance, hasDate,
+  }, [step, path, aim, goalMain, goalSecondary, blockWeeks, blockLevel, name, age, weight, level, eventDate, targetDistance, hasDate,
       targetTimeParts, experienceMonths, weeklyVolume, longestRun, daysPerWeek,
       availableDays, hasRun, runs, testRun, notes, answers,
       pregnancyStatus, weeksPostpartum, painAtRest, injury12m, breakBand])
 
+  // A repeat starts from what they actually ran in the last block, not from
+  // the volume they gave when the block began.
+  useEffect(() => {
+    if (seed?.next !== 'repeat' || !prof.id) return
+    getWorkouts(prof.id, { limit: 60 })
+      .then((rows) => {
+        const { weeklyKm, longestKm } = recentVolume(rows)
+        if (weeklyKm !== null) {
+          setWeeklyVolume(String(weeklyKm))
+          setLongestRun(String(longestKm))
+        }
+      })
+      .catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const stepOrder = useMemo(() => {
-    const s = ['path', 'name', 'body', 'level', 'goal', 'experience', 'safety', 'days']
+    const s = ['aim', 'path', 'name', 'body', 'level', ...(aim === 'goal' ? ['goals', 'block'] : ['goal']), 'experience', 'safety', 'days']
     if (path === 'thorough') {
       s.push('runbefore')
       if (hasRun === true) s.push('runs')
@@ -190,7 +236,7 @@ export default function Onboarding() {
     if (step === 'clarify') s.push('clarify')
     if (step === 'blocked') s.push('blocked')
     return s
-  }, [path, hasRun, step])
+  }, [aim, path, hasRun, step])
 
   // --- derived goal values -------------------------------------------------
   const targetDistanceValid = Number(targetDistance) > 0 && Number(targetDistance) <= 200
@@ -208,16 +254,24 @@ export default function Onboarding() {
   const stepIdx = Math.max(0, stepOrder.indexOf(step))
   const go = (dir) => setStep(stepOrder[Math.min(stepOrder.length - 1, Math.max(0, stepIdx + dir))])
 
+  // The goals this age may pick, and whether the chosen main goal is one of them.
+  const offeredGoals = goalsOffered(age ? Number(age) : null)
+  const goalChosen = offeredGoals.includes(goalMain)
+  const goalPlan = aim === 'goal' && goalChosen
+    ? { main: goalMain, secondary: goalSecondary || null, blockWeeks, level: blockLevel }
+    : null
+
   /** Everything collected, in the shape core/ai.js expects. */
   const buildIntake = () => ({
+    goalPlan,
     name: name.trim(),
     age: age ? Number(age) : null,
     weight: weight ? Number(weight) : null,
     fitness_level: level,
-    goal: goalKind,
-    target_distance_km: targetDistanceValid ? Number(targetDistance) : null,
-    target_time_min: targetTimeMin,
-    event_date: hasDate ? eventDate || null : null,
+    goal: aim === 'goal' ? 'general' : goalKind,
+    target_distance_km: aim !== 'goal' && targetDistanceValid ? Number(targetDistance) : null,
+    target_time_min: aim === 'goal' ? null : targetTimeMin,
+    event_date: aim !== 'goal' && hasDate ? eventDate || null : null,
     experience_months: experienceMonths ? Number(experienceMonths) : null,
     weekly_volume_km: weeklyVolume ? Number(weeklyVolume) : null,
     longest_run_km: longestRun ? Number(longestRun) : null,
@@ -238,11 +292,12 @@ export default function Onboarding() {
     weight: weight ? Number(weight) : null,
     fitness_level: level || null,
     // 'event' simply means "there is a date"; the goal itself is the distance.
-    goal: goalKind,
+    goal: aim === 'goal' ? 'general' : goalKind,
     event_name: null, // no named race type any more — the distance is the goal
-    event_date: hasDate ? eventDate || null : null,
-    target_distance_km: targetDistanceValid ? Number(targetDistance) : null,
-    target_time_min: targetTimeMin,
+    // A goal block has no race: nothing of an earlier race stays on the profile.
+    event_date: aim !== 'goal' && hasDate ? eventDate || null : null,
+    target_distance_km: aim !== 'goal' && targetDistanceValid ? Number(targetDistance) : null,
+    target_time_min: aim === 'goal' ? null : targetTimeMin,
     experience_months: experienceMonths ? Number(experienceMonths) : null,
     weekly_volume_km: weeklyVolume ? Number(weeklyVolume) : null,
     longest_run_km: longestRun ? Number(longestRun) : null,
@@ -297,7 +352,7 @@ export default function Onboarding() {
     setPreparing(true)
     setError('')
     try {
-      const intake = path === 'thorough' ? buildIntake() : null
+      const intake = path === 'thorough' || goalPlan ? buildIntake() : null
       const result = await previewPlan({ ...prof, ...profileFields() }, intake, nextAnswers)
       setPreview(result)
       if (result.status === 'blocked') {
@@ -334,7 +389,7 @@ export default function Onboarding() {
       const savedProfile = await saveProfile(profileFields())
 
       // Intake runs become real workout rows so the whole app sees them.
-      const intake = path === 'thorough' ? buildIntake() : null
+      const intake = path === 'thorough' || goalPlan ? buildIntake() : null
       for (const r of intake?.runs ?? []) {
         await addWorkout({
           user_id: savedProfile.id,
@@ -389,6 +444,33 @@ export default function Onboarding() {
           />
         ))}
       </div>
+
+      {step === 'aim' && (
+        <div className="animate-fade-up">
+          <h1 className="text-[1.75rem] font-bold leading-tight tracking-tight">{t.goals.aimTitle}</h1>
+          <p className="mt-2 max-w-[60ch] leading-relaxed text-zinc-400">{t.goals.aimSubtitle}</p>
+          <div className="mt-8 space-y-3">
+            {[
+              { id: 'race', title: t.goals.aimRace, desc: t.goals.aimRaceDesc },
+              { id: 'goal', title: t.goals.aimGoal, desc: t.goals.aimGoalDesc },
+            ].map((o) => (
+              <button
+                key={o.id}
+                onClick={() => {
+                  setAim(o.id)
+                  setStep('path')
+                }}
+                className={`card w-full text-left transition hover:ring-white/20 active:scale-[0.98] ${
+                  aim === o.id ? 'bg-primary-faint !ring-2 !ring-primary/70' : ''
+                }`}
+              >
+                <h3 className="font-semibold">{o.title}</h3>
+                <p className="mt-1 text-sm text-zinc-400">{o.desc}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {step === 'path' && (
         <div className="animate-fade-up">
@@ -642,6 +724,89 @@ export default function Onboarding() {
           >
             Continue
           </button>
+        </div>
+      )}
+
+      {step === 'goals' && (
+        <div className="animate-fade-up">
+          <h1 className="text-[1.75rem] font-bold leading-tight tracking-tight">{t.goals.mainTitle}</h1>
+          <p className="mt-2 max-w-[60ch] leading-relaxed text-zinc-400">{t.goals.mainSubtitle}</p>
+          <div className="mt-8 space-y-3">
+            {offeredGoals.map((g) => (
+              <button
+                key={g}
+                onClick={() => {
+                  setGoalMain(g)
+                  // The main goal wins: a secondary that is now the same, or that a
+                  // time trial does not sit beside, is dropped.
+                  if (goalSecondary === g || (goalSecondary === 'hitrost' && !['kondicija', 'baza'].includes(g))) {
+                    setGoalSecondary('')
+                  }
+                }}
+                aria-pressed={goalMain === g}
+                className={`card w-full text-left transition hover:ring-white/20 active:scale-[0.98] ${
+                  goalMain === g ? 'bg-primary-faint !ring-2 !ring-primary/70' : ''
+                }`}
+              >
+                <h3 className="font-semibold">{t.goals.items[g].label}</h3>
+                <p className="mt-1 text-sm text-zinc-400">{t.goals.items[g].desc}</p>
+              </button>
+            ))}
+          </div>
+
+          {goalChosen && (
+            <div className="mt-8">
+              <p className="font-semibold">{t.goals.secondaryTitle}</p>
+              <p className="mt-1 text-xs text-zinc-500">{t.goals.secondaryHint}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {[
+                  '',
+                  ...offeredGoals.filter((g) => g !== goalMain && (g !== 'hitrost' || ['kondicija', 'baza'].includes(goalMain))),
+                ].map((g) => (
+                  <button
+                    key={g || 'none'}
+                    onClick={() => setGoalSecondary(g)}
+                    className={`min-h-[44px] rounded-full px-4 py-2 text-sm font-medium transition active:scale-95 ${
+                      goalSecondary === g
+                        ? 'bg-primary text-white'
+                        : 'bg-surface-raised text-zinc-300 ring-1 ring-inset ring-white/10 hover:text-white'
+                    }`}
+                  >
+                    {g ? t.goals.items[g].label : t.goals.noSecondary}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <button className="btn-primary mt-8 w-full" disabled={!goalChosen} onClick={() => go(1)}>
+            {t.common.continue}
+          </button>
+        </div>
+      )}
+
+      {step === 'block' && (
+        <div className="animate-fade-up">
+          <h1 className="text-[1.75rem] font-bold leading-tight tracking-tight">{t.goals.blockTitle}</h1>
+          <p className="mt-2 max-w-[60ch] leading-relaxed text-zinc-400">{t.goals.blockSubtitle}</p>
+          <div className="mt-8 space-y-3">
+            {BLOCK_WEEKS.map((w) => (
+              <button
+                key={w}
+                onClick={() => {
+                  setBlockWeeks(w)
+                  go(1)
+                }}
+                aria-pressed={blockWeeks === w}
+                className={`card w-full text-left transition hover:ring-white/20 active:scale-[0.98] ${
+                  blockWeeks === w ? 'bg-primary-faint !ring-2 !ring-primary/70' : ''
+                }`}
+              >
+                <h3 className="font-semibold">{t.goals.blockWeeks(w)}</h3>
+                <p className="mt-1 text-sm text-zinc-400">{t.goals.blockHints[w]}</p>
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
