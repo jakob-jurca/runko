@@ -11,7 +11,7 @@
  */
 import {
   DEFAULT_LOAD, nextWeeklyLoad, nextLongRun, longShareFor, readinessFor, taperFor, longRunDurationCapKm,
-  longRunMaxMinutes, WALK_BREAK_LONG_SHARE, WALK_BREAK_MAX_KM,
+  longRunMaxMinutes, WALK_BREAK_LONG_SHARE, WALK_BREAK_MAX_KM, WALK_RUN_MAX_KM,
 } from './rules.js'
 
 /** Weeks of walk-run before a complete beginner runs 20 minutes non-stop. */
@@ -79,9 +79,11 @@ export function weeksToReach({
  * @param {boolean} [opts.gentle] - older / walking-only beginners
  * @param {object} [opts.limits] - resolved limit values (limits.js)
  * @param {boolean} [opts.firstMarathon]
+ * @param {boolean} [opts.completion] - no target time: run-walk counts for a half marathon too
  */
 export function weeksNeeded({
   assessment, distanceKm, runDays, walkBreaks = false, gentle = false, limits = DEFAULT_LOAD, firstMarathon = false,
+  completion = false,
 }) {
   const L = { ...DEFAULT_LOAD, ...limits }
   const req = readinessFor(distanceKm)
@@ -90,7 +92,7 @@ export function weeksNeeded({
   const taper = taperFor(distanceKm, { level, peakKm: req.weeklyComf }).weeks
 
   // Walk breaks lower what it takes to FINISH a short event, not to run it well.
-  const walkable = walkBreaks && distanceKm <= WALK_BREAK_MAX_KM
+  const walkable = walkBreaks && distanceKm <= (completion ? WALK_RUN_MAX_KM : WALK_BREAK_MAX_KM)
   // No long run is ever required beyond the duration cap: a slow runner is
   // ready for a marathon on 3 hours of long running, not on 30 km.
   // The age cap from limits.js, but never more than this distance allows

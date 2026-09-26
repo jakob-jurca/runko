@@ -126,11 +126,11 @@ export const PERSONAS = [
       age: 31, fitness_level: 'beginner', experience_months: 4, weekly_volume_km: 8,
       longest_run_km: 4, target_distance_km: 10, event_date: sundayIn(8), days_per_week: 3,
     },
-    // REVIEW (phase 2): even the walk-break minimum (a 6 km long run)
-    // needs ~13 km a week at the 45% cap on 3 days, 15 weeks from 8 km.
+    // Review decision (phase 2): unsafe means real injury risk, not an
+    // ambitious goal. Run-walk counts toward minimum readiness of a
+    // completion goal (a 4 km long run), so this is a stretch.
     expect: {
-      scenario: 'beginner_with_deadline', verdict: 'unsafe', proposesSaferGoal: true,
-      originalGoalNotBuilt: true, noHardSessions: true,
+      scenario: 'beginner_with_deadline', verdict: 'stretch', noHardSessions: true,
     },
   },
   {
@@ -184,10 +184,9 @@ export const PERSONAS = [
       longest_run_km: 5, target_distance_km: 10, event_date: sundayIn(6), days_per_week: 4,
       coach_notes: 'Štiri mesece nisem tekel, zdaj se vračam.',
     },
-    // REVIEW (phase 2): 90% start (b04 r2), a hold after the
-    // recovery week and a 1-week taper leave 5 building weeks: not enough.
+    // Run-walk counts toward minimum readiness of a completion goal.
     expect: {
-      scenario: 'returning', verdict: 'unsafe', proposesSaferGoal: true, originalGoalNotBuilt: true,
+      scenario: 'returning', verdict: 'stretch',
     },
   },
 
@@ -299,10 +298,10 @@ export const PERSONAS = [
       age: 27, fitness_level: 'intermediate', experience_months: 18, weekly_volume_km: 20,
       longest_run_km: 8, target_distance_km: 21.1, event_date: sundayIn(10), days_per_week: 4,
     },
-    // REVIEW (phase 2): a 15 km long run needs ~34 km a week at the
-    // 45% cap (b04 r18) and +10% long-run steps (b04 r16): 17 weeks, not 10.
+    // Review decision (phase 2): a completion goal counts run-walk toward
+    // minimum readiness (an 8 km long run), so a stretch, not unsafe.
     expect: {
-      verdict: 'unsafe', proposesSaferGoal: true, originalGoalNotBuilt: true,
+      verdict: 'stretch',
     },
   },
   {
@@ -623,13 +622,11 @@ export const PERSONAS = [
       longest_run_km: 12, target_distance_km: 21.1, event_date: sundayIn(20), days_per_week: 4,
       pregnancy_status: 'none', pain_at_rest: false, injury_last_12m: true, break_days: 0,
     },
-    // REVIEW (phase 2): literal research rules compound here — 90% start,
-    // 5%/week with a 1 km floor, 2:1 cycles, a hold after each recovery week
-    // (b04 r15: +1 km every three weeks) and the 45% long-run cap — so a
-    // runner already at 30 km/week with a 12 km long run needs 22 weeks for
-    // a half. The engine offers a 10 km on the date instead.
+    // Review decision (phase 2): with no target time, run-walk counts toward
+    // minimum readiness (an 8 km long run), so a stretch: the plan is built,
+    // comfortable readiness (18 km long run) is out of reach at 5% a week.
     expect: {
-      verdict: 'unsafe', proposesSaferGoal: true, originalGoalNotBuilt: true,
+      verdict: 'stretch',
       maxWeeklyIncreasePct: 5, recoveryCycle: 3, recoveryDepth: 0.7,
     },
   },

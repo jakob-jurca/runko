@@ -207,12 +207,17 @@ export function readinessFor(distanceKm) {
 }
 
 /**
- * Walk breaks make a SHORT event finishable on less: a beginner who can
- * walk-run 60% of 5-10 km can complete it by walking more on the day. They
- * do not rescue a half or a marathon, where the time on feet is the problem.
+ * Run-walk makes a COMPLETION goal finishable on less: someone who can
+ * run-walk 40% of the distance can finish it by walking more on the day.
+ * Up to 10 km this holds for anyone; up to a half marathon only when there
+ * is no target time (WALK_RUN_MAX_KM). A marathon is never rescued this way,
+ * and a target time is never reached by walking. Only the MINIMUM readiness
+ * counts run-walk, so the result is at most a stretch, never comfortable.
  */
-export const WALK_BREAK_LONG_SHARE = 0.6
+export const WALK_BREAK_LONG_SHARE = 0.4
 export const WALK_BREAK_MAX_KM = 10
+/** A completion goal (no target time) may be met run-walk up to a half marathon. */
+export const WALK_RUN_MAX_KM = 21.1
 
 /**
  * Taper (b06 rules 9-16, 22-23): weeks (race week included), each week's

@@ -77,7 +77,7 @@ export function checkFeasibility(inputs, assessment, classification, limits) {
   // MINIMUM readiness for every scenario. They never count toward comfortable.
   const need = weeksNeeded({
     assessment, distanceKm: goal.distanceKm, runDays, walkBreaks: true, gentle, limits,
-    firstMarathon: isFirstMarathon(inputs, goal.distanceKm),
+    firstMarathon: isFirstMarathon(inputs, goal.distanceKm), completion: !goal.targetTimeMin,
   })
   const req = need.requirements
   const available = hasEvent ? goal.weeksToEvent : null
@@ -150,6 +150,7 @@ export function checkFeasibility(inputs, assessment, classification, limits) {
     for (const d of STANDARD_DISTANCES.filter((x) => x < goal.distanceKm)) {
       const n = weeksNeeded({
         assessment, distanceKm: d, runDays, walkBreaks: true, gentle, limits, firstMarathon: isFirstMarathon(inputs, d),
+        completion: !goal.targetTimeMin,
       })
       if (runDays < n.requirements.run_days_min) continue
       if (available !== null && available < n.min) continue
