@@ -5,33 +5,62 @@
 @layer base {
   html {
     color-scheme: dark;
+    -webkit-tap-highlight-color: transparent;
   }
   body {
-    @apply bg-zinc-950 text-zinc-100 font-sans antialiased;
+    @apply bg-canvas text-zinc-100 font-sans antialiased;
+    font-feature-settings: 'ss01', 'cv11';
+  }
+  /* Numbers line up in columns: distances, paces, times, heart rates. */
+  .tabular,
+  .font-mono {
+    font-variant-numeric: tabular-nums;
+  }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+    letter-spacing: -0.02em;
+  }
+  p {
+    text-wrap: pretty;
+  }
+  :focus-visible {
+    @apply outline-none ring-2 ring-primary/60 ring-offset-2 ring-offset-canvas;
   }
 }
 
 @layer components {
-  /* Primary CTA — the athletic orange pill used across the app */
+  /* Primary CTA: the orange pill. No glow; the colour carries it. */
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-full bg-primary px-6 py-3
-      font-semibold text-white shadow-lg shadow-primary/25 transition
-      hover:bg-primary-dark active:scale-95 disabled:opacity-40 disabled:pointer-events-none;
+    @apply inline-flex min-h-[48px] items-center justify-center gap-2 rounded-full bg-primary px-6 py-3
+      font-semibold text-white transition duration-200
+      hover:bg-primary-dark active:scale-[0.98] active:translate-y-px
+      disabled:pointer-events-none disabled:opacity-40;
   }
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 rounded-full border border-zinc-700
-      px-6 py-3 font-semibold text-zinc-200 transition hover:border-zinc-500 hover:bg-zinc-900
-      active:scale-95 disabled:opacity-40 disabled:pointer-events-none;
+    @apply inline-flex min-h-[48px] items-center justify-center gap-2 rounded-full bg-surface-raised
+      px-6 py-3 font-semibold text-zinc-200 ring-1 ring-inset ring-white/10 transition duration-200
+      hover:bg-zinc-800 hover:text-white active:scale-[0.98]
+      disabled:pointer-events-none disabled:opacity-40;
   }
   .card {
-    @apply rounded-2xl border border-zinc-800/80 bg-zinc-900/60 p-5 backdrop-blur;
+    @apply rounded-card bg-surface p-5 ring-1 ring-inset ring-surface-line;
   }
   .input {
-    @apply w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-zinc-100
-      placeholder-zinc-500 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/30;
+    @apply w-full rounded-xl bg-surface-raised px-4 py-3 text-zinc-100 ring-1 ring-inset ring-white/10
+      placeholder:text-zinc-500 outline-none transition duration-200
+      focus:ring-2 focus:ring-primary/70;
   }
   .label {
-    @apply mb-1.5 block text-sm font-medium text-zinc-400;
+    @apply mb-2 block text-sm font-medium text-zinc-300;
+  }
+  /* Small section heading: sentence case, not shouted capitals. */
+  .section-title {
+    @apply text-sm font-semibold text-zinc-400;
+  }
+  .skeleton {
+    @apply rounded-xl bg-[linear-gradient(90deg,#1B1B1F_0%,#26262B_50%,#1B1B1F_100%)] bg-[length:200%_100%] animate-shimmer;
   }
 }
 
@@ -46,4 +75,14 @@
 }
 ::-webkit-scrollbar-track {
   background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
