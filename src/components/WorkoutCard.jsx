@@ -203,6 +203,15 @@ export default function WorkoutCard({
         </button>
       )}
 
+      {/* notes the engine adds: pospeški, tempo maratona, krepilna vadba */}
+      {(day.strides || day.note || day.strength_note) && (
+        <div className="mt-3 space-y-1 text-xs leading-relaxed text-zinc-400">
+          {day.strides && <p>Pospeški: {day.strides}</p>}
+          {day.note && <p>{day.note}</p>}
+          {day.strength_note && <p>{day.strength_note}</p>}
+        </div>
+      )}
+
       {/* the how and the why, folded away by default */}
       {hasDetail && (
         <>

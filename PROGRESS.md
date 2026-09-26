@@ -60,3 +60,4 @@ Group D: 35 runtime summaries in knowledge/research/ (<=350 tokens, frontmatter
 scenarios/populations/situations), plan call loads scenario + <=2 population
 notes (one AI call), chat via detectSituations, tests.
 Status: Group A done (returning.js, gating, min weeks, marathon prediction; tests/returning.test.mjs).
+Group B done (planning/intensity.js post-pass: quality caps, gaps by age, low-intensity floor, race week, easy-run limits, strides, MP long runs, strength notes, post-race clocks in plan.post_race; tests/intensity.test.mjs + intensityRulesKept property).

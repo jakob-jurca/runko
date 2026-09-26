@@ -532,3 +532,52 @@ export function walkRunWithinLimits(result) {
   }
   return { ok: true }
 }
+
+/**
+ * Intensity and placement (Group B): on every kilometre week of every plan,
+ * quality sessions stay within the cap for the runner's level, phase and age;
+ * hard sessions keep their gap (48/60/72 h by age); the low-intensity share
+ * holds (75%, 70% on 3 runs or fewer); and in race week no quality session
+ * falls inside the last 4 (5-10 km) or 6 (half and up) days.
+ */
+import { qualityCap, hardGapDays, lastQualityDaysBeforeRace } from '../../src/core/planning/intensity.js'
+
+export function intensityRulesKept(result, persona) {
+  const p = result.stored?.planning
+  const level = p?.assessment?.experience_level
+  const runDays = p?.feasibility?.run_days ?? 4
+  const age = persona.profile.age ?? null
+  const gap = hardGapDays(p?.limits?.values?.hardGapHours ?? 48)
+  const distance = result.goal?.distance_km ?? 0
+  const idx = (d) => ALL_DAYS.indexOf(d.day)
+  for (const w of result.weeks) {
+    if ((w.unit ?? result.unit) === 'time') continue
+    const q = w.days.filter((d) => HARD_TYPES.has(d.type))
+    const cap = qualityCap({ level, phase: w.phase, age, runDays })
+    if (q.length > cap) return { ok: false, detail: `week ${w.week_number}: ${q.length} quality sessions, cap ${cap}` }
+    const km = w.days.reduce((s, d) => s + (d.distance_km || 0), 0)
+    const hard = w.days.filter((d) => HARD_TYPES.has(d.type) || d.type === 'race')
+      .sort((a, b) => idx(a) - idx(b))
+    // Long runs are allowed to sit next to a hard day only when they are easy
+    // runs of the ordinary kind; two quality or race days always keep the gap.
+    for (let i = 1; i < hard.length; i++) {
+      if (idx(hard[i]) - idx(hard[i - 1]) < gap && HARD_TYPES.has(hard[i].type) && HARD_TYPES.has(hard[i - 1].type)) {
+        return { ok: false, detail: `week ${w.week_number}: ${hard[i - 1].day} and ${hard[i].day} are ${idx(hard[i]) - idx(hard[i - 1])} day(s) apart` }
+      }
+    }
+    if (km && w.days.some((d) => d.type !== 'race')) {
+      const low = 1 - w.days.reduce((s, d) => s + (d.hard_km || 0), 0) / km
+      const min = runDays <= 3 ? 0.7 : 0.75
+      if (low < min - 0.001 && !w.days.some((d) => d.type === 'race')) {
+        return { ok: false, detail: `week ${w.week_number}: ${Math.round(low * 100)}% easy, floor ${Math.round(min * 100)}%` }
+      }
+    }
+    const race = w.days.find((d) => d.type === 'race')
+    if (race) {
+      const need = lastQualityDaysBeforeRace(distance)
+      const late = q.find((d) => idx(race) - idx(d) < need)
+      if (late) return { ok: false, detail: `race week: ${late.type} on ${late.day}, ${idx(race) - idx(late)} days before the race` }
+    }
+  }
+  return { ok: true }
+}

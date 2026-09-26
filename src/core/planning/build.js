@@ -23,6 +23,7 @@ import { pickRunDays } from './days.js'
 import { buildTimePlan, buildWalkingPlan } from './build-time.js'
 import { buildDistancePlan } from './build-distance.js'
 import { withGoal } from './collect.js'
+import { applyIntensityRules, postRaceClocks } from './intensity.js'
 
 const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n))
 const round = Math.round
@@ -593,8 +594,14 @@ export function buildPlan(scenario, inputs, assessment, feasibility, restriction
   }))
   // The gate can take intensity away for good (a known condition); p05 r17
   // takes it away for the first 26 weeks of a heavier beginner.
+  // b03 r18-21, b05 r2-29: quality per week, hard-session gaps, the
+  // low-intensity floor, race week, easy-run limits, strides, strength notes.
+  const intense = applyIntensityRules(shaped, {
+    level: assessment.experience_level, age: inputs.age, runDays: ctx.runDays.length,
+    distanceKm: ctx.goal.distanceKm, paces: ctx.paces, hardGapHours: ctx.limits.hardGapHours, strength: true,
+  }).map((w, i) => ({ ...w, allow_hard: Boolean(shaped[i].allow_hard) && w.allow_hard }))
   const noIntensityWeeks = restrictions.noHardSessions ? Infinity : ctx.limits.noIntensityWeeks ?? 0
-  const weeks = noIntensityWeeks ? withoutHardSessions(shaped, ctx.paces, inputs.age, noIntensityWeeks) : shaped
+  const weeks = noIntensityWeeks ? withoutHardSessions(intense, ctx.paces, inputs.age, noIntensityWeeks) : intense
 
   return {
     unit: built.unit,
@@ -604,6 +611,8 @@ export function buildPlan(scenario, inputs, assessment, feasibility, restriction
     paces: ctx.paces,
     goal_pace_key: ctx.goalPaceKey,
     race_day: ctx.hasEvent ? ctx.goal.eventWeekday : null,
+    // b06 r25-29: what to do after the race.
+    post_race: ctx.hasEvent && ctx.goal.distanceKm ? postRaceClocks(ctx.goal.distanceKm, inputs.age) : null,
     walk_only: Boolean(restrictions.walkOnly),
     walk_base_weeks: restrictions.walkOnly ? 0 : ctx.walkBase?.minutes.length ?? 0,
     foundation_weeks: foundationWeeks,

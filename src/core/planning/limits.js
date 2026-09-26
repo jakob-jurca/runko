@@ -172,6 +172,9 @@ export function computeLimits(inputs, assessment) {
   addLimit(set, 'recoveryLongFactor', SAFE.recoveryLongFactor, { rule: 'b06 r3', level: LEVEL.PLAN })
 
   addLimit(set, 'hardGapHours', 48, { rule: 'b05 r3', level: LEVEL.DEFAULT })
+  // b05 r4 (p04 r9-11): older runners recover slower between hard sessions.
+  if (age !== null && age >= 60) addLimit(set, 'hardGapHours', 72, { rule: 'b05 r4 / p04', level: LEVEL.AGE })
+  else if (age !== null && age >= 50) addLimit(set, 'hardGapHours', 60, { rule: 'b05 r4 / p04', level: LEVEL.AGE })
 
   // --- teenagers, 15-17 (p08 r8-11, r14-16, r19) ---------------------------------
   // Under 15 never reaches here (the gate). Volumes, run days, long run and
