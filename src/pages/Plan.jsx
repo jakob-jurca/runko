@@ -149,7 +149,7 @@ export default function Plan() {
           time is out of reach for this block. */}
       {intro && (
         <section className="card mt-6 animate-fade-up" style={{ animationDelay: '20ms' }}>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-primary">
+          <p className="text-xs font-semibold text-primary-light">
             Coach Runko
           </p>
           <p className="mt-1.5 text-sm leading-relaxed text-zinc-200">{intro}</p>
@@ -172,7 +172,7 @@ export default function Plan() {
       {/* training paces */}
       {paces && !hasWalkRun && (
         <section className="card mt-6 animate-fade-up" style={{ animationDelay: '40ms' }}>
-          <h2 className="mb-3 text-sm font-bold uppercase tracking-widest text-zinc-500">
+          <h2 className="mb-3 text-base font-semibold text-zinc-100">
             {t.plan.yourPaces}
           </h2>
           <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
@@ -189,7 +189,7 @@ export default function Plan() {
       {/* volume curve */}
       <section className="card mt-4 animate-fade-up" style={{ animationDelay: '80ms' }}>
         <div className="mb-1 flex items-baseline justify-between">
-          <h2 className="text-sm font-bold uppercase tracking-widest text-zinc-500">
+          <h2 className="text-base font-semibold text-zinc-100">
             {t.plan.weeklyVolume}
           </h2>
           <span className="text-xs text-zinc-500">{t.plan.peak(peak, unit)}</span>
@@ -259,7 +259,7 @@ export default function Plan() {
 
       {/* week by week */}
       <section className="mt-6">
-        <h2 className="mb-3 text-sm font-bold uppercase tracking-widest text-zinc-500">
+        <h2 className="mb-3 text-base font-semibold text-zinc-100">
           {t.plan.weekByWeek}
         </h2>
         <div className="space-y-2">
@@ -270,7 +270,7 @@ export default function Plan() {
             return (
               <div
                 key={w.number}
-                className={`card !p-0 overflow-hidden ${isNow ? 'border-primary/50 ring-1 ring-primary/30' : ''}`}
+                className={`card !p-0 overflow-hidden ${isNow ? '!ring-primary/50' : ''}`}
               >
                 <button
                   onClick={() => setOpenWeek(open ? null : w.number)}
@@ -285,7 +285,7 @@ export default function Plan() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${s.chip}`}>
+                      <span className={`rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${s.chip}`}>
                         {s.label}
                       </span>
                       {w.isRecovery && (

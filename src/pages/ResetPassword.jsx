@@ -148,7 +148,7 @@ export default function ResetPassword() {
   // would otherwise hide the confirmation.
   if (loading && !done) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-[100dvh] items-center justify-center">
         <Spinner className="h-6 w-6 text-primary" />
       </div>
     )
@@ -158,7 +158,7 @@ export default function ResetPassword() {
   const brokenLink = !done && (linkFailed || !session)
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center px-6">
+    <div className="flex min-h-[100dvh] flex-col items-center justify-center px-6">
       <div className="w-full max-w-sm animate-fade-up">
         <div className="mb-10 text-center">
           <img src="/runko.svg" alt="" className="mx-auto mb-4 h-16 w-16" />

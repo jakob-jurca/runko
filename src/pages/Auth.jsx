@@ -68,7 +68,7 @@ export default function Auth() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center px-6">
+    <div className="flex min-h-[100dvh] flex-col items-center justify-center px-6">
       <div className="w-full max-w-sm animate-fade-up">
         <div className="mb-10 text-center">
           <img src="/runko.svg" alt="" className="mx-auto mb-4 h-16 w-16" />
