@@ -6,6 +6,7 @@ import { coachReaction } from '../core/ai'
 import { maybeAdaptPlan } from '../core/plan'
 import { hasPremium } from '../core/subscription'
 import Spinner from '../components/Spinner'
+import { Check, WarningCircle } from '@phosphor-icons/react'
 import { t } from '../core/strings'
 import { validateLogDate, DEFAULT_EFFORT } from '../core/logging'
 
@@ -92,34 +93,26 @@ export default function Log() {
 
   if (done) {
     return (
-      <main className="mx-auto max-w-md px-6 py-16 text-center animate-fade-up">
-        <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/15">
-          <svg viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="2.5" className="h-8 w-8">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-          </svg>
+      <main className="mx-auto max-w-md px-4 pb-10 pt-[max(3rem,env(safe-area-inset-top))] animate-fade-up sm:px-6">
+        <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-300">
+          <Check size={28} weight="bold" />
         </div>
-        <h1 className="text-2xl font-extrabold">{t.log.doneTitle}</h1>
+        <h1 className="text-2xl font-bold tracking-tight">{t.log.doneTitle}</h1>
 
-        <div className="card mt-6 text-left">
-          {done.premium && (
-            <p className="text-[10px] font-bold uppercase tracking-widest text-primary">{t.chat.title}</p>
-          )}
-          <p className={`leading-relaxed text-zinc-200 ${done.premium ? 'mt-2' : ''}`}>{done.reaction}</p>
+        <div className="card mt-6">
+          {done.premium && <p className="text-xs font-semibold text-primary-light">{t.chat.title}</p>}
+          <p className={`text-[15px] leading-relaxed text-zinc-100 ${done.premium ? 'mt-1.5' : ''}`}>{done.reaction}</p>
           {!done.premium && (
-            <p className="mt-3 text-xs text-zinc-500">
+            <p className="mt-3 text-xs leading-relaxed text-zinc-500">
               {t.paywall.logLocked}{' '}
-              <Link to="/chat" className="text-primary underline">
+              <Link to="/chat" className="text-primary-light underline underline-offset-4">
                 {t.paywall.ended}
               </Link>
             </p>
           )}
         </div>
 
-        {done.adapted && (
-          <p className="mt-4 text-sm text-primary">
-            {t.log.adapted}
-          </p>
-        )}
+        {done.adapted && <p className="mt-4 text-sm text-primary-light">{t.log.adapted}</p>}
 
         <Link to="/" className="btn-primary mt-8 w-full">
           {t.log.backToDashboard}
@@ -129,34 +122,45 @@ export default function Log() {
   }
 
   return (
-    <main className="mx-auto max-w-md px-6 py-8">
-      <h1 className="text-2xl font-extrabold animate-fade-up">{t.log.title}</h1>
+    <main className="mx-auto max-w-md px-4 pb-10 pt-[max(1.5rem,env(safe-area-inset-top))] sm:px-6">
+      <h1 className="text-[1.75rem] font-bold tracking-tight animate-fade-up">{t.log.title}</h1>
       {plannedDay && (
         <p className="mt-1 text-sm text-zinc-400 animate-fade-up">
-          {t.log.fromPlan}: <span className="text-primary">{params.get('title') || plannedDay}</span>
+          {t.log.fromPlan}: <span className="font-medium text-primary-light">{params.get('title') || plannedDay}</span>
         </p>
       )}
 
-      <form onSubmit={submit} className="mt-8 space-y-6 animate-fade-up" style={{ animationDelay: '80ms' }}>
-        <label className="card flex cursor-pointer items-center justify-between">
-          <div>
-            <p className="font-semibold">{t.log.missed}</p>
-            <p className="text-sm text-zinc-500">{t.log.subtitle}</p>
+      <form onSubmit={submit} className="mt-6 space-y-6 animate-fade-up" style={{ animationDelay: '60ms' }}>
+        {/* Missed: a switch, not a bare checkbox. */}
+        <label className="card flex cursor-pointer items-center justify-between gap-4 py-4">
+          <div className="min-w-0">
+            <p className="font-medium">{t.log.missed}</p>
+            <p className="mt-0.5 text-sm text-zinc-500">{t.log.subtitle}</p>
           </div>
           <input
             type="checkbox"
             checked={missed}
             onChange={(e) => setMissed(e.target.checked)}
-            className="h-5 w-5 accent-primary"
+            className="peer sr-only"
+            role="switch"
+            aria-checked={missed}
+          />
+          <span
+            aria-hidden
+            className="relative h-7 w-12 shrink-0 rounded-full bg-zinc-700 transition peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-primary/60
+              after:absolute after:left-0.5 after:top-0.5 after:h-6 after:w-6 after:rounded-full after:bg-white after:transition-transform after:duration-200 peer-checked:after:translate-x-5"
           />
         </label>
 
         {!missed && (
           <>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2">
-                <label className="label">{t.log.date}</label>
+                <label htmlFor="log-date" className="label">
+                  {t.log.date}
+                </label>
                 <input
+                  id="log-date"
                   type="date"
                   className="input"
                   value={date}
@@ -165,25 +169,33 @@ export default function Log() {
                 />
               </div>
               <div>
-                <label className="label">{t.log.distance}</label>
-                <input
+                <label htmlFor="log-distance" className="label">
+                  {t.log.distance}
+                </label>
+                <UnitInput
+                  id="log-distance"
+                  unit="km"
                   type="number"
+                  inputMode="decimal"
                   step="0.1"
                   min="0.1"
                   required
-                  className="input"
                   placeholder="5.0"
                   value={distance}
                   onChange={(e) => setDistance(e.target.value)}
                 />
               </div>
               <div>
-                <label className="label">{t.log.duration}</label>
-                <input
+                <label htmlFor="log-duration" className="label">
+                  {t.log.duration}
+                </label>
+                <UnitInput
+                  id="log-duration"
+                  unit="min"
                   type="number"
+                  inputMode="numeric"
                   min="1"
                   required
-                  className="input"
                   placeholder="30"
                   value={duration}
                   onChange={(e) => setDuration(e.target.value)}
@@ -191,32 +203,40 @@ export default function Log() {
               </div>
             </div>
 
-            <div>
-              <label className="label">{t.log.effort}</label>
-              <div className="grid grid-cols-5 gap-2">
+            <fieldset>
+              <legend className="label">{t.log.effort}</legend>
+              <div className="grid grid-cols-5 gap-1.5 rounded-2xl bg-surface p-1.5 ring-1 ring-inset ring-surface-line">
                 {EFFORTS.map((ef) => (
                   <button
                     type="button"
                     key={ef.v}
                     onClick={() => setEffort(ef.v)}
-                    className={`flex flex-col items-center gap-1 rounded-xl border py-3 transition active:scale-95 ${
-                      effort === ef.v
-                        ? 'border-primary bg-primary-faint'
-                        : 'border-zinc-800 hover:border-zinc-600'
+                    aria-pressed={effort === ef.v}
+                    className={`flex min-h-[64px] flex-col items-center justify-center gap-1 rounded-xl px-1 transition active:scale-95 ${
+                      effort === ef.v ? 'bg-primary-faint ring-1 ring-inset ring-primary/60' : 'hover:bg-surface-raised'
                     }`}
                   >
-                    <span className="text-lg">{ef.emoji}</span>
-                    <span className="text-[9px] font-medium text-zinc-400">{ef.label}</span>
+                    <span className="text-lg leading-none">{ef.emoji}</span>
+                    <span
+                      className={`text-center text-[10px] font-medium leading-tight ${
+                        effort === ef.v ? 'text-primary-light' : 'text-zinc-400'
+                      }`}
+                    >
+                      {ef.label}
+                    </span>
                   </button>
                 ))}
               </div>
-            </div>
+            </fieldset>
           </>
         )}
 
         <div>
-          <label className="label">{t.log.notes}</label>
+          <label htmlFor="log-notes" className="label">
+            {t.log.notes}
+          </label>
           <textarea
+            id="log-notes"
             rows={3}
             className="input resize-none"
             placeholder={t.log.notesPlaceholder}
@@ -225,7 +245,12 @@ export default function Log() {
           />
         </div>
 
-        {error && <p className="text-sm text-rose-400">{error}</p>}
+        {error && (
+          <p className="flex items-start gap-2 rounded-xl bg-rose-500/10 p-3 text-sm text-rose-200 ring-1 ring-inset ring-rose-500/25">
+            <WarningCircle size={18} className="mt-0.5 shrink-0" />
+            {error}
+          </p>
+        )}
 
         <button type="submit" disabled={busy} className="btn-primary w-full">
           {busy ? (
@@ -240,5 +265,17 @@ export default function Log() {
         </button>
       </form>
     </main>
+  )
+}
+
+/** A number input with its unit set inside the field, on the right. */
+function UnitInput({ unit, ...props }) {
+  return (
+    <div className="relative">
+      <input {...props} className="input pr-12 font-mono text-lg" />
+      <span className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-sm text-zinc-500">
+        {unit}
+      </span>
+    </div>
   )
 }
