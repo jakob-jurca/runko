@@ -41,7 +41,7 @@ export function checkFeasibility(inputs, assessment, classification, limits) {
   const scenario = classification.scenario
   const rules = SCENARIO_RULES[scenario]
   const { goal } = inputs
-  const runDays = effectiveRunDays(inputs, scenario)
+  const runDays = effectiveRunDays(inputs, scenario, limits)
   const hasEvent = Boolean(goal.eventDate && !goal.eventInPast && goal.weeksToEvent)
   const beginner = BEGINNER_SCENARIOS.has(scenario)
   const walkBreaks = Boolean(rules.walkBreaksInEvent)
@@ -86,6 +86,13 @@ export function checkFeasibility(inputs, assessment, classification, limits) {
   let verdict = 'feasible'
   let distanceStretch = false
 
+  // p08 r14-16: teenagers have a longest race, however long they have.
+  const goalCeiling = limits?.maxGoalKm ?? Infinity
+  const overCeiling = goal.distanceKm > goalCeiling
+  if (overCeiling) {
+    verdict = 'unsafe'
+    reasons.push(`At this age the longest goal is ${goalCeiling} km; a ${goal.distanceKm} km is not offered.`)
+  }
   if (runDays < req.run_days_min) {
     verdict = 'unsafe'
     reasons.push(`${runDays} run day(s) a week is below the ${req.run_days_min} a ${goal.distanceKm} km needs.`)
@@ -147,7 +154,7 @@ export function checkFeasibility(inputs, assessment, classification, limits) {
   const alternatives = []
   if (verdict === 'unsafe') {
     // Shorter distance on the same date (or with no date, if there was none).
-    for (const d of STANDARD_DISTANCES.filter((x) => x < goal.distanceKm)) {
+    for (const d of STANDARD_DISTANCES.filter((x) => x < goal.distanceKm && x <= goalCeiling)) {
       const n = weeksNeeded({
         assessment, distanceKm: d, runDays, walkBreaks: true, gentle, limits, firstMarathon: isFirstMarathon(inputs, d),
         completion: !goal.targetTimeMin,
@@ -165,7 +172,7 @@ export function checkFeasibility(inputs, assessment, classification, limits) {
     }
     // The same distance later — only if more time actually fixes it.
     const daysProblem = runDays < req.run_days_min
-    if (!daysProblem && Number.isFinite(need.comfortable)) {
+    if (!daysProblem && !overCeiling && Number.isFinite(need.comfortable)) {
       alternatives.push({
         kind: 'later',
         distance_km: goal.distanceKm,

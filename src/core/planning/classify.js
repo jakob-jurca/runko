@@ -26,10 +26,10 @@ export function isFirstMarathon(inputs, distanceKm) {
 export const SHORT_RACE_MAX_KM = 10
 
 /** Effective run days: what they offered, what is available, what the scenario allows. */
-export function effectiveRunDays(inputs, scenario = null) {
+export function effectiveRunDays(inputs, scenario = null, limits = null) {
   const offered = inputs.constraints.maxRunDays ?? inputs.daysPerWeek ?? null
   const available = inputs.constraints.availableDays?.length ?? inputs.availableDays?.length ?? 7
-  const cap = scenario ? SCENARIO_RULES[scenario].maxRunDays : 7
+  const cap = Math.min(scenario ? SCENARIO_RULES[scenario].maxRunDays : 7, limits?.maxRunDays ?? 7)
   const fallback = scenario === 'complete_beginner' ? 3 : 4
   return Math.max(1, Math.min(offered ?? fallback, available, cap))
 }
@@ -64,7 +64,7 @@ export function classifyRunner(inputs, assessment, limits) {
       const need = weeksNeeded({
         assessment,
         distanceKm: goal.distanceKm,
-        runDays: effectiveRunDays(inputs, 'beginner_with_deadline'),
+        runDays: effectiveRunDays(inputs, 'beginner_with_deadline', limits),
         walkBreaks: true,
         gentle: (inputs.age ?? 0) >= GENTLE_START_AGE,
         limits,

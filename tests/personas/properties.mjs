@@ -253,6 +253,11 @@ export const SPECIFIC = {
     return most <= max ? { ok: true } : { ok: false, detail: `${most} run days in a week` }
   },
 
+  maxWeeklyKm: (r, p, max) => {
+    const worst = Math.max(0, ...r.weeks.map((w) => weekLoad(w, 'distance')))
+    return worst <= max + 0.01 ? { ok: true } : { ok: false, detail: `a ${worst} km week` }
+  },
+
   maxWeeklyIncreasePct: (r, p, pct) => weeklyIncreaseWithinLimit(r, p, pct),
 
   maxRunMinutes: (r, p, max) => {

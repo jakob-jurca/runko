@@ -519,8 +519,9 @@ const HARD_TYPES = new Set(['tempo', 'interval', 'repetition'])
  * day becomes an easy run of the same length, so the week's load is kept and
  * only the intensity goes.
  */
-function withoutHardSessions(weeks, paces, age) {
-  return weeks.map((w) => {
+function withoutHardSessions(weeks, paces, age, untilWeek = Infinity) {
+  return weeks.map((w, i) => {
+    if (i >= untilWeek) return w
     if (!w.days.some((d) => HARD_TYPES.has(d.type))) return { ...w, allow_hard: false }
     const days = w.days.map((d) => {
       if (!HARD_TYPES.has(d.type)) return d
@@ -568,7 +569,10 @@ export function buildPlan(scenario, inputs, assessment, feasibility, restriction
         : rules.hard === 'late' ? i >= (rules.noIntensityWeeks ?? 0) && Boolean(w.allow_hard)
           : false,
   }))
-  const weeks = restrictions.noHardSessions ? withoutHardSessions(shaped, ctx.paces, inputs.age) : shaped
+  // The gate can take intensity away for good (a known condition); p05 r17
+  // takes it away for the first 26 weeks of a heavier beginner.
+  const noIntensityWeeks = restrictions.noHardSessions ? Infinity : ctx.limits.noIntensityWeeks ?? 0
+  const weeks = noIntensityWeeks ? withoutHardSessions(shaped, ctx.paces, inputs.age, noIntensityWeeks) : shaped
 
   return {
     unit: built.unit,

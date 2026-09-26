@@ -158,6 +158,31 @@ export function computeLimits(inputs, assessment) {
 
   addLimit(set, 'hardGapHours', 48, { rule: 'b05 r3', level: LEVEL.DEFAULT })
 
+  // --- teenagers, 15-17 (p08 r8-11, r14-16, r19) ---------------------------------
+  // Under 15 never reaches here (the gate). Volumes, run days, long run and
+  // the goal ceiling are all caps; a marathon is refused, not squeezed.
+  if (age !== null && age >= 15 && age < 18) {
+    const seventeen = age >= 17
+    addLimit(set, 'weeklyMaxKm', seventeen ? 60 : 45, { rule: seventeen ? 'p08 r10' : 'p08 r9', level: LEVEL.MEDICAL })
+    addLimit(set, 'maxRunDays', seventeen ? 6 : 5, { rule: seventeen ? 'p08 r10' : 'p08 r9', level: LEVEL.MEDICAL })
+    addLimit(set, 'longRunMaxMin', seventeen ? 90 : 75, { rule: seventeen ? 'p08 r10' : 'p08 r9', level: LEVEL.MEDICAL })
+    addLimit(set, 'maxGoalKm', age < 16 ? 10 : 21.1, { rule: age < 16 ? 'p08 r14' : 'p08 r15-16', level: LEVEL.MEDICAL })
+    // r11: at most two build weeks in a row, then a lighter one.
+    addLimit(set, 'recoveryEvery', 3, { rule: 'p08 r11', level: LEVEL.MEDICAL })
+    addLimit(set, 'weeklyIncreasePct', 0.1, { rule: 'p08 r11', level: LEVEL.MEDICAL })
+  }
+
+  // --- heavier beginners, BMI 30+ (p05 r12, r15, r17, r29) -------------------------
+  // For someone who does not run yet; a runner already at level keeps the
+  // ordinary rules. Unknown BMI adds nothing.
+  const bmi = inputs.health?.bmi ?? null
+  if (bmi !== null && bmi >= 30 && (level === 'none' || level === 'beginner')) {
+    addLimit(set, 'weeklyIncreasePct', 0.1, { rule: 'p05 r12', level: LEVEL.POPULATION })
+    addLimit(set, 'maxRunDays', 3, { rule: 'p05 r15', level: LEVEL.POPULATION })
+    addLimit(set, 'noIntensityWeeks', 26, { rule: 'p05 r17', level: LEVEL.POPULATION })
+    addLimit(set, 'raceFloor', true, { rule: 'p05 r29', level: LEVEL.POPULATION })
+  }
+
   return resolveLimits(set)
 }
 

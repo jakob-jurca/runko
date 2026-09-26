@@ -668,6 +668,63 @@ export const PERSONAS = [
     // b04 r18: a first marathon may use 45% below 50 km (universal share check).
     expect: { scenario: 'long_race', taperWeeks: 3, taper: true, raceOnEventDay: true },
   },
+  // ------------------------------------------------------------- teens (15-17)
+  {
+    id: 'teen-16-marathon',
+    who: '16-year-old, 40 km/week, wants a marathon in 24 weeks',
+    profile: {
+      age: 16, fitness_level: 'intermediate', experience_months: 36, weekly_volume_km: 40,
+      longest_run_km: 16, target_distance_km: 42.2, event_date: sundayIn(24), days_per_week: 5,
+      pregnancy_status: 'none', pain_at_rest: false, injury_last_12m: false,
+    },
+    // p08 r16: refuse the marathon and offer a half or shorter.
+    expect: { verdict: 'unsafe', proposesSaferGoal: true, originalGoalNotBuilt: true, maxWeeklyKm: 45, maxRunDays: 5 },
+  },
+  {
+    id: 'teen-15-half',
+    who: '15-year-old, 25 km/week, wants a half marathon in 20 weeks',
+    profile: {
+      age: 15, fitness_level: 'intermediate', experience_months: 30, weekly_volume_km: 25,
+      longest_run_km: 10, target_distance_km: 21.1, event_date: sundayIn(20), days_per_week: 6,
+      pregnancy_status: 'none', pain_at_rest: false, injury_last_12m: false,
+    },
+    // p08 r14: 10 km is the longest race at 15; r9: 5 run days, 45 km, 75 min.
+    expect: { verdict: 'unsafe', proposesSaferGoal: true, originalGoalNotBuilt: true, maxWeeklyKm: 45, maxRunDays: 5, recoveryCycle: 3 },
+  },
+  {
+    id: 'teen-17-half',
+    who: '17-year-old, 35 km/week, half marathon in 16 weeks',
+    profile: {
+      age: 17, fitness_level: 'intermediate', experience_months: 48, weekly_volume_km: 35,
+      longest_run_km: 14, target_distance_km: 21.1, event_date: sundayIn(16), days_per_week: 6,
+      pregnancy_status: 'none', pain_at_rest: false, injury_last_12m: false,
+    },
+    expect: { scenario: 'long_race', maxWeeklyKm: 60, maxRunDays: 6, maxWeeklyIncreasePct: 10, recoveryCycle: 3 },
+  },
+
+  // ------------------------------------------------------- BMI 30+ beginners
+  {
+    id: 'bmi-33-10k-in-20w',
+    who: 'BMI 33, never ran, wants a 10 km race in 20 weeks',
+    profile: {
+      age: 38, fitness_level: 'beginner', experience_months: 0, weekly_volume_km: 0, weight: 100,
+      height_cm: 174, target_distance_km: 10, event_date: sundayIn(20), days_per_week: 4,
+      pregnancy_status: 'none', pain_at_rest: false, injury_last_12m: false,
+    },
+    // p05 r29: a 10 km comes at the earliest after six months.
+    expect: { verdict: 'unsafe', proposesSaferGoal: true, originalGoalNotBuilt: true, maxRunDays: 3 },
+  },
+  {
+    id: 'bmi-33-5k-in-16w',
+    who: 'BMI 33, never ran, wants a 5 km race in 16 weeks',
+    profile: {
+      age: 38, fitness_level: 'beginner', experience_months: 0, weekly_volume_km: 0, weight: 100,
+      height_cm: 174, target_distance_km: 5, event_date: sundayIn(16), days_per_week: 4,
+      pregnancy_status: 'none', pain_at_rest: false, injury_last_12m: false,
+    },
+    // p05 r12, r15, r17: +10% at most, three days, no intensity for 26 weeks.
+    expect: { scenario: 'beginner_with_deadline', maxRunDays: 3, noHardSessions: true, walkRun: true },
+  },
 ]
 
 export { ALL_DAYS }

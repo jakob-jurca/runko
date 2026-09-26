@@ -11,7 +11,7 @@
  */
 import {
   DEFAULT_LOAD, nextWeeklyLoad, nextLongRun, longShareFor, readinessFor, taperFor, longRunDurationCapKm,
-  longRunMaxMinutes, WALK_BREAK_LONG_SHARE, WALK_BREAK_MAX_KM, WALK_RUN_MAX_KM,
+  longRunMaxMinutes, raceFloorWeeks, WALK_BREAK_LONG_SHARE, WALK_BREAK_MAX_KM, WALK_RUN_MAX_KM,
 } from './rules.js'
 
 /** Weeks of walk-run before a complete beginner runs 20 minutes non-stop. */
@@ -127,9 +127,13 @@ export function weeksNeeded({
   if (fromZero && walkable && minReq.long <= 3.5) min = MIN_WEEKS_FROM_ZERO
   const comfortable = ladder + build(comfReq) + taper
 
+  // p05 r29: a heavier beginner's earliest race, whatever the arithmetic says.
+  const floor = L.raceFloor ? raceFloorWeeks(distanceKm) : 0
+  min = Math.max(min, floor)
+
   return {
     min,
-    comfortable: Math.max(min, comfortable),
+    comfortable: Math.max(min, comfortable, floor),
     requirements: {
       long_run_min_km: round1(minReq.long),
       long_run_comfortable_km: round1(comfReq.long),

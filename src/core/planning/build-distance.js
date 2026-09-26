@@ -105,6 +105,8 @@ export function buildDistancePlan(c) {
       }
     }
     volume = Math.max(1, volume)
+    // p08 r9-10: teenagers have a weekly ceiling, whatever the plan wants.
+    if (L.weeklyMaxKm) volume = Math.min(volume, L.weeklyMaxKm)
 
     // --- this week's long-run ceiling -------------------------------------
     let longCap

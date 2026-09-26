@@ -214,6 +214,16 @@ export function readinessFor(distanceKm) {
  * and a target time is never reached by walking. Only the MINIMUM readiness
  * counts run-walk, so the result is at most a stretch, never comfortable.
  */
+/**
+ * p05 r29: the earliest race for a heavier beginner (BMI 30+) — a 5 km after
+ * 12 weeks of training, a 10 km after 26 (six months), a half after 52.
+ */
+export const RACE_FLOOR_WEEKS = [[5, 12], [10, 26], [21.1, 52]]
+export function raceFloorWeeks(distanceKm) {
+  const row = RACE_FLOOR_WEEKS.find(([d]) => distanceKm <= d)
+  return row ? row[1] : Infinity
+}
+
 export const WALK_BREAK_LONG_SHARE = 0.4
 export const WALK_BREAK_MAX_KM = 10
 /** A completion goal (no target time) may be met run-walk up to a half marathon. */
