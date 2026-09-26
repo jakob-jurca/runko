@@ -30,3 +30,12 @@ Notes: web's hardcoded English "Continue" buttons use t.common.continue; decimal
 - eas.json: development (dev client, internal), preview (internal APK), production (auto increment). expo-dev-client added.
 - STORE_CHECKLIST.md: accounts, EAS login and env, privacy policy, privacy labels, screenshots, age rating, RevenueCat later, HealthKit/Health Connect requirements.
 - FLAGGED: the app has no in-app **account deletion**, which Apple and Google require before release (needs an Edge Function). Written into the checklist; not built (out of scope, backend change).
+
+## Phase 6: verification — done
+- Mobile tests (`cd mobile && npm test`): 78 checks (auth links, session storage adapter, knowledge bundle vs Vite glob, env adapter names, Metro redirects, decimal parsing, onboarding seed, reminders).
+- Web: `npm test` 1902 checks pass, `npm run build` succeeds (verify-bundle clean).
+- Mobile bundles export for Android, iOS and web; expo-doctor 21/21.
+- NOT verified (needs a real device or Supabase project): everything at runtime. Screens compile and the logic is tested, but none was run on a phone or in a browser (browser automation was off limits).
+
+## Blocked / questions
+- None blocking. Open item: in-app account deletion (see Phase 5) must be built before store submission.
