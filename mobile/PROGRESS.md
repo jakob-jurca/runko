@@ -24,3 +24,9 @@ Notes: web's hardcoded English "Continue" buttons use t.common.continue; decimal
 - Haptics on quick-log and on saving a run (expo-haptics). Pull to refresh on Dashboard (done in phase 3).
 - Core change: `t.reminders` strings in src/core/strings.js (web suite 1902 checks pass).
 - Expo Go note: on Android, Expo Go limits expo-notifications; use a development build to test reminders there.
+
+## Phase 5: store readiness (configuration only) — done
+- app.json: name Runko, `si.runko.app` (iOS bundle id, Android package), version 0.1.0, scheme `runko`, dark UI, dark splash (#0B0B0D), adaptive icon (foreground + monochrome + colour background), ITSAppUsesNonExemptEncryption false. Icons generated from public/runko.svg (placeholders).
+- eas.json: development (dev client, internal), preview (internal APK), production (auto increment). expo-dev-client added.
+- STORE_CHECKLIST.md: accounts, EAS login and env, privacy policy, privacy labels, screenshots, age rating, RevenueCat later, HealthKit/Health Connect requirements.
+- FLAGGED: the app has no in-app **account deletion**, which Apple and Google require before release (needs an Edge Function). Written into the checklist; not built (out of scope, backend change).
