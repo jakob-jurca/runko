@@ -9,7 +9,7 @@ export default function Spinner({ className = 'h-6 w-6' }) {
 
 export function FullScreenSpinner({ message }) {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-4">
+    <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-4">
       <Spinner className="h-10 w-10" />
       {message && <p className="animate-pulse-dot text-sm text-zinc-400">{message}</p>}
     </div>

@@ -23,7 +23,7 @@ function Protected({ children }) {
   if (!session) return <Navigate to="/auth" replace />
   if (!profile) return <Navigate to="/onboarding" replace />
   return (
-    <div className="min-h-screen pb-24 md:pb-0 md:pl-60">
+    <div className="min-h-[100dvh] pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:pb-0 md:pl-60">
       <NavBar />
       {children}
     </div>
@@ -62,7 +62,7 @@ function AuthGate() {
 function ConfigBanner() {
   if (isSupabaseConfigured) return null
   return (
-    <div className="fixed inset-x-0 top-0 z-50 bg-amber-500/90 px-4 py-2 text-center text-sm font-medium text-black">
+    <div className="fixed inset-x-0 top-0 z-50 bg-amber-400 px-4 py-2 text-center text-sm font-medium text-black">
       {t.errors.supabaseMissing}
     </div>
   )
