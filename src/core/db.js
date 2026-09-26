@@ -117,7 +117,13 @@ export async function getHealthProfile(userId) {
  */
 export async function saveHealthProfile(userId, fields, consentAt) {
   const row = { user_id: userId, consent_at: consentAt, updated_at: new Date().toISOString() }
-  for (const k of HEALTH_FIELDS) row[k] = fields[k] ?? null
+  // Columns added by migration v8 are written only when answered, so saving
+  // still works on a database that has not run it yet.
+  const LATE = new Set(['pelvic_floor_symptoms', 'severe_tear', 'height_gain_cm_3mo'])
+  for (const k of HEALTH_FIELDS) {
+    if (LATE.has(k) && (fields[k] ?? null) === null) continue
+    row[k] = fields[k] ?? null
+  }
   const { data, error } = await supabase.from('health_profiles').upsert(row).select().single()
   if (error) throw error
   return data
