@@ -47,7 +47,8 @@
           "color": "#F97316"
         }
       ],
-      "expo-asset"
+      "expo-asset",
+      "@react-native-community/datetimepicker"
     ]
   }
 }

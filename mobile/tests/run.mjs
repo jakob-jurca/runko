@@ -1,5 +1,5 @@
 /** Mobile test runner: `npm test` in mobile/. Pure logic only, no device. */
-const SUITES = ['./auth-link.test.mjs', './hybrid-storage.test.mjs', './platform.test.mjs']
+const SUITES = ['./auth-link.test.mjs', './hybrid-storage.test.mjs', './platform.test.mjs', './logic.test.mjs']
 
 let passes = 0
 const failed = []

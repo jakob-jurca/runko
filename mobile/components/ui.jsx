@@ -1,6 +1,10 @@
 import { ActivityIndicator, Pressable, ScrollView, Text as RNText, TextInput, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { cssInterop } from 'nativewind'
 import { colors } from '../lib/theme'
+
+// className on third-party components needs an explicit mapping in NativeWind.
+cssInterop(SafeAreaView, { className: 'style' })
 
 const WEIGHTS = { extrabold: 'g8', bold: 'g7', semibold: 'g6', medium: 'g5' }
 const WEIGHT_RE = /\bfont-(extrabold|bold|semibold|medium)\b/
@@ -20,10 +24,11 @@ export function Spinner({ size = 'small', color = colors.primary }) {
   return <ActivityIndicator size={size} color={color} />
 }
 
-export function FullScreenSpinner() {
+export function FullScreenSpinner({ message }) {
   return (
-    <View className="flex-1 items-center justify-center bg-canvas">
+    <View className="flex-1 items-center justify-center gap-4 bg-canvas px-8">
       <Spinner size="large" />
+      {!!message && <Text className="text-center text-sm text-zinc-400">{message}</Text>}
     </View>
   )
 }
