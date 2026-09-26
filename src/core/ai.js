@@ -703,6 +703,7 @@ const TYPE_SL = {
   race: 'tekma',
   rest: 'počitek',
   walk_run: 'hoja-tek',
+  walk: 'hitra hoja',
 }
 
 function defaultHow(day) {
@@ -736,6 +737,7 @@ function defaultWhy(day, week) {
     interval: 'Intervali dvigujejo VO2 max in tekaško ekonomičnost.',
     repetition: 'Kratke ponovitve izboljšajo hitrost in tehniko teka.',
     race: 'Dan tekme — vse od tu naprej je izvedba.',
+    walk: 'Hitra hoja v pogovornem tempu gradi aerobno osnovo in pripravi kite ter sklepe na obremenitev.',
     walk_run: 'Izmenjava hoje in teka nauči telo teka, ne da bi ga preobremenila — kite in kosti se prilagajajo počasneje kot pljuča.',
   }[day.type] || 'Gradi splošno tekaško pripravljenost.'
   return base
@@ -751,6 +753,7 @@ function defaultPurpose(day) {
     repetition: 'izboljša hitrost',
     race: 'ciljna tekma',
     cross: 'ohranja kondicijo brez obremenitve nog',
+    walk: 'gradi aerobno osnovo brez udarne obremenitve',
     walk_run: 'postopno navajanje na tek',
   }[day.type] || 'gradi aerobno osnovo'
 }

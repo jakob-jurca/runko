@@ -16,6 +16,7 @@ export const PHASE_STYLES = {
   taper: { label: t.plan.phases.taper, bar: 'bg-sky-500', text: 'text-sky-400', chip: 'bg-sky-500/15 text-sky-400' },
   // Scenario phases (core/planning)
   walk_run: { label: t.plan.phases.walk_run, bar: 'bg-amber-500', text: 'text-amber-400', chip: 'bg-amber-500/15 text-amber-400' },
+  walk: { label: t.plan.phases.walk, bar: 'bg-teal-500', text: 'text-teal-400', chip: 'bg-teal-500/15 text-teal-400' },
   return: { label: t.plan.phases.return, bar: 'bg-violet-500', text: 'text-violet-400', chip: 'bg-violet-500/15 text-violet-400' },
   consistency: { label: t.plan.phases.consistency, bar: 'bg-teal-500', text: 'text-teal-400', chip: 'bg-teal-500/15 text-teal-400' },
   maintain: { label: t.plan.phases.maintain, bar: 'bg-zinc-400', text: 'text-zinc-300', chip: 'bg-zinc-500/20 text-zinc-300' },

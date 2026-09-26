@@ -48,6 +48,8 @@ export function explainPlan({ classification, feasibility, plan, notices = [] })
     parts.push(P.intro.unsafe(goalText({ ...original, walk_breaks: false }), goalText(adopted)))
     if (others.length) parts.push(P.intro.otherOption(alternativeText(others[0])))
   }
+  if (plan.walk_only) parts.push(P.intro.walkOnly)
+  if (plan.walk_base_weeks) parts.push(P.intro.walkBase(plan.walk_base_weeks))
   if (plan.distance_from_week) parts.push(P.intro.timeThenDistance(plan.distance_from_week))
   if (plan.foundation_weeks) {
     parts.push(P.intro.foundation(plan.foundation_weeks, plan.weeks.length - plan.foundation_weeks))

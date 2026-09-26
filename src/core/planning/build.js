@@ -16,10 +16,11 @@ import {
 import {
   SCENARIO_RULES, DEFAULT_LOAD, MAX_PLAN_WEEKS, OPEN_GOAL_WEEKS, OLDER_RUNNER_AGE, GENTLE_START_AGE,
   longShareFor, longRunCeiling, readinessFor, taperFor, longRunDurationCapKm, longRunMaxMinutes,
+  WALK_BASE_30, WALK_BASE_35,
 } from './rules.js'
 import { isFirstMarathon } from './classify.js'
 import { pickRunDays } from './days.js'
-import { buildTimePlan } from './build-time.js'
+import { buildTimePlan, buildWalkingPlan } from './build-time.js'
 import { buildDistancePlan } from './build-distance.js'
 import { withGoal } from './collect.js'
 
@@ -87,6 +88,8 @@ function context(scenario, inputs, assessment, feasibility, limits) {
     current: assessment.weekly_km ?? 0,
     level,
     limits: L,
+    // p05 r8-9: the brisk-walking weeks before a BMI 30+ beginner's ladder.
+    walkBase: L.walkBaseWeeks ? (L.walkBaseWeeks >= WALK_BASE_35.minutes.length ? WALK_BASE_35 : WALK_BASE_30) : null,
     longest: assessment.longest_km ?? round((assessment.weekly_km ?? 0) * 0.3),
     goalPaceKey: paces.goal ? 'goal' : 'marathon',
     age: inputs.age,
@@ -196,7 +199,7 @@ function completeBeginner(ctx) {
     : 30
   const draft = buildTimePlan({
     totalWeeks: OPEN_GOAL_WEEKS.max, ladder, runDayCount: ctx.runDays.length, available: ctx.runDays,
-    runPace, age: ctx.age, targetLongMin, targetEasyMin: 30,
+    runPace, age: ctx.age, targetLongMin, targetEasyMin: 30, walkBase: ctx.walkBase,
   })
   // Stop the week after the target is first reached: that is the programme.
   const done = draft.weeks.findIndex((w) =>
@@ -227,6 +230,7 @@ function beginnerToRace(ctx, { runPace, ladder }) {
   const draft = buildTimePlan({
     totalWeeks, ladder, runDayCount: ctx.runDays.length, available: ctx.runDays,
     runPace, age: ctx.age, targetLongMin: CONTINUOUS_TARGET_MIN, targetEasyMin: CONTINUOUS_TARGET_MIN,
+    walkBase: ctx.walkBase,
   })
   const ready = draft.weeks.findIndex((w) =>
     w.days.some((day) => day.walk_run?.continuous_min >= CONTINUOUS_TARGET_MIN))
@@ -297,6 +301,7 @@ function deadlineBeginner(ctx, assessment, feasibility) {
       age: ctx.age,
       targetLongMin: clamp(round(d * 0.6 * runPace), 30, 75),
       targetEasyMin: 30,
+      walkBase: ctx.walkBase,
       race: ctx.hasEvent ? { distanceKm: d, walkBreaks: true, day: ctx.goal.eventWeekday } : null,
     })
     return { unit: 'time', weeks: plan.weeks }
@@ -452,6 +457,15 @@ function race(ctx, assessment, feasibility, kind) {
   }
 }
 
+/**
+ * p03 section 2.8: a postpartum runner starts on the Goom table; with BMI over
+ * 30 the gentle ladder stands in for its "half the running time" version (r25).
+ */
+function postpartumLadder(inputs) {
+  if (inputs.safety?.pregnancyStatus !== 'postpartum') return 'returning'
+  return (inputs.health?.bmi ?? 0) > 30 ? 'gentle' : 'postpartum'
+}
+
 function returning(ctx, assessment, feasibility, inputs) {
   const noIntensity = SCENARIO_RULES.returning.noIntensityWeeks
   const d = ctx.goal.distanceKm
@@ -462,7 +476,7 @@ function returning(ctx, assessment, feasibility, inputs) {
     // ladder is its own foundation, so it runs all the way to race day.
     const runPace = Math.max(ctx.paces.easy, 7)
     const plan = buildTimePlan({
-      totalWeeks: ctx.hasEvent ? ctx.goal.weeksToEvent : SCENARIO_RULES.returning.weeks, ladder: 'returning',
+      totalWeeks: ctx.hasEvent ? ctx.goal.weeksToEvent : SCENARIO_RULES.returning.weeks, ladder: postpartumLadder(inputs),
       runDayCount: Math.min(ctx.runDays.length, 4), available: ctx.runDays,
       runPace, age: ctx.age, targetLongMin: d ? clamp(round(d * runPace * 0.8), 30, 90) : 45, targetEasyMin: 35,
       race: ctx.hasEvent && d ? { distanceKm: d, walkBreaks: false, day: ctx.goal.eventWeekday } : null,
@@ -537,7 +551,13 @@ export function buildPlan(scenario, inputs, assessment, feasibility, restriction
   // Foundation weeks come first: the block's long run starts from theirs.
   if (ctx.foundationWeeks) ctx.longest = foundationLong(ctx, ctx.weekly, ctx.longest, ctx.longMaxKm)
   let built
-  switch (scenario) {
+  if (restrictions.walkOnly) {
+    // p05 r4: walking only until a clinician agrees.
+    built = { unit: 'time', weeks: buildWalkingPlan({
+      available: inputs.constraints.availableDays ?? inputs.availableDays, age: inputs.age,
+      days: inputs.constraints.maxRunDays ?? inputs.daysPerWeek ?? undefined,
+    }).weeks }
+  } else switch (scenario) {
     case 'complete_beginner': built = completeBeginner(ctx); break
     case 'beginner_with_deadline': built = deadlineBeginner(ctx, assessment, feasibility); break
     case 'recreational': built = recreational(ctx); break
@@ -582,6 +602,8 @@ export function buildPlan(scenario, inputs, assessment, feasibility, restriction
     paces: ctx.paces,
     goal_pace_key: ctx.goalPaceKey,
     race_day: ctx.hasEvent ? ctx.goal.eventWeekday : null,
+    walk_only: Boolean(restrictions.walkOnly),
+    walk_base_weeks: restrictions.walkOnly ? 0 : ctx.walkBase?.minutes.length ?? 0,
     foundation_weeks: foundationWeeks,
     // Mixed plans: the first week prescribed in kilometres.
     distance_from_week: built.unit === 'mixed' ? weeks.find((w) => w.unit === 'distance')?.week_number ?? null : null,

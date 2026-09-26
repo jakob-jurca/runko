@@ -70,6 +70,9 @@ export function runPlanningPipeline({ profile = {}, runs = [], memories = [], an
     }
   }
 
+  // A walking-only programme has no distance and no date to be ready for.
+  if (gate.restrictions.walkOnly) inputs = withGoal(inputs, { distanceKm: null, eventDate: null })
+
   // The caps and gaps every research rule sets for this runner, resolved by
   // precedence (limits.js), with the rule behind each value. Classification,
   // feasibility and the builder all read the same values.

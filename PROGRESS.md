@@ -14,8 +14,22 @@ table, Phase 6 = knowledge files + ai.js) — Phase 4 scope is my own choice.
   re-cut to 8,10,12,14,16,18,20 running min (+6/wk on 3 days), property
   `walkRunWithinLimits` in tests/personas/properties.mjs.
 
+- Phase 4: teens 15-17 (p08 r9-11, r14-16: weekly km / run-day / long-run
+  ceilings, longest goal 10 km at 15 and a half at 16-17, marathon refused)
+  and BMI 30+ beginners (p05 r12, r15, r17, r29: 3 run days, no intensity 26
+  weeks, earliest race 12/26/52 weeks). Limits in limits.js, enforced in
+  feasibility.js, build-distance.js, build.js.
+- Phase 5: walking-first plans and the Goom table. BMI 30-34.9 / 35-39.9: 3 / 6
+  weeks of brisk walking before the ladder (p05 r8-9, WALK_BASE_* in rules.js,
+  walkBase in build-time.js); BMI 40+ without clinician agreement: a 12-week
+  walking-only plan instead of the old block (p05 r4, gate restriction
+  walkOnly); postpartum returners get the Goom table as a 'postpartum' ladder
+  (weeks 3 and 6 trimmed to keep +10 running min/week, noted in build-time.js).
+  New workout type 'walk' + phase 'walk' in UI strings, ai.js, logging.
+
 ## Next
-Phase 4, 5, 6 (see below as they are done).
+Phase 6: knowledge files + ai.js prompt still quoting the old 10 / 30 percent
+numbers; docs (src/core/README.md, this file); then migration_v7 and push.
 
 ## Open questions
 - The injured 62-year-old half: comfortable readiness computes to 55 weeks

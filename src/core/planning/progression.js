@@ -106,7 +106,8 @@ export function weeksNeeded({
 
   // Someone who does not run yet climbs the walk-run ladder first.
   const fromZero = assessment.band === 'none'
-  const ladder = fromZero ? WALK_RUN_WEEKS[gentle ? 'gentle' : 'standard'] : 0
+  const walkBase = fromZero ? L.walkBaseWeeks ?? 0 : 0
+  const ladder = fromZero ? WALK_RUN_WEEKS[gentle ? 'gentle' : 'standard'] + walkBase : 0
   const start = fromZero
     ? AFTER_WALK_RUN
     : {
@@ -124,7 +125,7 @@ export function weeksNeeded({
   let min = ladder + build(minReq) + taper
   // A walk-run session already covers ~3 km with its walking; a walkable 5 km
   // event needs the first few weeks of the ladder, not all of it.
-  if (fromZero && walkable && minReq.long <= 3.5) min = MIN_WEEKS_FROM_ZERO
+  if (fromZero && walkable && minReq.long <= 3.5) min = MIN_WEEKS_FROM_ZERO + walkBase
   const comfortable = ladder + build(comfReq) + taper
 
   // p05 r29: a heavier beginner's earliest race, whatever the arithmetic says.

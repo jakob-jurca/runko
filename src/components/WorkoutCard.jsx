@@ -13,6 +13,7 @@ const TYPE_STYLES = {
   race: 'bg-amber-500/20 text-amber-400',
   rest: 'bg-zinc-700/30 text-zinc-400',
   walk_run: 'bg-amber-500/15 text-amber-400',
+  walk: 'bg-teal-500/15 text-teal-400',
 }
 
 /** One row of the spec block: LABEL on the left, value on the right. */

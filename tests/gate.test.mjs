@@ -43,7 +43,10 @@ check('pain_at_rest false → plan', gateFor({ pain_at_rest: false }).outcome ==
 check('BMI without height → no BMI rule', gateFor({ weight: 140 }).outcome === 'clear')
 check('BMI 39.9 → plan with a doctor notice',
   (() => { const g = gateFor({ weight: 122.2, height_cm: 175 }); return g.outcome === 'clear' && g.notices.some((n) => n.id === 'bmi_35') })())
-check('BMI 40 → blocked', gateFor({ weight: 122.5, height_cm: 175 }).reason === 'bmi_40')
+check('BMI 40 → a walking plan, no running',
+  (() => { const g = gateFor({ weight: 122.5, height_cm: 175 }); return g.outcome === 'clear' && g.restrictions.walkOnly === true && g.notices.some((n) => n.id === 'bmi_40') })())
+check('BMI 40 with clinician agreement → the ordinary beginner path',
+  (() => { const g = gateFor({ weight: 122.5, height_cm: 175, medical_clearance: true }); return g.outcome === 'clear' && !g.restrictions.walkOnly })())
 
 // Marathon is road; only above it is "limited support".
 check('marathon has no ultra notice', !gateFor({ target_distance_km: 42.2 }).notices.length)

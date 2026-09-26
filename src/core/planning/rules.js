@@ -224,6 +224,17 @@ export function raceFloorWeeks(distanceKm) {
   return row ? row[1] : Infinity
 }
 
+/**
+ * p05 r8-9: the walking base before any run-walk for a BMI 30+ beginner —
+ * minutes per brisk walk, one entry per week. 30-34.9: three walks a week,
+ * two weeks of 30-40 minutes pain-free unlock run-walk. 35-39.9: four walks a
+ * week, run-walk only after a week of 4 x 45 minutes (and clearance).
+ */
+export const WALK_BASE_30 = { sessions: 3, minutes: [30, 35, 40] }
+export const WALK_BASE_35 = { sessions: 4, minutes: [20, 25, 30, 35, 45, 45] }
+/** p05 r4: the walking-only programme (BMI 40+, no clinician agreement yet). */
+export const WALKING_PLAN = { sessions: 4, minutes: [20, 20, 25, 30, 30, 35, 40, 40, 45, 45, 45, 45], longWalkFrom: 9, longWalkExtra: 15 }
+
 export const WALK_BREAK_LONG_SHARE = 0.4
 export const WALK_BREAK_MAX_KM = 10
 /** A completion goal (no target time) may be met run-walk up to a half marathon. */

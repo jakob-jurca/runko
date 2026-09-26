@@ -538,9 +538,9 @@ export const PERSONAS = [
       pain_at_rest: false, injury_last_12m: false, break_days: 90, postpartum_cleared: true,
       sex: 'female',
     },
-    // A plan is built. Its shape (the Goom walk-run table) is Phase 5; for
-    // now it must at least be a gentle comeback with no hard sessions early.
-    expect: { scenario: 'returning', noHardSessions: { firstWeeks: 6 } },
+    // p03 r20: the Goom walk-run table from week 1 (8 x 1 min run), no hard
+    // sessions early.
+    expect: { scenario: 'returning', noHardSessions: { firstWeeks: 6 }, firstWalkRun: { repeats: 8, run_sec: 60 } },
   },
   {
     id: 'bmi-42-walker',
@@ -550,8 +550,8 @@ export const PERSONAS = [
       height_cm: 175, target_distance_km: 5, days_per_week: 3,
       pregnancy_status: 'none', pain_at_rest: false, injury_last_12m: false,
     },
-    // p05 r4: no running prescription at BMI >= 40 (walking plan comes in Phase 5).
-    expect: { blocked: { reason: 'bmi_40', mentions: ['hoja', 'zdravnik'] } },
+    // p05 r4: no running prescription at BMI >= 40: a walking plan.
+    expect: { walkingOnly: true, notice: 'bmi_40' },
   },
   {
     id: 'diabetic-inactive',
@@ -594,7 +594,8 @@ export const PERSONAS = [
       pregnancy_status: 'none', pain_at_rest: false, injury_last_12m: false,
     },
     // p05 r5: doctor visit recommended; the plan itself is built.
-    expect: { scenario: 'complete_beginner', notice: 'bmi_35', walkRun: true, noHardSessions: true },
+    // p05 r9: six weeks of brisk walking before the walk-run ladder.
+    expect: { scenario: 'complete_beginner', notice: 'bmi_35', walkRun: true, walkBase: 6, noHardSessions: true },
   },
 
   // ------------------------------------------------------------- masters
@@ -723,7 +724,7 @@ export const PERSONAS = [
       pregnancy_status: 'none', pain_at_rest: false, injury_last_12m: false,
     },
     // p05 r12, r15, r17: +10% at most, three days, no intensity for 26 weeks.
-    expect: { scenario: 'beginner_with_deadline', maxRunDays: 3, noHardSessions: true, walkRun: true },
+    expect: { scenario: 'beginner_with_deadline', maxRunDays: 3, noHardSessions: true, walkRun: true, walkBase: 3 },
   },
 ]
 

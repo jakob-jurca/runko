@@ -106,6 +106,8 @@ export function weeklyIncreaseWithinLimit(result, persona, pct = agePct(persona)
   let last = null
   for (const w of result.weeks) {
     if (hasRaceDay(w) || w.phase === 'taper') continue
+    // Walking is not running load (p05 r12 caps RUNNING minutes): the check starts with the first run.
+    if (w.days.every((d) => d.type === 'walk' || d.type === 'rest')) { last = null; continue }
     const u = w.unit ?? unit
     const load = weekLoad(w, unit)
     const prev = last && (last.unit === u ? last.load : u === 'distance' ? last.km : null)
@@ -220,9 +222,29 @@ export const SPECIFIC = {
     r.verdict === want ? { ok: true } : { ok: false, detail: `got ${r.verdict ?? 'none'}` },
 
   walkRun: (r) =>
-    r.weeks[0]?.days.some((d) => d.type === 'walk_run')
+    r.weeks.some((w) => w.days.some((d) => d.type === 'walk_run'))
       ? { ok: true }
-      : { ok: false, detail: `week 1 is ${[...new Set(runDaysOf(r.weeks[0] || { days: [] }).map((d) => d.type))].join('+') || 'empty'}` },
+      : { ok: false, detail: 'no walk-run session in the plan' },
+
+  walkBase: (r, p, weeks) => {
+    const first = r.weeks.findIndex((w) => w.days.some((d) => d.type === 'walk_run'))
+    const walked = r.weeks.slice(0, weeks).every((w) => w.days.every((d) => d.type === 'walk' || d.type === 'rest'))
+    return walked && first === weeks ? { ok: true } : { ok: false, detail: `first walk-run week index ${first}, wanted ${weeks}` }
+  },
+
+  // The first walk-run session (p03 section 2.8: the Goom table starts 8 x 1 min run).
+  firstWalkRun: (r, p, want) => {
+    const d = r.weeks.flatMap((w) => w.days).find((x) => x.type === 'walk_run')?.walk_run
+    return d && d.repeats === want.repeats && d.run_sec === want.run_sec
+      ? { ok: true }
+      : { ok: false, detail: `first walk-run is ${d ? `${d.repeats} x ${d.run_sec} s` : 'missing'}` }
+  },
+
+  walkingOnly: (r) => {
+    const types = new Set(r.weeks.flatMap((w) => w.days.map((d) => d.type)))
+    const bad = [...types].filter((x) => !['walk', 'rest'].includes(x))
+    return bad.length ? { ok: false, detail: `types: ${bad.join(', ')}` } : { ok: true }
+  },
 
   timeBased: (r) =>
     r.unit === 'time' ? { ok: true } : { ok: false, detail: 'plan is prescribed in kilometres' },
@@ -485,7 +507,7 @@ export function walkRunWithinLimits(result) {
   for (const [i, w] of weeks.entries()) {
     if (w.phase === 'taper' || w.days.some((d) => d.type === 'race')) continue
     const total = sessions[i].reduce((s, x) => s + x, 0)
-    if (lastTotal !== null && total > lastTotal + 10 + 0.01) {
+    if (lastTotal && total > lastTotal + 10 + 0.01) {
       return { ok: false, detail: `week ${w.week_number}: ${total} running min after ${lastTotal} (+${total - lastTotal})` }
     }
     const recent = Math.max(0, ...sessions.slice(Math.max(0, i - 4), i).flat())

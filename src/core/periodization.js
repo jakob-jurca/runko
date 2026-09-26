@@ -473,6 +473,7 @@ export const PHASE_INTENT = {
   sharpen: 'tekmovalno hitrost in vadbo ciljnega tempa',
   taper: 'odpravljanje utrujenosti ob ohranjanju ostrine za dan tekme',
   // Scenario phases (core/planning)
+  walk: 'hitro hojo, ki telo pripravi na obremenitev',
   walk_run: 'navajanje telesa na tek z izmenjavo hoje in teka',
   return: 'ponovno navajanje kit, kosti in sklepov na tek, brez intenzivnosti',
   consistency: 'rednost in užitek v teku, večinoma lahkotno',

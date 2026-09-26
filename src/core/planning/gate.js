@@ -63,9 +63,6 @@ export function safetyGate(inputs, assessment) {
   if (health.knownCondition === true && health.medicalClearance !== true && assessment.band === 'none') {
     return withDefaults(block('known_condition_inactive', G.knownConditionInactive, ['b01 r3', 'p01 r2']))
   }
-  if (health.bmi !== null && health.bmi >= 40) {
-    return withDefaults(block('bmi_40', G.bmi40, ['p05 r4']))
-  }
 
   // --- a plan, with restrictions and notices --------------------------------
   const result = withDefaults({ outcome: 'clear', rules: [] })
@@ -77,7 +74,13 @@ export function safetyGate(inputs, assessment) {
     result.rules.push('b01 r4')
     result.notices.push({ id: 'known_condition', text: G.knownConditionActive, rule: 'b01 r4' })
   }
-  if (health.bmi !== null && health.bmi >= 35) {
+  // p05 r4: no running prescription at BMI 40+ until a clinician agrees; a
+  // walking programme is built instead.
+  if (health.bmi !== null && health.bmi >= 40 && health.medicalClearance !== true) {
+    result.restrictions.walkOnly = true
+    result.rules.push('p05 r4')
+    result.notices.push({ id: 'bmi_40', text: G.bmi40, rule: 'p05 r4' })
+  } else if (health.bmi !== null && health.bmi >= 35) {
     result.notices.push({ id: 'bmi_35', text: G.bmi35, rule: 'p05 r5' })
   }
   if ((goal.distanceKm ?? 0) > 42.2) {

@@ -166,6 +166,7 @@ export const t = {
       race: 'tekma',
       rest: 'počitek',
       walk_run: 'hoja-tek',
+      walk: 'hitra hoja',
     },
   },
 
@@ -196,6 +197,7 @@ export const t = {
       sharpen: 'Ostrenje',
       taper: 'Razbremenitev',
       walk_run: 'Hoja-tek',
+      walk: 'Hoja',
       return: 'Vrnitev',
       consistency: 'Rednost',
       maintain: 'Ohranjanje',
@@ -560,6 +562,8 @@ export const t = {
       otherOption: (option) => `Druga varna možnost: ${option}.`,
       priorities: (list) => `Načrt daje prednost temu: ${list.join(', ')}.`,
       noGoal: 'Brez tekme in brez ciljne razdalje — gradiva rednost in veselje do teka.',
+      walkOnly: 'To je načrt hitre hoje brez teka: hodiš 3–5-krat na teden, dolžina sprehodov pa se počasi povečuje do 45–60 minut.',
+      walkBase: (weeks) => `Pred prvimi tekaškimi koraki je ${weeks} tednov hitre hoje (pogovorni tempo), da se kite in sklepi navadijo obremenitve.`,
       timeThenDistance: (week) =>
         `Začneš s hojo-tekom po minutah. Ko zmoreš približno 30 minut teka brez premora (predvidoma v ${week - 1}. tednu), načrt preide na kilometre in te postopno pripelje do tekme.`,
       foundation: (weeks, block) =>
@@ -604,9 +608,10 @@ export const t = {
         'tako bo začetek varen in prilagojen tebi. Ko ti zdravnik vadbo odobri, to označi v Zdravstvenem profilu in ' +
         'Runko ti sestavi načrt.',
       bmi40:
-        'Pri tvoji telesni teži je tek za sklepe in kite zaenkrat prevelika obremenitev. Najboljši začetek so hoja, ' +
-        'kolesarjenje, plavanje ali tek v vodi. Pred začetkom se posvetuj z osebnim zdravnikom; ko boš 45–60 minut hodil(a) ' +
-        'brez bolečin in ti zdravnik tek odobri, ti Runko pripravi postopen prehod na hojo-tek.',
+        'Pri tvoji telesni teži je tek za sklepe in kite zaenkrat prevelika obremenitev, zato je to načrt hoje, ne teka. ' +
+        'Posvetuj se z osebnim zdravnikom; ko boš 45–60 minut hodil(a) brez bolečin in ti zdravnik tek odobri (označi to ' +
+        'v Zdravstvenem profilu), ti Runko pripravi postopen prehod na hojo-tek. Hojo lahko dopolniš s kolesarjenjem, ' +
+        'plavanjem ali tekom v vodi.',
       knownConditionActive:
         'Zaradi znane bolezni načrt ne vsebuje trdih treningov, dokler ti jih zdravnik ne odobri (označi v Zdravstvenem profilu).',
       bmi35: 'Pred začetkom teka priporočamo pregled pri osebnem zdravniku. Načrt je previden, s hojo kot delom treninga.',

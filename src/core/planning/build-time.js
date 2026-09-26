@@ -12,7 +12,7 @@
  */
 import { DAYS } from '../periodization.js'
 import { heartRateFor } from '../heart-rate.js'
-import { SAFE } from './rules.js'
+import { SAFE, WALKING_PLAN } from './rules.js'
 import { pickRunDays } from './days.js'
 
 const WARMUP_MIN = 5
@@ -47,6 +47,20 @@ export const LADDERS = {
     { repeats: 4, run: 240, walk: 90 },
     { repeats: 3, run: 360, walk: 90 },
     { repeats: 2, run: 600, walk: 60 },
+    { continuous: 20 },
+  ],
+  // Goom 2019 postpartum table (p03 section 2.8), three sessions a week:
+  // 8 x 1 / 1.5, 6 x 1.5 / 2, then on to 20 minutes non-stop. Weeks 3 and 6
+  // of the research table (5 x 2 + 1 x 3 = 13 run minutes; 2 x 8 = 16) are
+  // cut to 12 and 15/18 run minutes so that three sessions never add more
+  // than +10 running minutes a week (decision 6).
+  postpartum: [
+    { repeats: 8, run: 60, walk: 90 },
+    { repeats: 6, run: 90, walk: 120 },
+    { repeats: 6, run: 120, walk: 90 },
+    { repeats: 4, run: 180, walk: 90 },
+    { repeats: 3, run: 300, walk: 120 },
+    { repeats: 2, run: 540, walk: 120 },
     { continuous: 20 },
   ],
   // A comeback from nothing: the lungs remember, tendons have detrained.
@@ -125,6 +139,48 @@ function sessionDay({ day, rung, kind = 'easy', age, runPace, title }) {
   }
 }
 
+/** A brisk walk as a stored day: talk-test effort, about 5.5 km/h. */
+function walkDay(day, minutes, age) {
+  const hr = heartRateFor(age, { paceKey: 'easy' })
+  return {
+    day, type: 'walk', title: 'Hitra hoja', time_based: true, intensity: 'easy', pace_key: 'easy',
+    pace: 'hitra hoja, še lahko govoriš (RPE 3–4)', pace_range: null,
+    distance_km: Math.round((minutes / WALK_PACE) * 10) / 10, hard_km: 0, duration_min: minutes,
+    duration_range: null, hr,
+    segments: [{ kind: 'main', label: 'GLAVNI DEL', text: `${minutes} min hitre hoje`, duration_min: minutes, hr }],
+    is_segmented: true,
+  }
+}
+
+function walkWeeks(minutes, walkDays, age, phase, { recoveryEvery = 0, longFrom = null, longExtra = 0 } = {}) {
+  return minutes.map((min, i) => {
+    const isRecovery = recoveryEvery > 0 && (i + 1) % recoveryEvery === 0
+    const each = isRecovery ? Math.max(15, Math.round((min * 0.8) / 5) * 5) : min
+    const days = DAYS.map((day) => {
+      if (!walkDays.includes(day)) return rest(day)
+      const long = longFrom !== null && i + 1 >= longFrom && !isRecovery && day === walkDays[walkDays.length - 1]
+      return walkDay(day, each + (long ? longExtra : 0), age)
+    })
+    return {
+      week_number: i + 1, phase, is_recovery: isRecovery, unit: 'time',
+      target_minutes: days.reduce((s, d) => s + (d.duration_min || 0), 0),
+      target_volume_km: Math.round(days.reduce((s, d) => s + (d.distance_km || 0), 0) * 10) / 10,
+      intent: null, days,
+    }
+  })
+}
+
+/** BMI 40+ (p05 r4): walking only, 20 up to 45-60 minutes, no running prescribed. */
+export function buildWalkingPlan({ available = null, age = null, days = WALKING_PLAN.sessions } = {}) {
+  const walkDays = pickRunDays({ count: Math.min(WALKING_PLAN.sessions, Math.max(2, days)), available, noBackToBack: false })
+  return {
+    weeks: walkWeeks(WALKING_PLAN.minutes, walkDays, age, 'walk', {
+      recoveryEvery: 4, longFrom: WALKING_PLAN.longWalkFrom, longExtra: WALKING_PLAN.longWalkExtra,
+    }),
+    runDays: walkDays,
+  }
+}
+
 function rest(day) {
   return {
     day, type: 'rest', title: 'Počitek', distance_km: 0, duration_min: 0,
@@ -148,7 +204,21 @@ const weekMinutes = (days) => days.reduce((s, d) => s + (d.type === 'race' ? 0 :
  * @param {string} [opts.ladderPhase] - phase name for ladder weeks
  * @returns {{weeks: Array, reachedTarget: boolean}}
  */
-export function buildTimePlan({
+export function buildTimePlan({ walkBase = null, ...opts }) {
+  if (!walkBase || opts.totalWeeks <= walkBase.minutes.length) return buildTimeCore(opts)
+  // p05 r8-9: brisk walking first, then the ladder from week one.
+  const runDays = pickRunDays({
+    count: Math.min(walkBase.sessions, Math.max(2, opts.runDayCount ?? 3)), available: opts.available, noBackToBack: false,
+  })
+  const base = walkWeeks(walkBase.minutes, runDays, opts.age, 'walk_base')
+  const rest = buildTimeCore({ ...opts, totalWeeks: opts.totalWeeks - base.length })
+  return {
+    ...rest,
+    weeks: [...base, ...rest.weeks.map((w) => ({ ...w, week_number: w.week_number + base.length }))],
+  }
+}
+
+function buildTimeCore({
   totalWeeks, ladder = 'standard', runDayCount = 3, available = null, runPace = 7.5, age = null,
   targetLongMin = 30, targetEasyMin = 30, race = null, ladderPhase = 'walk_run', racePhase = 'taper',
 }) {

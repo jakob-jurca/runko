@@ -20,7 +20,7 @@
  *
  * Pure data. See ../README.md for the core rules.
  */
-import { SAFE, WEEKLY_FLOOR_KM, longRunMaxMinutes } from './rules.js'
+import { SAFE, WEEKLY_FLOOR_KM, longRunMaxMinutes, WALK_BASE_30, WALK_BASE_35 } from './rules.js'
 
 /** Precedence levels, highest first (_RULE-PRECEDENCE section 1). */
 export const LEVEL = {
@@ -35,7 +35,7 @@ export const LEVEL = {
 }
 
 /** Keys whose conservative value is the MAXIMUM (gaps, waits); all others are caps. */
-const GAP_KEYS = new Set(['hardGapHours', 'hardGapHoursZ56', 'noIntensityWeeks'])
+const GAP_KEYS = new Set(['hardGapHours', 'hardGapHoursZ56', 'noIntensityWeeks', 'walkBaseWeeks'])
 
 export const isGapKey = (key) => GAP_KEYS.has(key)
 
@@ -181,6 +181,12 @@ export function computeLimits(inputs, assessment) {
     addLimit(set, 'maxRunDays', 3, { rule: 'p05 r15', level: LEVEL.POPULATION })
     addLimit(set, 'noIntensityWeeks', 26, { rule: 'p05 r17', level: LEVEL.POPULATION })
     addLimit(set, 'raceFloor', true, { rule: 'p05 r29', level: LEVEL.POPULATION })
+    // r8-9: walk first — 2-4 weeks at BMI 30-34.9, 4-8 at 35-39.9 — before any run-walk.
+    if (level === 'none') {
+      addLimit(set, 'walkBaseWeeks', bmi >= 35 ? WALK_BASE_35.minutes.length : WALK_BASE_30.minutes.length, {
+        rule: bmi >= 35 ? 'p05 r9' : 'p05 r8', level: LEVEL.POPULATION,
+      })
+    }
   }
 
   return resolveLimits(set)
