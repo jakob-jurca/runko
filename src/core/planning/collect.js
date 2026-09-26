@@ -119,6 +119,36 @@ export function collectInputs({ profile = {}, runs = [], memories = [], answers 
     : null
   const daysPerWeek = numberOrNull(profile.days_per_week)
 
+  // --- safety and health ---------------------------------------------------
+  // Onboarding asks only what safety needs; everything else comes from the
+  // optional health profile. Unknown stays null, and every later step treats
+  // null as "assume the conservative case".
+  const bool = (v) => (v === true || v === false ? v : null)
+  const pregnancy = ['none', 'pregnant', 'postpartum'].includes(profile.pregnancy_status)
+    ? profile.pregnancy_status
+    : null
+  const safety = {
+    pregnancyStatus: pregnancy,
+    weeksPostpartum: pregnancy === 'postpartum' ? numberOrNull(profile.weeks_postpartum) : null,
+    painAtRest: bool(profile.pain_at_rest),
+    breakDays: numberOrNull(profile.break_days),
+    injuryLast12m: bool(profile.injury_last_12m),
+  }
+  const heightCm = numberOrNull(profile.height_cm)
+  const weightKg = numberOrNull(profile.weight)
+  const health = {
+    sex: ['female', 'male'].includes(profile.sex) ? profile.sex : null,
+    heightCm,
+    weightKg,
+    bmi: heightCm && weightKg ? Math.round((weightKg / (heightCm / 100) ** 2) * 10) / 10 : null,
+    cardiacSymptoms: bool(profile.cardiac_symptoms),
+    knownCondition: bool(profile.known_condition),
+    medicalClearance: bool(profile.medical_clearance),
+    caesarean: bool(profile.caesarean),
+    postpartumCleared: bool(profile.postpartum_cleared),
+    marathonsCompleted: numberOrNull(profile.marathons_completed),
+  }
+
   // --- runs ----------------------------------------------------------------
   const normalizedRuns = runs
     .map((r) => ({
@@ -149,6 +179,8 @@ export function collectInputs({ profile = {}, runs = [], memories = [], answers 
     },
     notes,
     signals,
+    safety,
+    health,
     constraints,
     runs: normalizedRuns,
     answers: { ...answers },
@@ -184,6 +216,19 @@ export function inputsSummary(inputs) {
     available_days: inputs.availableDays,
     goal: inputs.goal,
     signals: inputs.signals,
+    safety: inputs.safety,
+    // Health data is stored only as far as the engine used it: the derived
+    // BMI and the flags, never height or weight themselves.
+    health: {
+      sex: inputs.health.sex,
+      bmi: inputs.health.bmi,
+      cardiac_symptoms: inputs.health.cardiacSymptoms,
+      known_condition: inputs.health.knownCondition,
+      medical_clearance: inputs.health.medicalClearance,
+      caesarean: inputs.health.caesarean,
+      postpartum_cleared: inputs.health.postpartumCleared,
+      marathons_completed: inputs.health.marathonsCompleted,
+    },
     logged_runs: inputs.runs.length,
     answers: inputs.answers,
   }

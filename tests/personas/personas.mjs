@@ -50,6 +50,7 @@ export const PERSONAS = [
       coach_notes: 'Mama dveh otrok, še nikoli nisem tekla. Rada bi udobno pretekla 5 km.',
     },
     expect: {
+      experienceLevel: 'none',
       scenario: 'complete_beginner', verdict: 'feasible',
       walkRun: true, timeBased: true, noHardSessions: true, noBackToBack: true,
       maxWeeklyIncreasePct: 10, maxRunDays: 3,
@@ -122,6 +123,7 @@ export const PERSONAS = [
       longest_run_km: 4, target_distance_km: 10, event_date: sundayIn(8), days_per_week: 3,
     },
     expect: {
+      experienceLevel: 'beginner',
       scenario: 'beginner_with_deadline', verdict: 'stretch',
       hasFallbackTarget: true, noHardSessions: true, raceWalkBreaks: true,
       maxWeeklyIncreasePct: 10, maxLongRunKm: 9,
@@ -199,6 +201,7 @@ export const PERSONAS = [
       { date: daysAgo(8), distance: 15, duration: 85, effort: 3 },
     ],
     expect: {
+      experienceLevel: 'intermediate',
       scenario: 'short_race', verdict: 'stretch', hasFallbackTarget: true,
       minHardPerWeek: { phase: 'build', count: 2 }, maxLongRunKm: 18,
       maxWeeklyIncreasePct: 10, taper: true,
@@ -214,6 +217,7 @@ export const PERSONAS = [
     },
     runs: [{ date: daysAgo(4), distance: 5, duration: 19.6, effort: 5 }],
     expect: {
+      experienceLevel: 'advanced',
       scenario: 'short_race', verdict: 'feasible',
       minHardPerWeek: { phase: 'build', count: 2 }, hasRepetitionWork: true,
       maxLongRunKm: 18, maxWeeklyIncreasePct: 10, taper: true,
@@ -255,6 +259,7 @@ export const PERSONAS = [
       longest_run_km: 24, target_distance_km: 42.2, event_date: sundayIn(18), days_per_week: 5,
     },
     expect: {
+      experienceLevel: 'advanced',
       scenario: 'long_race', verdict: 'feasible',
       reachesLongRunKm: 29, maxLongRunKm: 32, maxWeeklyIncreasePct: 10, taper: true,
       raceOnEventDay: true,

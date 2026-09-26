@@ -10,6 +10,7 @@
  * whether they are worth a question.
  */
 import { estimateVdot, pacesFromVdot } from '../periodization.js'
+import { EXPERIENCE_LEVELS } from './limits.js'
 
 const DAY_MS = 86_400_000
 const round1 = (n) => Math.round(n * 10) / 10
@@ -33,6 +34,43 @@ function bandFrom(weeklyKm) {
   if (weeklyKm < 35) return 'moderate'
   if (weeklyKm < 60) return 'high'
   return 'very_high'
+}
+
+/**
+ * `experience_level` (runko-research b01 rules 9-13): the median of three
+ * component levels — years running, current weekly volume, longest recent
+ * run — capped at one step above the years component, so a big week cannot
+ * make a newcomer "advanced".
+ *
+ * Missing data falls back to the conservative end: no stated history counts
+ * one step below the self-rated fitness level, and an unknown volume or long
+ * run counts as beginner.
+ */
+const YEARS_FROM_FITNESS = { beginner: 'beginner', intermediate: 'novice', advanced: 'intermediate' }
+
+export function experienceLevel({ months, fitnessLevel, weeklyKm, longestKm, neverRan, band }) {
+  // b01 r9: has never run and cannot run ten minutes yet.
+  if (neverRan || (band === 'none' && (months ?? 0) === 0)) return { level: 'none', years: 'none', volume: 'none', long: 'none' }
+
+  let years
+  if (months === null || months === undefined) years = YEARS_FROM_FITNESS[fitnessLevel] || 'beginner'
+  else if (months < 6) years = 'beginner'
+  else if (months < 24) years = 'novice'
+  else if (months < 60) years = 'intermediate'
+  else years = 'advanced'
+
+  const byBands = (value, bands) => {
+    if (value === null || value === undefined) return 'beginner'
+    const i = bands.findIndex((b) => value < b)
+    return ['beginner', 'novice', 'intermediate', 'advanced', 'elite'][i === -1 ? 4 : i]
+  }
+  const volume = byBands(weeklyKm, [10, 25, 50, 90]) // b01 r11
+  const long = byBands(longestKm, [5, 10, 18, 25]) // b01 r12
+
+  const idx = (l) => EXPERIENCE_LEVELS.indexOf(l)
+  const median = [years, volume, long].map(idx).sort((a, b) => a - b)[1]
+  const level = EXPERIENCE_LEVELS[Math.min(median, idx(years) + 1)] // b01 r13
+  return { level, years, volume, long }
 }
 
 /**
@@ -80,6 +118,11 @@ export function assessFitness(inputs) {
   const { vdot, source: vdotSource, basedOn } = estimateVdot(inputs.runs, inputs.fitnessLevel || 'beginner')
   const easyPace = pacesFromVdot(vdot).easy
 
+  const experience = experienceLevel({
+    months: inputs.experienceMonths, fitnessLevel: inputs.fitnessLevel,
+    weeklyKm, longestKm, neverRan, band,
+  })
+
   const contradictions = []
   if (
     inputs.statedLongestKm !== null && inputs.statedWeeklyKm !== null &&
@@ -99,6 +142,8 @@ export function assessFitness(inputs) {
     experience_months: inputs.experienceMonths,
     history,
     band,
+    experience_level: experience.level,
+    experience_components: { years: experience.years, volume: experience.volume, long: experience.long },
     running_now: band !== 'none' && band !== 'unknown',
     continuous_min: band === 'none' ? 0 : longestKm ? Math.round(longestKm * easyPace) : null,
     vdot,

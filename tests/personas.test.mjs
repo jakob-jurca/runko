@@ -46,7 +46,22 @@ for (const persona of PERSONAS) {
     record('engine runs', { ok: false, detail: err.message })
   }
 
-  if (result && result.status !== 'ready') {
+  if (result && persona.expect.blocked) {
+    // Runners the safety gate turns away (pregnant, under 15, rest pain…):
+    // no plan at all, and a kind explanation of why and whom to see.
+    const want = persona.expect.blocked
+    record('no plan is built', result.status === 'blocked' && !(result.weeks || []).length
+      ? { ok: true }
+      : { ok: false, detail: `status ${result.status}, ${(result.weeks || []).length} weeks` })
+    record(`blocked for: ${want.reason}`, result.block?.reason === want.reason
+      ? { ok: true }
+      : { ok: false, detail: `reason ${result.block?.reason ?? 'none'}` })
+    const msg = String(result.block?.message || '')
+    const refers = (want.mentions || []).filter((w) => !msg.toLowerCase().includes(w.toLowerCase()))
+    record('explains and refers', msg.length > 40 && !refers.length
+      ? { ok: true }
+      : { ok: false, detail: refers.length ? `message does not mention ${refers.join(', ')}` : 'no message' })
+  } else if (result && result.status !== 'ready') {
     record('builds once answered', { ok: false, detail: `still ${result.status}: ${(result.questions || []).map((q) => q.id).join(', ')}` })
   } else if (result) {
     record('rest days respected', restDaysRespected(result, persona))
@@ -55,7 +70,7 @@ for (const persona of PERSONAS) {
     record('run duration ≤ 2.5 h (3 h marathon)', runDurationWithinCap(result, persona))
     record('steps 2-4 stored in plan_json', planningStored(result))
     for (const [key, want] of Object.entries(persona.expect)) {
-      if (key === 'questions') continue
+      if (key === 'questions' || key === 'blocked') continue
       const fn = SPECIFIC[key]
       if (!fn) {
         record(key, { ok: false, detail: 'unknown property' })

@@ -22,6 +22,7 @@ import { clarifyQuestions } from './clarify.js'
 import { buildPlan } from './build.js'
 import { explainPlan } from './explain.js'
 import { SCENARIO_RULES } from './rules.js'
+import { computeLimits } from './limits.js'
 import { formatPace } from '../periodization.js'
 import { maxHeartRate, heartRateZones } from '../heart-rate.js'
 
@@ -101,6 +102,10 @@ export function runPlanningPipeline({ profile = {}, runs = [], memories = [], an
   }
   const scenario = buildClassification.scenario
 
+  // The caps and gaps every research rule sets for this runner, resolved by
+  // precedence (limits.js), with the rule behind each value.
+  const limits = computeLimits(inputs, assessment)
+
   // 6
   const plan = buildPlan(scenario, inputs, assessment, feasibility)
 
@@ -115,6 +120,7 @@ export function runPlanningPipeline({ profile = {}, runs = [], memories = [], an
     feasibility,
     clarify: { answers: { ...answers }, assumptions },
     rules: SCENARIO_RULES[scenario],
+    limits: { values: limits.values, rules: Object.fromEntries(Object.entries(limits.sources).map(([k, v]) => [k, v.rule])) },
     explain,
   }
 

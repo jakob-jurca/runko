@@ -143,6 +143,11 @@ export function planningStored(result) {
 // ---------------------------------------------------------------------------
 
 export const SPECIFIC = {
+  // b01 rules 9-13, read from the stored assessment.
+  experienceLevel: (r, p, want) => {
+    const got = r.stored?.planning?.assessment?.experience_level
+    return got === want ? { ok: true } : { ok: false, detail: `experience_level ${got}, expected ${want}` }
+  },
   scenario: (r, p, want) =>
     r.scenario === want ? { ok: true } : { ok: false, detail: `got ${r.scenario ?? 'none'}` },
 
