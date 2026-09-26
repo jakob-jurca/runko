@@ -34,7 +34,8 @@ table, Phase 6 = knowledge files + ai.js) — Phase 4 scope is my own choice.
   unchanged apart from the new 'walk' type texts.
 
 ## Next
-Apply supabase/migration_v7.sql, run the full suite (rls-live runs once the
+BLOCKED: supabase CLI 401 (not logged in / no SUPABASE_DB_PASSWORD). Run
+supabase/migration_v7.sql in the SQL Editor, then `npm test` (rls-live runs once the
 migration is in), push to main.
 
 ## Open questions
