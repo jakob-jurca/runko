@@ -377,14 +377,14 @@ export default function Onboarding() {
     setRuns((rs) => rs.map((r, idx) => (idx === i ? { ...r, ...patch } : r)))
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-md flex-col px-6 py-10">
+    <div className="mx-auto flex min-h-[100dvh] max-w-md flex-col px-4 pb-[max(2.5rem,env(safe-area-inset-bottom))] pt-[max(1.5rem,env(safe-area-inset-top))] sm:px-6">
       {/* progress dots */}
-      <div className="mb-10 flex gap-2">
+      <div className="mb-8 flex gap-1.5" aria-hidden>
         {stepOrder.map((_, i) => (
           <div
             key={i}
             className={`h-1.5 flex-1 rounded-full transition-colors duration-300 ${
-              i <= stepIdx ? 'bg-primary' : 'bg-zinc-800'
+              i <= stepIdx ? 'bg-primary' : 'bg-surface-raised'
             }`}
           />
         ))}
@@ -392,21 +392,21 @@ export default function Onboarding() {
 
       {step === 'path' && (
         <div className="animate-fade-up">
-          <h1 className="text-3xl font-extrabold">{t.onboarding.welcome}</h1>
-          <p className="mt-2 text-zinc-400">{t.onboarding.pathQuestion}</p>
+          <h1 className="text-[1.75rem] font-bold leading-tight tracking-tight">{t.onboarding.welcome}</h1>
+          <p className="mt-2 max-w-[60ch] leading-relaxed text-zinc-400">{t.onboarding.pathQuestion}</p>
           <div className="mt-8 space-y-3">
             <button
               onClick={() => {
                 setPath('thorough')
                 setStep('name')
               }}
-              className={`card w-full text-left transition hover:border-primary/60 active:scale-[0.98] ${
-                path === 'thorough' ? 'border-primary ring-1 ring-primary/40' : ''
+              className={`card w-full text-left transition hover:ring-white/20 active:scale-[0.98] ${
+                path === 'thorough' ? 'bg-primary-faint !ring-2 !ring-primary/70' : ''
               }`}
             >
               <div className="flex items-center gap-2">
-                <h3 className="font-bold">{t.onboarding.thoroughTitle}</h3>
-                <span className="rounded-full bg-primary-faint px-2 py-0.5 text-[10px] font-bold uppercase text-primary">
+                <h3 className="font-semibold">{t.onboarding.thoroughTitle}</h3>
+                <span className="rounded-md bg-primary-faint px-1.5 py-0.5 text-[11px] font-semibold text-primary-light">
                   {t.onboarding.thoroughBadge}
                 </span>
               </div>
@@ -419,11 +419,11 @@ export default function Onboarding() {
                 setPath('quick')
                 setStep('name')
               }}
-              className={`card w-full text-left transition hover:border-primary/60 active:scale-[0.98] ${
-                path === 'quick' ? 'border-primary ring-1 ring-primary/40' : ''
+              className={`card w-full text-left transition hover:ring-white/20 active:scale-[0.98] ${
+                path === 'quick' ? 'bg-primary-faint !ring-2 !ring-primary/70' : ''
               }`}
             >
-              <h3 className="font-bold">{t.onboarding.quickTitle}</h3>
+              <h3 className="font-semibold">{t.onboarding.quickTitle}</h3>
               <p className="mt-1 text-sm text-zinc-400">
                 {t.onboarding.quickDesc}
               </p>
@@ -434,8 +434,8 @@ export default function Onboarding() {
 
       {step === 'name' && (
         <div className="animate-fade-up">
-          <h1 className="text-3xl font-extrabold">{t.onboarding.nameTitle}</h1>
-          <p className="mt-2 text-zinc-400">{t.onboarding.nameQuestion}</p>
+          <h1 className="text-[1.75rem] font-bold leading-tight tracking-tight">{t.onboarding.nameTitle}</h1>
+          <p className="mt-2 max-w-[60ch] leading-relaxed text-zinc-400">{t.onboarding.nameQuestion}</p>
           <input
             className="input mt-8"
             placeholder={t.onboarding.namePlaceholder}
@@ -452,8 +452,8 @@ export default function Onboarding() {
 
       {step === 'body' && (
         <div className="animate-fade-up">
-          <h1 className="text-3xl font-extrabold">{t.onboarding.bodyTitle(name.split(' ')[0])}</h1>
-          <p className="mt-2 text-zinc-400">{t.onboarding.bodySubtitle}</p>
+          <h1 className="text-[1.75rem] font-bold leading-tight tracking-tight">{t.onboarding.bodyTitle(name.split(' ')[0])}</h1>
+          <p className="mt-2 max-w-[60ch] leading-relaxed text-zinc-400">{t.onboarding.bodySubtitle}</p>
           <div className="mt-8 grid grid-cols-2 gap-4">
             <div>
               <label className="label">{t.onboarding.age}</label>
@@ -489,8 +489,8 @@ export default function Onboarding() {
 
       {step === 'level' && (
         <div className="animate-fade-up">
-          <h1 className="text-3xl font-extrabold">{t.onboarding.levelTitle}</h1>
-          <p className="mt-2 text-zinc-400">{t.onboarding.levelSubtitle}</p>
+          <h1 className="text-[1.75rem] font-bold leading-tight tracking-tight">{t.onboarding.levelTitle}</h1>
+          <p className="mt-2 max-w-[60ch] leading-relaxed text-zinc-400">{t.onboarding.levelSubtitle}</p>
           <div className="mt-8 space-y-3">
             {LEVELS.map((l) => (
               <button
@@ -499,11 +499,11 @@ export default function Onboarding() {
                   setLevel(l.id)
                   go(1)
                 }}
-                className={`card w-full text-left transition hover:border-primary/60 active:scale-[0.98] ${
-                  level === l.id ? 'border-primary ring-1 ring-primary/40' : ''
+                className={`card w-full text-left transition hover:ring-white/20 active:scale-[0.98] ${
+                  level === l.id ? 'bg-primary-faint !ring-2 !ring-primary/70' : ''
                 }`}
               >
-                <h3 className="font-bold">{l.title}</h3>
+                <h3 className="font-semibold">{l.title}</h3>
                 <p className="mt-1 text-sm text-zinc-400">{l.desc}</p>
               </button>
             ))}
@@ -513,8 +513,8 @@ export default function Onboarding() {
 
       {step === 'goal' && (
         <div className="animate-fade-up">
-          <h1 className="text-3xl font-extrabold">{t.onboarding.goalTitle}</h1>
-          <p className="mt-2 text-zinc-400">
+          <h1 className="text-[1.75rem] font-bold leading-tight tracking-tight">{t.onboarding.goalTitle}</h1>
+          <p className="mt-2 max-w-[60ch] leading-relaxed text-zinc-400">
             {t.onboarding.goalSubtitle}
           </p>
 
@@ -527,10 +527,10 @@ export default function Onboarding() {
                   key={c.km}
                   type="button"
                   onClick={() => setTargetDistance(String(c.km))}
-                  className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                  className={`min-h-[44px] rounded-full px-4 py-2 font-mono text-sm font-semibold transition active:scale-95 ${
                     Number(targetDistance) === c.km
                       ? 'bg-primary text-white'
-                      : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                      : 'bg-surface-raised text-zinc-300 ring-1 ring-inset ring-white/10 hover:text-white'
                   }`}
                 >
                   {c.label}
@@ -543,7 +543,7 @@ export default function Onboarding() {
                 step="0.1"
                 min="1"
                 max="200"
-                className="input flex-1"
+                className="input flex-1 font-mono"
                 placeholder={t.onboarding.distancePlaceholder}
                 value={targetDistance}
                 onChange={(e) => setTargetDistance(e.target.value)}
@@ -559,8 +559,8 @@ export default function Onboarding() {
               <button
                 type="button"
                 onClick={() => setHasDate(true)}
-                className={`flex-1 rounded-xl px-3 py-2 text-sm font-semibold transition ${
-                  hasDate ? 'bg-primary text-white' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                className={`min-h-[48px] flex-1 rounded-xl px-3 py-2 text-sm font-semibold transition active:scale-[0.98] ${
+                  hasDate ? 'bg-primary text-white' : 'bg-surface-raised text-zinc-300 ring-1 ring-inset ring-white/10 hover:text-white'
                 }`}
               >
                 {t.onboarding.onADate}
@@ -571,8 +571,8 @@ export default function Onboarding() {
                   setHasDate(false)
                   setEventDate('')
                 }}
-                className={`flex-1 rounded-xl px-3 py-2 text-sm font-semibold transition ${
-                  !hasDate ? 'bg-primary text-white' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                className={`min-h-[48px] flex-1 rounded-xl px-3 py-2 text-sm font-semibold transition active:scale-[0.98] ${
+                  !hasDate ? 'bg-primary text-white' : 'bg-surface-raised text-zinc-300 ring-1 ring-inset ring-white/10 hover:text-white'
                 }`}
               >
                 {t.onboarding.noDate}
@@ -627,7 +627,7 @@ export default function Onboarding() {
               )}
             </p>
             {paceCheck?.warning && (
-              <p className="mt-1 text-xs text-amber-400">
+              <p className="mt-1 text-xs text-amber-300">
                 {paceCheck.warning === 'too_fast'
                   ? t.onboarding.paceTooFast(paceCheck.label)
                   : t.onboarding.paceTooSlow(paceCheck.label)}
@@ -647,8 +647,8 @@ export default function Onboarding() {
 
       {step === 'experience' && (
         <div className="animate-fade-up">
-          <h1 className="text-3xl font-extrabold">{t.onboarding.experienceTitle}</h1>
-          <p className="mt-2 text-zinc-400">
+          <h1 className="text-[1.75rem] font-bold leading-tight tracking-tight">{t.onboarding.experienceTitle}</h1>
+          <p className="mt-2 max-w-[60ch] leading-relaxed text-zinc-400">
             {t.onboarding.experienceSubtitle}
           </p>
           <div className="mt-8 space-y-5">
@@ -713,8 +713,8 @@ export default function Onboarding() {
 
       {step === 'safety' && (
         <div className="animate-fade-up">
-          <h1 className="text-3xl font-extrabold">{t.onboarding.safetyTitle}</h1>
-          <p className="mt-3 rounded-2xl bg-zinc-900 px-4 py-3 text-xs leading-relaxed text-zinc-400">
+          <h1 className="text-[1.75rem] font-bold leading-tight tracking-tight">{t.onboarding.safetyTitle}</h1>
+          <p className="mt-3 rounded-2xl bg-surface px-4 py-3 text-xs leading-relaxed text-zinc-400 ring-1 ring-inset ring-surface-line">
             {t.onboarding.safetyConsent}
           </p>
           <div className="mt-8 space-y-7">
@@ -756,7 +756,7 @@ export default function Onboarding() {
 
       {step === 'blocked' && preview?.block && (
         <div className="animate-fade-up">
-          <h1 className="text-3xl font-extrabold">{t.planning.gate.title}</h1>
+          <h1 className="text-[1.75rem] font-bold leading-tight tracking-tight">{t.planning.gate.title}</h1>
           <div className="card mt-6">
             <p className="text-sm leading-relaxed text-zinc-200">{preview.block.message}</p>
           </div>
@@ -774,8 +774,8 @@ export default function Onboarding() {
 
       {step === 'days' && (
         <div className="animate-fade-up">
-          <h1 className="text-3xl font-extrabold">{t.onboarding.daysTitle}</h1>
-          <p className="mt-2 text-zinc-400">
+          <h1 className="text-[1.75rem] font-bold leading-tight tracking-tight">{t.onboarding.daysTitle}</h1>
+          <p className="mt-2 max-w-[60ch] leading-relaxed text-zinc-400">
             {t.onboarding.daysSubtitle}
           </p>
 
@@ -787,10 +787,10 @@ export default function Onboarding() {
                   key={n}
                   type="button"
                   onClick={() => setDaysPerWeek(String(n))}
-                  className={`h-11 w-11 rounded-full text-sm font-bold transition ${
+                  className={`h-12 w-12 rounded-full font-mono text-base font-semibold transition active:scale-95 ${
                     Number(daysPerWeek) === n
                       ? 'bg-primary text-white'
-                      : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                      : 'bg-surface-raised text-zinc-300 ring-1 ring-inset ring-white/10 hover:text-white'
                   }`}
                 >
                   {n}
@@ -813,8 +813,8 @@ export default function Onboarding() {
                         days.includes(d) ? days.filter((x) => x !== d) : [...days, d]
                       )
                     }
-                    className={`rounded-lg py-2 text-xs font-bold transition ${
-                      on ? 'bg-primary text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                    className={`min-h-[44px] rounded-xl text-xs font-semibold transition active:scale-95 ${
+                      on ? 'bg-primary text-white' : 'bg-surface-raised text-zinc-400 ring-1 ring-inset ring-white/10 hover:text-zinc-200'
                     }`}
                   >
                     {t.onboarding.weekdays[WEEKDAYS.indexOf(d)]}
@@ -839,8 +839,8 @@ export default function Onboarding() {
 
       {step === 'runbefore' && (
         <div className="animate-fade-up">
-          <h1 className="text-3xl font-extrabold">{t.onboarding.runBeforeTitle}</h1>
-          <p className="mt-2 text-zinc-400">
+          <h1 className="text-[1.75rem] font-bold leading-tight tracking-tight">{t.onboarding.runBeforeTitle}</h1>
+          <p className="mt-2 max-w-[60ch] leading-relaxed text-zinc-400">
             {t.onboarding.runBeforeSubtitle}
           </p>
           <div className="mt-8 space-y-3">
@@ -849,11 +849,11 @@ export default function Onboarding() {
                 setHasRun(true)
                 setStep('runs')
               }}
-              className={`card w-full text-left transition hover:border-primary/60 active:scale-[0.98] ${
-                hasRun === true ? 'border-primary ring-1 ring-primary/40' : ''
+              className={`card w-full text-left transition hover:ring-white/20 active:scale-[0.98] ${
+                hasRun === true ? 'bg-primary-faint !ring-2 !ring-primary/70' : ''
               }`}
             >
-              <h3 className="font-bold">{t.onboarding.yesRegularly}</h3>
+              <h3 className="font-semibold">{t.onboarding.yesRegularly}</h3>
               <p className="mt-1 text-sm text-zinc-400">{t.onboarding.yesDesc}</p>
             </button>
             <button
@@ -861,11 +861,11 @@ export default function Onboarding() {
                 setHasRun(false)
                 setStep('gorun')
               }}
-              className={`card w-full text-left transition hover:border-primary/60 active:scale-[0.98] ${
-                hasRun === false ? 'border-primary ring-1 ring-primary/40' : ''
+              className={`card w-full text-left transition hover:ring-white/20 active:scale-[0.98] ${
+                hasRun === false ? 'bg-primary-faint !ring-2 !ring-primary/70' : ''
               }`}
             >
-              <h3 className="font-bold">{t.onboarding.noBrandNew}</h3>
+              <h3 className="font-semibold">{t.onboarding.noBrandNew}</h3>
               <p className="mt-1 text-sm text-zinc-400">{t.onboarding.noDesc}</p>
             </button>
           </div>
@@ -874,15 +874,15 @@ export default function Onboarding() {
 
       {step === 'runs' && (
         <div className="animate-fade-up">
-          <h1 className="text-3xl font-extrabold">{t.onboarding.runsTitle}</h1>
-          <p className="mt-2 text-zinc-400">
+          <h1 className="text-[1.75rem] font-bold leading-tight tracking-tight">{t.onboarding.runsTitle}</h1>
+          <p className="mt-2 max-w-[60ch] leading-relaxed text-zinc-400">
             {t.onboarding.runsSubtitle}
           </p>
           <div className="mt-6 space-y-4">
             {runs.map((r, i) => (
               <div key={i} className="card space-y-3">
                 <div className="flex items-center justify-between">
-                  <p className="text-xs font-bold uppercase tracking-widest text-zinc-500">{t.onboarding.runLabel(i + 1)}</p>
+                  <p className="text-sm font-medium text-zinc-400">{t.onboarding.runLabel(i + 1)}</p>
                   {i >= 3 && (
                     <button
                       type="button"
@@ -978,15 +978,15 @@ export default function Onboarding() {
 
       {step === 'gorun' && (
         <div className="animate-fade-up">
-          <h1 className="text-3xl font-extrabold">{t.onboarding.testRunTitle}</h1>
-          <div className="card mt-6 border-primary/40">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-primary">{t.onboarding.coachSays}</p>
+          <h1 className="text-[1.75rem] font-bold leading-tight tracking-tight">{t.onboarding.testRunTitle}</h1>
+          <div className="card mt-6 !ring-primary/40">
+            <p className="text-xs font-semibold text-primary-light">{t.onboarding.coachSays}</p>
             <p className="mt-2 leading-relaxed text-zinc-200">
               {t.onboarding.testRunBody}
             </p>
           </div>
           <div className="card mt-4 space-y-3">
-            <p className="text-xs font-bold uppercase tracking-widest text-zinc-500">{t.onboarding.logTestRun}</p>
+            <p className="text-sm font-medium text-zinc-400">{t.onboarding.logTestRun}</p>
             <div className="grid grid-cols-3 gap-3">
               <div>
                 <label className="label">{t.onboarding.distanceKm}</label>
@@ -1049,8 +1049,8 @@ export default function Onboarding() {
 
       {step === 'notes' && (
         <div className="animate-fade-up">
-          <h1 className="text-3xl font-extrabold">{t.onboarding.notesTitle}</h1>
-          <p className="mt-2 text-zinc-400">
+          <h1 className="text-[1.75rem] font-bold leading-tight tracking-tight">{t.onboarding.notesTitle}</h1>
+          <p className="mt-2 max-w-[60ch] leading-relaxed text-zinc-400">
             {t.onboarding.notesSubtitle}
           </p>
           <textarea
@@ -1082,7 +1082,7 @@ export default function Onboarding() {
         />
       )}
 
-      {error && <p className="mt-4 text-sm text-rose-400">{error}</p>}
+      {error && <p className="mt-4 rounded-xl bg-rose-500/10 p-3 text-sm text-rose-200 ring-1 ring-inset ring-rose-500/25">{error}</p>}
 
       {/* Bottom bar: back where it applies, and "skip for now" on every step. */}
       <div className="mt-auto flex items-center justify-between gap-4 pt-8">
@@ -1119,8 +1119,8 @@ function Choice({ question, options, value, onChange }) {
           <button
             key={String(o.value)}
             onClick={() => onChange(o.value)}
-            className={`rounded-full px-4 py-2 text-sm font-medium transition ${
-              value === o.value ? 'bg-primary text-white' : 'bg-zinc-900 text-zinc-300 hover:bg-zinc-800'
+            className={`min-h-[44px] rounded-full px-4 py-2 text-sm font-medium transition active:scale-95 ${
+              value === o.value ? 'bg-primary text-white' : 'bg-surface-raised text-zinc-300 ring-1 ring-inset ring-white/10 hover:text-white'
             }`}
           >
             {o.label}
@@ -1140,8 +1140,8 @@ function ClarifyStep({ preview, answers, onAnswer, onChooseGoal, onChangeGoal })
   if (preview.status === 'needs_answers') {
     return (
       <div className="animate-fade-up">
-        <h1 className="text-3xl font-extrabold">{t.onboarding.clarifyTitle}</h1>
-        <p className="mt-2 text-zinc-400">{t.onboarding.clarifySubtitle}</p>
+        <h1 className="text-[1.75rem] font-bold leading-tight tracking-tight">{t.onboarding.clarifyTitle}</h1>
+        <p className="mt-2 max-w-[60ch] leading-relaxed text-zinc-400">{t.onboarding.clarifySubtitle}</p>
         <div className="mt-8 space-y-8">
           {preview.questions.map((q) => (
             <div key={q.id}>
@@ -1152,10 +1152,10 @@ function ClarifyStep({ preview, answers, onAnswer, onChooseGoal, onChangeGoal })
                   <button
                     key={o.value}
                     onClick={() => onAnswer(q.id, o.value)}
-                    className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+                    className={`min-h-[44px] rounded-full px-4 py-2 text-sm font-medium transition active:scale-95 ${
                       answers[q.id] === o.value
                         ? 'bg-primary text-white'
-                        : 'bg-zinc-900 text-zinc-300 hover:bg-zinc-800'
+                        : 'bg-surface-raised text-zinc-300 ring-1 ring-inset ring-white/10 hover:text-white'
                     }`}
                   >
                     {o.label}
@@ -1185,9 +1185,9 @@ function ClarifyStep({ preview, answers, onAnswer, onChooseGoal, onChangeGoal })
     a.kind === 'no_event' ? P.alternative.no_event : P.goal(a.distance_km, a.event_date, a.walk_breaks)
   return (
     <div className="animate-fade-up">
-      <h1 className="text-3xl font-extrabold">{t.onboarding.verdictTitle}</h1>
+      <h1 className="text-[1.75rem] font-bold leading-tight tracking-tight">{t.onboarding.verdictTitle}</h1>
       <div className="card mt-6">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-rose-400">
+        <p className="text-xs font-semibold text-rose-300">
           {P.verdicts.unsafe}
         </p>
         <p className="mt-2 text-sm leading-relaxed text-zinc-200">{preview.explain?.intro}</p>
@@ -1198,7 +1198,7 @@ function ClarifyStep({ preview, answers, onAnswer, onChooseGoal, onChangeGoal })
           <button
             key={a.id}
             onClick={() => onChooseGoal(a.id)}
-            className="w-full rounded-2xl bg-zinc-900 px-4 py-3 text-left text-sm font-medium text-zinc-100 transition hover:bg-zinc-800"
+            className="flex min-h-[52px] w-full items-center rounded-2xl bg-surface px-4 py-3 text-left text-sm font-medium text-zinc-100 ring-1 ring-inset ring-surface-line transition hover:ring-primary/50 active:scale-[0.99]"
           >
             {label(a)}
           </button>
