@@ -25,7 +25,7 @@ export const SAFE = {
   weeklyIncrease: 0.1,
   /** ...b04 r12 [SAFETY]: and never by more than 20%, for anyone. */
   weeklyCeiling: 0.2,
-  /** Time-based plans: 10% or five minutes a week (walk-run rules: phase 3). */
+  /** Time-based plans: 10% or five minutes a week, at most +10 running minutes (decision 6). */
   weeklyFloorMin: 5,
 
   /**

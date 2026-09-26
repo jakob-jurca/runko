@@ -19,17 +19,20 @@ const WARMUP_MIN = 5
 const COOLDOWN_MIN = 5
 const WALK_PACE = 11 // min/km, brisk walking
 const SESSION_STEP_MIN = 5 // most any one session may grow in a week
+const WEEKLY_RUN_STEP_MIN = 10 // most the weekly running minutes may grow
 
 /** Main sets. `continuous` rungs are plain running for that many minutes. */
 export const LADDERS = {
   // 20-22 minute main sets; the running share climbs, the time barely moves.
+  // Running minutes per session go 8, 10, 12, 14, 16, 18, 20: on three run
+  // days that is +6 a week, inside the +10 running-minute cap (decision 6).
   standard: [
     { repeats: 8, run: 60, walk: 90 },
-    { repeats: 6, run: 90, walk: 120 },
     { repeats: 5, run: 120, walk: 120 },
     { repeats: 4, run: 180, walk: 120 },
-    { repeats: 3, run: 300, walk: 120 },
+    { repeats: 3, run: 280, walk: 120 },
     { repeats: 2, run: 480, walk: 180 },
+    { repeats: 2, run: 540, walk: 120 },
     { repeats: 2, run: 600, walk: 60 },
     { continuous: 20 },
   ],
@@ -203,7 +206,11 @@ export function buildTimePlan({
         long = Math.max(15, Math.round(longMin * 0.8))
       } else {
         // Grow weekly minutes by at most 10% (or 5 min): long session first.
-        const allowed = Math.max(lastTotal + SAFE.weeklyFloorMin, Math.floor(lastTotal * (1 + SAFE.weeklyIncrease)))
+        // Decision 6: and never more than +10 running minutes a week.
+        const allowed = Math.min(
+          lastTotal + WEEKLY_RUN_STEP_MIN,
+          Math.max(lastTotal + SAFE.weeklyFloorMin, Math.floor(lastTotal * (1 + SAFE.weeklyIncrease)))
+        )
         const overhead = sessions * (WARMUP_MIN + COOLDOWN_MIN)
         let budget = allowed - overhead - (longMin + easyMin * (sessions - 1))
         // No single session grows by more than 5 minutes in a week: the

@@ -9,7 +9,7 @@
 import { PERSONAS } from './personas/personas.mjs'
 import {
   SPECIFIC, restDaysRespected, weeklyIncreaseWithinLimit, longRunProgressionSafe, planningStored,
-  runDurationWithinCap, agePct, longRunShareWithinCap,
+  runDurationWithinCap, agePct, longRunShareWithinCap, walkRunWithinLimits,
 } from './personas/properties.mjs'
 import { planFor, ENGINE } from './personas/engines.mjs'
 import { check, summary } from './harness.mjs'
@@ -69,6 +69,7 @@ for (const persona of PERSONAS) {
     record('no run over 1.10 × the 30-day longest', longRunProgressionSafe(result, persona))
     record('run duration within the cap', runDurationWithinCap(result, persona))
     record('long-run share within the cap', longRunShareWithinCap(result, persona))
+    record('walk-run: +10 running min a week, sessions ≤ max(110%, +5 min)', walkRunWithinLimits(result))
     record('steps 2-4 stored in plan_json', planningStored(result))
     for (const [key, want] of Object.entries(persona.expect)) {
       if (key === 'questions' || key === 'blocked') continue

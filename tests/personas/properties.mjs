@@ -85,8 +85,7 @@ export function restDaysRespected(result, persona) {
 export function weeklyIncreaseWithinLimit(result, persona, pct = agePct(persona)) {
   const unit = result.unit
   const kmFloor = floorKm(result, persona)
-  // Walk-run minutes keep the pre-research 10% / 5 min check until the
-  // walk-run rules (decision 6) replace it.
+  // Walk-run minutes: 10% or 5 min here; the +10 running-minute rule is walkRunWithinLimits.
   const limit = (prev, u = unit) => u === 'time'
     ? Math.max(prev * 1.1, prev + FLOOR_MIN)
     : Math.min(Math.max(prev * (1 + pct / 100), prev + kmFloor), Math.max(prev * 1.2, prev + 1))
@@ -463,4 +462,33 @@ export const SPECIFIC = {
     const lead = r.weeks.findIndex((w) => w.phase !== 'foundation')
     return lead === weeks ? { ok: true } : { ok: false, detail: `${lead === -1 ? r.weeks.length : lead} foundation weeks, expected ${weeks}` }
   },
+}
+
+/**
+ * Walk-run rules (decision 6): in a minutes plan, running minutes grow by at
+ * most 10 a week, and no session runs more than max(110%, +5 min) of the
+ * longest running session of the last four weeks.
+ */
+export function walkRunWithinLimits(result) {
+  const runMin = (d) => d.walk_run
+    ? d.walk_run.run_min_total ?? 0
+    : ['easy', 'long'].includes(d.type) && d.time_based ? Math.max(0, (d.duration_min || 0) - 10) : 0
+  const weeks = result.weeks.filter((w) => w.unit === 'time')
+  if (!weeks.length) return { ok: true }
+  const sessions = weeks.map((w) => w.days.filter((d) => d.type !== 'race').map(runMin))
+  let lastTotal = null
+  for (const [i, w] of weeks.entries()) {
+    if (w.phase === 'taper' || w.days.some((d) => d.type === 'race')) continue
+    const total = sessions[i].reduce((s, x) => s + x, 0)
+    if (lastTotal !== null && total > lastTotal + 10 + 0.01) {
+      return { ok: false, detail: `week ${w.week_number}: ${total} running min after ${lastTotal} (+${total - lastTotal})` }
+    }
+    const recent = Math.max(0, ...sessions.slice(Math.max(0, i - 4), i).flat())
+    const longest = Math.max(...sessions[i])
+    if (recent && longest > Math.max(recent * 1.1, recent + 5) + 0.01) {
+      return { ok: false, detail: `week ${w.week_number}: a ${longest} min running session after ${recent} min` }
+    }
+    if (!w.is_recovery) lastTotal = total
+  }
+  return { ok: true }
 }
