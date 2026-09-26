@@ -899,6 +899,24 @@ export const t = {
   },
 
   // -------------------------------------------------------------------------
+  // Local reminders (mobile app; scheduled on the device, nothing sent to a server)
+  // -------------------------------------------------------------------------
+  reminders: {
+    title: 'Opomniki',
+    body: 'Opomniki se ustvarijo na tvoji napravi. Na strežnik se ne pošlje nič.',
+    morning: 'Jutranji opomnik',
+    morningHint: 'Vsako jutro na dan treninga: kaj te čaka danes.',
+    time: 'Ura opomnika',
+    evening: 'Večerni opomnik',
+    eveningHint: 'Večer pred dolgim tekom ali zahtevnim treningom (tempo, intervali, ponovitve, preizkus).',
+    denied: 'Obvestila so izklopljena. Vklopi jih v nastavitvah telefona in poskusi znova.',
+    unavailable: 'Obvestila v tem okolju niso na voljo.',
+    morningTitle: 'Danes te čaka trening',
+    eveningTitle: 'Jutri je zahteven trening',
+    line: (type, distance, time) => [type, distance, time].filter(Boolean).join(' · '),
+  },
+
+  // -------------------------------------------------------------------------
   // Paywall
   // -------------------------------------------------------------------------
   paywall: {

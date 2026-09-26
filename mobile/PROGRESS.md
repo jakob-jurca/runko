@@ -18,3 +18,9 @@
 ## Phase 3: core screens — done (bundles for Android; not run on a device)
 Order as asked, all reusing src/core: Dashboard (app/(tabs)/index.jsx: week, ring, phase, coach message or free-tier text, create plan, goal progress, end-of-block card, pull to refresh), WorkoutCard (2x2 figures, segment timeline, rest row, Podrobnosti, one-tap done, Prilagodi), Log (prefill, unplanned, time trial min+sec, date picker capped at today), Chat (inverted FlatList = opens at the bottom, load earlier, clear dialog, KeyboardAvoidingView), Plan overview, Onboarding (full flow incl. Tekma/Samo tečem, goals, block length, safety questions, gate/verdict/clarify), Settings, Zdravstveni profil (own screen, consent first, delete all), Paywall (UI only, "kmalu").
 Notes: web's hardcoded English "Continue" buttons use t.common.continue; decimal commas from Slovenian keyboards are normalised (lib/parse.js); a saved run resets the Log tab; Geist Mono is not used (Geist with tabular numbers).
+
+## Phase 4: mobile-only features — done
+- Local reminders (lib/reminders.js pure + lib/notifications.js expo-notifications + Settings "Opomniki"): morning reminder with today's workout (type, distance, time range) at a chosen time (default 7:30), evening-before reminder (19:00) for long run / tempo / intervals / repetitions / time trial / race. Both OFF by default; the permission is asked only on opt-in. Rescheduled for the next 14 days on dashboard load and settings change. No server.
+- Haptics on quick-log and on saving a run (expo-haptics). Pull to refresh on Dashboard (done in phase 3).
+- Core change: `t.reminders` strings in src/core/strings.js (web suite 1902 checks pass).
+- Expo Go note: on Android, Expo Go limits expo-notifications; use a development build to test reminders there.
