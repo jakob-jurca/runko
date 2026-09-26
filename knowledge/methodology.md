@@ -36,14 +36,14 @@ priority: high
   - Bone remodelling: ~3-4 months per cycle; bone stress injuries follow fast load increases.
 - Consequence: cardiovascular fitness grows faster than tendons/bone. Runners feel ready for more before their tissues are. Hold volume steady even when it "feels easy".
 
-## 4. The 10 percent rule (use as a ceiling, not a target)
-- Rule: do not increase weekly volume by more than ~10% per week.
+## 4. Weekly progression (the 10 percent rule, by age; a ceiling, not a target)
+- Rule: the weekly step is at most ~10% for adults under 50, ~8% from 50, ~5-7% from 60 (7% only with 10+ years of running and no injury this year), and NEVER more than 20% for anyone. Where the percentage rounds to nothing, the step is a whole kilometre at least (2 km novice, 3 km intermediate, 5 km advanced; 1 km from 50). The week after a lighter week repeats the last loading week; growth resumes the week after that.
 - Evidence: a 13-week 10%-progression programme did NOT reduce injuries vs an 8-week faster programme in novices (20.8% vs 20.3% injured). [Buist 2008] Novices increasing weekly distance > 30% over 2 weeks had more distance-related injuries (patellofemoral pain, ITBS, etc.) than those < 10%. [Nielsen 2014]
 - Newer evidence: single RUN distance matters more than weekly ratio. In 5,205 runners over 18 months, a single session > 10% longer than the longest run of the previous 30 days raised overuse-injury rate (dose-dependent: 10-30% spike, 30-100%, > 100% spike highest). Weekly ratio and ACWR did not show this. [Frandsen 2025]
 - Apply as:
-  1. Weekly volume: +5-10% per week for most runners; low-volume runners (< 20 km/week) may add up to ~2-3 km/week even if that is > 10%.
+  1. Weekly volume: +5-10% per week for most runners (the age steps above); low-volume runners (< 20 km/week) may add up to ~2-3 km/week even if that is > 10%.
   2. Single run: never > 10% longer than the longest run in the last 30 days.
-  3. Every 3rd or 4th week: down week at ~70-80% of previous week.
+  3. A down week at ~75% of the last loading week every 4th week (every 3rd for beginners and from 50; ~70% from 60); a hold week follows it.
   4. Returning after a break or injury: restart below previous volume, rebuild; do not jump back.
 - ACWR (acute 7-day / chronic 28-day load): 0.8-1.3 historically called "sweet spot", > 1.5 "danger zone" [Gabbett 2016]. Method is disputed statistically [Impellizzeri 2020]. Use only as a secondary warning signal, not as a rule.
 
@@ -83,7 +83,7 @@ Taper evidence: reduce volume 41-60% over ~2 weeks, keep intensity and frequency
 
 ## 8. Plan-generation rules (apply these)
 1. Start from current weekly volume (average last 4 weeks), never from goal volume.
-2. Long run: capped primarily by DURATION — ≤ 150 min (2.5 h) for most runners, up to 180 min (3 h) in marathon-and-longer plans. Time on feet, not distance, is what loads tendons and bones, so a slower runner reaches the cap at fewer kilometres, and reaching the cap counts as marathon-ready. Above ~50 km/week, ~30% of weekly volume is a guide for the long run's size [Daniels], not a hard cap: marathon builds may exceed it where the long run needs to reach its peak, but never the duration cap.
+2. Long run: capped primarily by DURATION — ≤ 150 min (2.5 h) for most runners, up to 180 min (3 h) in marathon-and-longer plans. Time on feet, not distance, is what loads tendons and bones, so a slower runner reaches the cap at fewer kilometres, and reaching the cap counts as marathon-ready. Below ~50 km/week the long run is capped at a share of the week: 60% on 2 run days, 45% on 3 run days, 45% on 4+ days under 40 km (36% from 40 km). Above ~50 km/week, ~36% of weekly volume is a guide for the long run's size, not a hard cap: marathon builds may exceed it where the long run needs to reach its peak, but never the duration cap.
 3. Recovery/down week every 3rd-4th week at 70-80% volume.
 4. Quality sessions: 0 for beginners in first 8 weeks (strides only), 1 for 3-4 runs/week, 2 for 5-7 runs/week.
 5. Hard/easy alternation. No quality session the day before or after the long run for amateurs.

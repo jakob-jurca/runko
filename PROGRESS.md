@@ -27,9 +27,15 @@ table, Phase 6 = knowledge files + ai.js) — Phase 4 scope is my own choice.
   (weeks 3 and 6 trimmed to keep +10 running min/week, noted in build-time.js).
   New workout type 'walk' + phase 'walk' in UI strings, ai.js, logging.
 
+- Phase 6: knowledge files (methodology, workout-types, beginners, faq,
+  recreational, returning, short-race, INDEX) and the plan-page "how built"
+  string no longer quote a flat 10% weekly / 30% long-run share; ai.js itself
+  carried no such numbers (its per-week rules come from the engine), so it is
+  unchanged apart from the new 'walk' type texts.
+
 ## Next
-Phase 6: knowledge files + ai.js prompt still quoting the old 10 / 30 percent
-numbers; docs (src/core/README.md, this file); then migration_v7 and push.
+Apply supabase/migration_v7.sql, run the full suite (rls-live runs once the
+migration is in), push to main.
 
 ## Open questions
 - The injured 62-year-old half: comfortable readiness computes to 55 weeks

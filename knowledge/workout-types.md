@@ -49,7 +49,7 @@ Quality sessions = tempo, interval, repetition types (and M-pace runs). Strides 
 
 ## long
 - Purpose: endurance, glycogen storage, fat use, musculoskeletal durability, mental tolerance. Marathon-critical.
-- Structure: continuous E pace. Length capped by duration: ≤ 150 min, up to 180 min in marathon plans; above ~50 km/week ~30% of weekly volume is a guide, not a cap (see methodology.md). Marathon plans peak at ~29-32 km or 3 h, whichever comes first (Pfitzinger), or 26 km (Hansons, run on pre-fatigued legs). Half-marathon plans peak at 16-22 km or 2.5 h. 5K/10K: 60-90 min.
+- Structure: continuous E pace. Length capped by duration: ≤ 150 min, up to 180 min in marathon plans; below ~50 km/week the long run is at most 60% of the week on 2 run days, 45% on 3, and 45% on 4+ days under 40 km (36% from 40 km); above ~50 km/week ~36% is a guide, not a cap (see methodology.md). Marathon plans peak at ~29-32 km or 3 h, whichever comes first (Pfitzinger), or 26 km (Hansons, run on pre-fatigued legs). Half-marathon plans peak at 16-22 km or 2.5 h. 5K/10K: 60-90 min.
 - Variants (build/sharpen, experienced runners only): last 20-30% at M pace; M-pace segments (e.g. 3 x 5 km M within 25-30 km); fast-finish.
 - Target: E pace; M-pace segments per vdot.md.
 - Frequency: 1/week (every 2nd week for low-volume runners in down weeks).

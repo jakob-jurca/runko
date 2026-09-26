@@ -4,7 +4,7 @@ Tokens = body after HTML comments are stripped, ~4 chars/token, same estimate as
 vdot.md            high    ~ 2962 tok  load_when: plan_generation, pace_question
                    Daniels-Gilbert formulas + full VDOT 30-85 tables (race times, E/M/T/I/R paces), intensity limits, update/adjustment rules.
 methodology.md     high    ~ 2077 tok  load_when: plan_generation, pace_question, workout_question
-                   Intensity zones, 80/20, progressive overload, 10% rule + single-run spike evidence, recovery, periodization phases, plan rules.
+                   Intensity zones, 80/20, progressive overload, weekly progression by age + single-run spike evidence, recovery, periodization phases, plan rules.
 workout-types.md   high    ~ 2382 tok  load_when: plan_generation, workout_question
                    One ## section per engine type (easy, long, tempo, interval, repetition, cross, rest, race) with variants, paces, frequency, phase, plain-language line.
 injuries.md        high    ~ 2460 tok  load_when: injury_mention

@@ -15,7 +15,7 @@ Who: has a real running history but is coming back after a break (weeks to years
 Why caution: aerobic fitness returns quickly; tendons, bones and connective tissue lose conditioning with rest and take longer to rebuild. Returning runners tend to do too much because it "used to be easy".
 How the plan is built (the app enforces these; explain them, never contradict them):
 - Starts well below their previous level, at or below what they run now. Under ~8 km a week: time-based, starting with walk-run (2 min run / 1 min walk), bouts growing weekly.
-- Conservative ramp: +10% a week at most, long run +1 km or 10%, a lighter week every 4th.
+- Conservative ramp: +10% a week at most (less from 50), long run +1 km or 10%, a lighter week every 4th, a hold week after it. Postpartum: the Goom walk-run table (8 x 1 min run / 1.5 min walk, three sessions a week).
 - NO intensity for the first 6 weeks. After that at most one short threshold session a week.
 - After an injury: never two run days in a row.
 - With an event: judged against where they are now, not where they were.

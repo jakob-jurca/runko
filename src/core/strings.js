@@ -190,7 +190,7 @@ export const t = {
     noPlan: 'Načrta še ni.',
     howBuilt: 'Kako je nastal ta načrt',
     howBuiltBody:
-      'Obseg raste za največ 10 % na teden, vsak 4. teden se zmanjša na približno 70 %, da trening zaleže, in približno 80 % teka je lahkotnega. Faze:',
+      'Obseg raste počasi (za odrasle do 50 let za največ 10 % na teden, pozneje manj), vsak 3. ali 4. teden je lažji, da trening zaleže, in večina teka je lahkotnega. Faze:',
     phases: {
       base: 'Osnova',
       build: 'Nadgradnja',

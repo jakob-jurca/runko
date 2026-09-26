@@ -49,7 +49,7 @@ this folder.
 | `knowledge.js` | Loads `/knowledge/*.md` and injects the relevant parts into prompts. |
 | `knowledge-scenarios.js` | Picks the one `## Scenario: <id>` section plan generation loads. Pure, tested. |
 | `periodization.js` | The training-plan maths: VDOT, paces, phases, volume, taper, week layout. |
-| `planning/` | The planning pipeline, one file per step: `collect` → `assess` → `gate` (safety: no plan, restrictions, notices) → `classify` (seven runner scenarios) → `feasibility` (feasible / stretch / unsafe) → `clarify` (≤ 3 questions) → `build` (a builder per scenario) → `explain`. `rules.js` holds the safety limits every step shares; `limits.js` combines the research rules (runko-research) that apply to one runner into caps and gaps by the research's precedence order, recording the rule behind each value; `guard.js` keeps AI-adapted weeks inside them. Pure code, no AI; tested by `tests/personas.test.mjs`. |
+| `planning/` | The planning pipeline, one file per step: `collect` → `assess` → `gate` (safety: no plan, restrictions such as walking-only or no hard sessions, notices) → `classify` (seven runner scenarios) → `feasibility` (feasible / stretch / unsafe) → `clarify` (≤ 3 questions) → `build` (a builder per scenario) → `explain`. `rules.js` holds the safety limits every step shares; `limits.js` combines the research rules (runko-research) that apply to one runner into caps and gaps by the research's precedence order, recording the rule behind each value; `guard.js` keeps AI-adapted weeks inside them. Pure code, no AI; tested by `tests/personas.test.mjs`. |
 | `plan.js` | The plan engine — runs the pipeline, has the AI describe the result (one call), persists it. |
 | `subscription.js` | Trial and premium gating. |
 

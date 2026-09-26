@@ -14,7 +14,7 @@ priority: medium
 Who: runs for health, stress relief or enjoyment. No event, no target distance or time. Wants to feel fitter, not to peak.
 How the plan is built (the app enforces these; explain them, never contradict them):
 - A rolling plan, not a race build: no phases toward a date, no taper.
-- Volume grows gently (at most 10% a week, a lighter week every 4th) to about 25% above where they are now, then settles there. More is not the goal; sustainable is.
+- Volume grows gently (at most 10% a week (less from 50), a lighter week every 4th) to about 25% above where they are now, then settles there. More is not the goal; sustainable is.
 - Almost everything is easy, conversational running (80/20 or easier).
 - Optional variety: on one easy run a week, 4-6 strides of ~20 s (quick, relaxed, not a sprint) with full walk recovery. Optional means optional.
 - The long run grows only slightly; it is the "longer, relaxed" run of the week.

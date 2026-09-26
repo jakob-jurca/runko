@@ -22,7 +22,7 @@ Usually nothing: heat, humidity, caffeine, poor sleep, dehydration, stress and l
 Consistency and volume first (more easy running over months), then 1-2 quality sessions per week (threshold and intervals at VDOT paces), plus strides. Most amateurs improve fastest by running more easy km, not more hard sessions. [Daniels]
 
 ## How much should I increase my weekly distance?
-~5-10% per week, with a lighter week every 3rd-4th week. More important: never make a single run > 10% longer than your longest run in the last 30 days. [Frandsen 2025; Nielsen 2014]
+~5-10% per week (less with age: ~8% from 50, ~5-7% from 60; never more than 20%), with a lighter week every 3rd-4th week. More important: never make a single run > 10% longer than your longest run in the last 30 days. [Frandsen 2025; Nielsen 2014]
 
 ## Is it OK to run every day?
 Yes for experienced runners with mostly easy days. Beginners: rest day between runs for the first 2-3 months. Frequency grows only as tissues adapt.
