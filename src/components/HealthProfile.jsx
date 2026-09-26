@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getHealthProfile, saveHealthProfile, deleteHealthProfile, updateProfile } from '../core/db'
+import { ShieldCheck, Trash } from '@phosphor-icons/react'
 import { t } from '../core/strings'
 
 const H = t.settings.health
@@ -119,19 +120,24 @@ export default function HealthProfile({ profile, onChanged }) {
 
   return (
     <section className="card mt-4 animate-fade-up" style={{ animationDelay: '70ms' }}>
-      <h2 className="mb-1 text-sm font-bold uppercase tracking-widest text-zinc-500">{H.title}</h2>
-      <p className="mb-4 text-xs text-zinc-500">{H.body}</p>
+      <h2 className="mb-1 flex items-center gap-2 text-base font-semibold text-zinc-100">
+        <ShieldCheck size={18} className="text-zinc-400" />
+        {H.title}
+      </h2>
+      <p className="mb-4 max-w-[60ch] text-sm leading-relaxed text-zinc-500">{H.body}</p>
 
-      {stored === undefined && !error ? null : !consent ? (
+      {stored === undefined && !error ? (
+        <div className="skeleton h-24" aria-busy="true" />
+      ) : !consent ? (
         <div className="space-y-4">
-          <p className="rounded-2xl bg-zinc-950/60 p-3 text-xs leading-relaxed text-zinc-400">{H.consent}</p>
+          <p className="rounded-xl bg-canvas/70 p-4 text-sm leading-relaxed text-zinc-300">{H.consent}</p>
           <button className="btn-primary w-full text-sm" onClick={() => setConsent(true)}>
             {H.accept}
           </button>
         </div>
       ) : (
         <div className="space-y-6">
-          <p className="text-xs text-zinc-600">{H.optionalHint}</p>
+          <p className="text-sm text-zinc-500">{H.optionalHint}</p>
           <Choice label={H.sex} value={form.sex} onChange={set('sex')} options={H.sexOptions} />
           <div>
             <label className="label">{H.height}</label>
@@ -202,12 +208,13 @@ export default function HealthProfile({ profile, onChanged }) {
       <button
         onClick={removeAll}
         disabled={busy}
-        className="mt-4 w-full text-center text-xs text-zinc-500 underline underline-offset-4 hover:text-rose-400"
+        className="mt-5 flex min-h-[44px] w-full items-center justify-center gap-1.5 text-center text-sm text-zinc-500 transition hover:text-rose-300 disabled:opacity-50"
       >
+        <Trash size={16} />
         {H.deleteAll}
       </button>
-      {status && <p className="mt-3 text-xs text-primary">{status}</p>}
-      {error && <p className="mt-3 text-xs text-rose-400">{error}</p>}
+      {status && <p className="mt-3 text-sm text-primary-light" role="status">{status}</p>}
+      {error && <p className="mt-3 text-sm text-rose-300" role="alert">{error}</p>}
     </section>
   )
 }
@@ -220,14 +227,15 @@ const YES_NO = [
 function Choice({ label, value, onChange, options }) {
   return (
     <div>
-      <p className="text-sm font-semibold">{label}</p>
+      <p className="text-sm font-medium leading-relaxed text-zinc-200">{label}</p>
       <div className="mt-2 flex flex-wrap gap-2">
         {options.map((o) => (
           <button
             key={String(o.value)}
             onClick={() => onChange(value === o.value ? null : o.value)}
-            className={`rounded-full px-4 py-1.5 text-sm font-medium transition ${
-              value === o.value ? 'bg-primary text-white' : 'bg-zinc-900 text-zinc-300 hover:bg-zinc-800'
+            aria-pressed={value === o.value}
+            className={`min-h-[44px] rounded-full px-4 py-2 text-sm font-medium transition active:scale-95 ${
+              value === o.value ? 'bg-primary text-white' : 'bg-surface-raised text-zinc-300 ring-1 ring-inset ring-white/10 hover:text-white'
             }`}
           >
             {o.label}

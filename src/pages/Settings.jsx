@@ -5,6 +5,7 @@ import { isTrialActive, trialDaysLeft, hasActiveSubscription, startCheckout } fr
 import { getMemories, deleteMemory } from '../core/memory'
 import { goalLabel } from '../core/periodization'
 import { maxHeartRate } from '../core/heart-rate'
+import { X } from '@phosphor-icons/react'
 import { t } from '../core/strings'
 import HealthProfile from '../components/HealthProfile'
 
@@ -47,13 +48,13 @@ export default function Settings() {
   }
 
   return (
-    <main className="mx-auto max-w-2xl px-5 py-8">
-      <h1 className="text-2xl font-extrabold animate-fade-up">{t.settings.title}</h1>
+    <main className="mx-auto max-w-2xl px-4 pb-10 pt-[max(1.5rem,env(safe-area-inset-top))] sm:px-6">
+      <h1 className="text-[1.75rem] font-bold tracking-tight animate-fade-up">{t.settings.title}</h1>
 
       {/* Profile */}
       <section className="card mt-6 animate-fade-up" style={{ animationDelay: '50ms' }}>
-        <h2 className="mb-4 text-sm font-bold uppercase tracking-widest text-zinc-500">{t.settings.profile}</h2>
-        <dl className="space-y-3 text-sm">
+        <h2 className="mb-4 text-base font-semibold text-zinc-100">{t.settings.profile}</h2>
+        <dl className="divide-y divide-surface-line text-sm">
           <Row label={t.settings.name} value={profile.name} />
           <Row label={t.settings.email} value={session.user.email} />
           <Row label={t.settings.age} value={profile.age} />
@@ -69,10 +70,10 @@ export default function Settings() {
 
       {/* What the coach remembers */}
       <section className="card mt-4 animate-fade-up" style={{ animationDelay: '60ms' }}>
-        <h2 className="mb-1 text-sm font-bold uppercase tracking-widest text-zinc-500">
+        <h2 className="mb-1 text-base font-semibold text-zinc-100">
           {t.settings.memoryTitle}
         </h2>
-        <p className="mb-4 text-xs text-zinc-500">
+        <p className="mb-4 max-w-[60ch] text-sm leading-relaxed text-zinc-500">
           {t.settings.memoryBody}
         </p>
 
@@ -85,33 +86,33 @@ export default function Settings() {
             {memories.map((m) => (
               <li
                 key={m.id}
-                className="flex items-start gap-3 rounded-xl bg-zinc-950/60 p-3 animate-fade-in"
+                className="flex items-start gap-3 rounded-xl bg-canvas/70 p-3 animate-fade-in"
               >
-                <span className="mt-0.5 shrink-0 rounded-full bg-primary-faint px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary">
+                <span className="mt-0.5 shrink-0 rounded-md bg-primary-faint px-1.5 py-0.5 text-[11px] font-semibold text-primary-light">
                   {t.settings.memoryCategories[m.category] || m.category}
                 </span>
-                <p className="min-w-0 flex-1 text-sm text-zinc-200">{m.content}</p>
+                <p className="min-w-0 flex-1 text-sm leading-relaxed text-zinc-200">{m.content}</p>
                 <button
                   onClick={() => forget(m.id)}
                   aria-label={t.settings.forget}
                   title={t.settings.forget}
-                  className="shrink-0 rounded-full px-2 text-lg leading-none text-zinc-600 transition hover:text-rose-400"
+                  className="-m-1.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-zinc-500 transition hover:bg-rose-500/10 hover:text-rose-300"
                 >
-                  ×
+                  <X size={16} />
                 </button>
               </li>
             ))}
           </ul>
         )}
-        {memoryError && <p className="mt-3 text-xs text-rose-400">{memoryError}</p>}
+        {memoryError && <p className="mt-3 text-sm text-rose-300">{memoryError}</p>}
       </section>
 
       {/* Training plan — rebuild any time */}
       <section className="card mt-4 animate-fade-up" style={{ animationDelay: '75ms' }}>
-        <h2 className="mb-1 text-sm font-bold uppercase tracking-widest text-zinc-500">
+        <h2 className="mb-1 text-base font-semibold text-zinc-100">
           {t.settings.planTitle}
         </h2>
-        <p className="mb-4 text-xs text-zinc-500">
+        <p className="mb-4 max-w-[60ch] text-sm leading-relaxed text-zinc-500">
           {t.settings.planBody}
         </p>
         <button
@@ -124,12 +125,12 @@ export default function Settings() {
 
       {/* Subscription */}
       <section className="card mt-4 animate-fade-up" style={{ animationDelay: '100ms' }}>
-        <h2 className="mb-4 text-sm font-bold uppercase tracking-widest text-zinc-500">
+        <h2 className="mb-4 text-base font-semibold text-zinc-100">
           {t.settings.subscription}
         </h2>
         {hasActiveSubscription(profile) ? (
           <p className="text-sm">
-            <span className="font-semibold text-primary">{t.subscription.planName}</span> — {t.settings.premiumActive}
+            <span className="font-semibold text-primary-light">{t.subscription.planName}</span> · {t.settings.premiumActive}
           </p>
         ) : isTrialActive(profile) ? (
           <>
@@ -138,7 +139,7 @@ export default function Settings() {
                 <p className="font-semibold">{t.settings.trial}</p>
                 <p className="text-sm text-zinc-400">{t.settings.trialDaysLeft(trialDaysLeft(profile))}</p>
               </div>
-              <span className="rounded-full bg-primary-faint px-3 py-1 text-xs font-bold text-primary">
+              <span className="rounded-md bg-primary-faint px-2 py-1 font-mono text-[11px] font-semibold text-primary-light">
                 TRIAL
               </span>
             </div>
@@ -160,22 +161,22 @@ export default function Settings() {
 
       <button
         onClick={signOut}
-        className="btn-ghost mt-6 w-full text-rose-400 hover:border-rose-500/50 animate-fade-up"
+        className="btn-ghost mt-6 w-full !text-rose-300 hover:!bg-rose-500/10 animate-fade-up"
         style={{ animationDelay: '200ms' }}
       >
         {t.settings.signOut}
       </button>
 
-      <p className="mt-8 text-center text-xs text-zinc-600">{t.settings.version}</p>
+      <p className="mt-8 text-center font-mono text-xs text-zinc-600">{t.settings.version}</p>
     </main>
   )
 }
 
 function Row({ label, value, capitalize }) {
   return (
-    <div className="flex justify-between gap-4">
+    <div className="flex justify-between gap-4 py-2.5 first:pt-0 last:pb-0">
       <dt className="text-zinc-500">{label}</dt>
-      <dd className={`truncate font-medium ${capitalize ? 'capitalize' : ''}`}>{value || '—'}</dd>
+      <dd className={`truncate text-right font-medium ${capitalize ? 'capitalize' : ''}`}>{value || '-'}</dd>
     </div>
   )
 }
