@@ -1,0 +1,7 @@
+node_modules/
+.expo/
+dist/
+platform/knowledge-files.js
+.env
+.env.*
+!.env.example

@@ -12,6 +12,7 @@
  * See /knowledge/README.md for the file format and the situation vocabulary.
  */
 import { IS_DEV } from './env'
+import { RAW_FILES, RESEARCH_FILES } from './knowledge-files.js'
 import { scenarioSection, documentForScenario } from './knowledge-scenarios.js'
 import { parseFrontmatter, contentOf, estimateTokens } from './frontmatter.js'
 import { SITUATIONS, detectSituations } from './situations.js'
@@ -29,12 +30,7 @@ export { SITUATIONS, detectSituations }
 // Loading + parsing
 // ---------------------------------------------------------------------------
 
-// Bundled at build time. `?raw` gives us the file as a string.
-const RAW_FILES = import.meta.glob('../../knowledge/*.md', {
-  query: '?raw',
-  import: 'default',
-  eager: true,
-})
+// Bundled at build time (see knowledge-files.js, the platform touchpoint).
 
 const PRIORITY_RANK = { high: 0, medium: 1, low: 2 }
 
@@ -66,11 +62,6 @@ const DOCUMENTS = Object.entries(RAW_FILES)
 // The 35 runtime summaries of the research files (knowledge/research/). They
 // are not part of the ordinary documents above: plan generation and chat pick
 // from them with the rules in research-select.js.
-const RESEARCH_FILES = import.meta.glob('../../knowledge/research/*.md', {
-  query: '?raw',
-  import: 'default',
-  eager: true,
-})
 const RESEARCH = Object.entries(RESEARCH_FILES).map(([path, raw]) => parseResearchDoc(raw, path.split('/').pop()))
 
 /** Every parsed document, including the empty ones. For diagnostics/tests. */

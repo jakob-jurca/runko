@@ -20,3 +20,7 @@ export const SUPABASE_ANON_KEY = clean(import.meta.env.VITE_SUPABASE_ANON_KEY)
 // import.meta.env value into the browser bundle, so a Groq key in this file
 // would be readable by anyone. It lives as a Supabase secret and is used
 // only by supabase/functions/ai-proxy.
+
+// Extra supabase-js auth options for this platform. On the web the SDK reads
+// the emailed link from the URL; a native port swaps in its own storage.
+export const AUTH_OPTIONS = { detectSessionInUrl: true }

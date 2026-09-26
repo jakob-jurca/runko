@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import { IS_DEV, SUPABASE_URL, SUPABASE_ANON_KEY } from './env'
+import { IS_DEV, SUPABASE_URL, SUPABASE_ANON_KEY, AUTH_OPTIONS } from './env'
 
 // Placeholders keep the app booting (with a visible warning banner) before
 // the developer has filled in .env — see isSupabaseConfigured below.
@@ -15,8 +15,9 @@ export const supabase = createClient(url, anonKey, {
     // lock. Implicit, not PKCE: PKCE only works if the link is opened in the
     // same browser that requested it, and reset emails are often opened on a
     // phone.
-    detectSessionInUrl: true,
     flowType: 'implicit',
+    // Platform-specific: detectSessionInUrl (web) or a storage adapter (native).
+    ...AUTH_OPTIONS,
   },
 })
 
