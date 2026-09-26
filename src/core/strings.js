@@ -379,6 +379,33 @@ export const t = {
       'npr. Koleno nagaja, če tečem dva dneva zapored. Tečem lahko samo zjutraj. Lani 5 km v 25:30…',
     buildMyPlan: 'Sestavi mi načrt',
 
+    // Safety questions: only what the plan engine needs to keep you safe.
+    safetyTitle: 'Varnost na prvem mestu',
+    safetyConsent:
+      'Ta vprašanja so o zdravju. Odgovore uporabimo samo za to, da je tvoj načrt varen — ne pošiljamo jih AI trenerju ' +
+      'in jih ne delimo z nikomer. Spremeniš jih ob novem načrtu, izbrišeš pa kadar koli v Nastavitvah › Zdravstveni profil.',
+    pregnancyQuestion: 'Si noseča ali si v zadnjem letu rodila?',
+    pregnancyOptions: [
+      { value: 'none', label: 'Ne' },
+      { value: 'pregnant', label: 'Noseča sem' },
+      { value: 'postpartum', label: 'Rodila sem' },
+    ],
+    weeksPostpartum: 'Koliko tednov je od poroda?',
+    painQuestion: 'Te kaj boli v mirovanju ali pri hoji?',
+    injuryQuestion: 'Si imel(a) v zadnjih 12 mesecih tekaško poškodbo?',
+    breakQuestion: 'Kdaj si nazadnje redno tekel(a)?',
+    breakOptions: [
+      { value: '0', label: 'Tečem redno' },
+      { value: '5', label: 'Pred manj kot tednom' },
+      { value: '28', label: 'Pred 1–4 tedni' },
+      { value: '56', label: 'Pred 1–2 mesecema' },
+      { value: '90', label: 'Pred več kot 2 mesecema' },
+      { value: 'never', label: 'Še nikoli nisem tekel(a)' },
+    ],
+    yes: 'Da',
+    no: 'Ne',
+    blockedBack: 'Popravi odgovore',
+    blockedToApp: 'V aplikacijo',
     clarifyTitle: 'Še nekaj vprašanj',
     clarifySubtitle: 'Brez teh odgovorov bi moral trener ugibati — in ugibanje tu pomeni napačen načrt.',
     clarifyContinue: 'Naprej',
@@ -543,6 +570,50 @@ export const t = {
       walk_breaks: (km) => `priti do cilja na ${String(km).replace('.', ',')} km s hojo po potrebi`,
       finish: (km) => `udobno priti do cilja na ${String(km).replace('.', ',')} km, brez ciljnega časa`,
     },
+    // Safety gate (core/planning/gate.js): when Runko builds no plan, and why.
+    gate: {
+      title: 'Načrta zaenkrat ne sestavim',
+      under15:
+        'Runko je zaenkrat na voljo od 15. leta naprej, zato ti načrta še ne morem sestaviti. ' +
+        'Do takrat je za tek najboljša igra, šport s prijatelji in tekaški klub za mlade, kjer te vodi trener. ' +
+        'Veseli bomo, ko se vrneš.',
+      pregnant:
+        'Iskrene čestitke! V nosečnosti Runko ne sestavlja tekaških načrtov: kaj je varno, je odvisno od tvojega zdravja ' +
+        'in poteka nosečnosti, tega pa aplikacija ne more zanesljivo oceniti. O gibanju se posvetuj s svojim ginekologom, ' +
+        'osebnim zdravnikom ali babico — povedali ti bodo, kaj je zate primerno. Ko boš po porodu pripravljena, ti Runko ' +
+        'pomaga pri postopni vrnitvi k teku.',
+      postpartumEarly:
+        'V prvih šestih tednih po porodu je tek še prezgoden: telo, zlasti medenično dno, potrebuje čas, da se zaceli. ' +
+        'Zdaj so pravi izbor sprehodi in vaje za medenično dno. Po poporodnem pregledu pri zdravniku ali babici se vrni — ' +
+        'Runko ti pripravi postopno vrnitev k teku, praviloma od 12. tedna po porodu naprej.',
+      postpartumNotCleared: (weeksLeft) =>
+        'Med 6. in 12. tednom po porodu je tek smiseln le, če ti ga odobri zdravnik ali babica in so opravljeni testi ' +
+        'obremenitve (na primer pri fizioterapevtu za medenično dno). Če to dovoljenje imaš, ga označi v Nastavitvah › ' +
+        `Zdravstveni profil. Sicer se vrni čez ${weeksLeft} ${weeksLeft === 1 ? 'teden' : weeksLeft === 2 ? 'tedna' : weeksLeft <= 4 ? 'tedne' : 'tednov'} — ` +
+        'do takrat pa sprehodi in vaje za medenično dno.',
+      painAtRest:
+        'Bolečina v mirovanju ali pri hoji pomeni, da tek zdaj ni varen — najprej jo mora pogledati strokovnjak. ' +
+        'Obišči osebnega zdravnika ali fizioterapevta. Ko pri hoji ne bo več bolelo, ti Runko pripravi previdno vrnitev k teku.',
+      cardiacSymptoms:
+        'Bolečina ali pritisk v prsih, omotica ali omedlevica, nenavadna zadihanost ali razbijanje srca med naporom so znaki, ' +
+        'ki jih mora pred začetkom treninga pregledati zdravnik. Obišči osebnega zdravnika; ob bolečini v prsih, ki v ' +
+        'mirovanju traja več kot 5 minut, pokliči 112. Ko ti zdravnik tek odobri, to označi v Zdravstvenem profilu in ' +
+        'Runko ti sestavi načrt.',
+      knownConditionInactive:
+        'Z boleznijo srca, sladkorno boleznijo ali boleznijo ledvic je pred začetkom vadbe potreben posvet z zdravnikom — ' +
+        'tako bo začetek varen in prilagojen tebi. Ko ti zdravnik vadbo odobri, to označi v Zdravstvenem profilu in ' +
+        'Runko ti sestavi načrt.',
+      bmi40:
+        'Pri tvoji telesni teži je tek za sklepe in kite zaenkrat prevelika obremenitev. Najboljši začetek so hoja, ' +
+        'kolesarjenje, plavanje ali tek v vodi. Pred začetkom se posvetuj z osebnim zdravnikom; ko boš 45–60 minut hodil(a) ' +
+        'brez bolečin in ti zdravnik tek odobri, ti Runko pripravi postopen prehod na hojo-tek.',
+      knownConditionActive:
+        'Zaradi znane bolezni načrt ne vsebuje trdih treningov, dokler ti jih zdravnik ne odobri (označi v Zdravstvenem profilu).',
+      bmi35: 'Pred začetkom teka priporočamo pregled pri osebnem zdravniku. Načrt je previden, s hojo kot delom treninga.',
+      ultraLimited:
+        'Ultramaratoni in trail so v Runku zaenkrat omejeno podprti: načrt je zgrajen po pravilih za cestne teke, brez ' +
+        'posebnosti vzponov, spustov in zelo dolgih tekov.',
+    },
     alternative: {
       shorter: (goal) => goal,
       later: (goal) => goal,
@@ -577,6 +648,35 @@ export const t = {
       preference: 'preference',
       life_context: 'življenje',
       goal_change: 'sprememba cilja',
+    },
+
+    health: {
+      title: 'Zdravstveni profil',
+      body: 'Neobvezno. Pomaga, da je načrt varen in prilagojen tebi — npr. srčni utrip za ženske, previdnejši začetek ali vrnitev po porodu.',
+      consent:
+        'Podatki o zdravju so posebna vrsta osebnih podatkov. Če nadaljuješ, se strinjaš, da jih Runko shrani in uporabi ' +
+        'izključno za sestavo tvojega načrta. Ne pošiljamo jih AI trenerju in jih ne delimo z nikomer. Vsako vprašanje je ' +
+        'neobvezno, privolitev pa lahko kadar koli prekličeš z izbrisom podatkov spodaj.',
+      accept: 'Strinjam se — izpolni profil',
+      optionalHint: 'Vsa polja so neobvezna. Kjer odgovora ni, načrt izbere previdnejšo možnost.',
+      sex: 'Spol',
+      sexOptions: [
+        { value: 'female', label: 'Ženska' },
+        { value: 'male', label: 'Moški' },
+      ],
+      height: 'Višina',
+      cardiac:
+        'Imaš med naporom bolečino ali pritisk v prsih, omotico ali omedlevico, nenavadno zadihanost ali razbijanje srca?',
+      condition: 'Imaš znano bolezen srca, sladkorno bolezen ali bolezen ledvic?',
+      clearance: 'Ti je zdravnik potrdil, da smeš teči in trenirati?',
+      caesarean: 'Je bil porod s carskim rezom?',
+      postpartumCleared:
+        'Ti je zdravnik ali babica po porodu odobril(a) tek in so opravljeni testi obremenitve (npr. pri fizioterapevtu)?',
+      marathons: 'Koliko maratonov si že pretekel(a)?',
+      save: 'Shrani',
+      saved: 'Shranjeno. Upoštevano bo pri naslednjem načrtu.',
+      deleteAll: 'Izbriši vse zdravstvene podatke (tudi varnostne odgovore)',
+      deleted: 'Zdravstveni podatki so izbrisani.',
     },
 
     planTitle: 'Načrt treninga',

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { saveProfile, addWorkout, addDaysISO, todayISO } from '../core/db'
-import { createInitialPlan, previewPlan, ClarificationNeededError } from '../core/plan'
+import { createInitialPlan, previewPlan, ClarificationNeededError, PlanBlockedError } from '../core/plan'
 import {
   parseDuration, targetTimeFromParts, targetTimeToParts, targetTimeHasSeconds, targetPaceCheck,
 } from '../core/periodization'
@@ -146,6 +146,14 @@ export default function Onboarding() {
   const [runs, setRuns] = useState(saved.runs || [emptyRun(2), emptyRun(5), emptyRun(8)])
   const [testRun, setTestRun] = useState(saved.testRun || { ...emptyRun(0), distance: '3' })
   const [notes, setNotes] = useState(prefill(saved.notes, prof.coach_notes))
+  // Safety questions (core/planning/gate.js). Booleans stay null until answered.
+  const [pregnancyStatus, setPregnancyStatus] = useState(prefill(saved.pregnancyStatus, prof.pregnancy_status))
+  const [weeksPostpartum, setWeeksPostpartum] = useState(prefill(saved.weeksPostpartum, prof.weeks_postpartum))
+  const [painAtRest, setPainAtRest] = useState(saved.painAtRest ?? prof.pain_at_rest ?? null)
+  const [injury12m, setInjury12m] = useState(saved.injury12m ?? prof.injury_last_12m ?? null)
+  const [breakBand, setBreakBand] = useState(
+    saved.breakBand ?? (prof.break_days === null || prof.break_days === undefined ? '' : String(prof.break_days))
+  )
 
   // Planning pipeline follow-up: its questions, the runner's answers, and the
   // preview (verdict) the clarify step shows before anything is built.
@@ -163,14 +171,16 @@ export default function Onboarding() {
         targetDistance, hasDate, targetTimeParts, experienceMonths, weeklyVolume,
         longestRun, daysPerWeek, availableDays,
         hasRun, runs, testRun, notes, answers,
+        pregnancyStatus, weeksPostpartum, painAtRest, injury12m, breakBand,
       })
     )
   }, [step, path, name, age, weight, level, eventDate, targetDistance, hasDate,
       targetTimeParts, experienceMonths, weeklyVolume, longestRun, daysPerWeek,
-      availableDays, hasRun, runs, testRun, notes, answers])
+      availableDays, hasRun, runs, testRun, notes, answers,
+      pregnancyStatus, weeksPostpartum, painAtRest, injury12m, breakBand])
 
   const stepOrder = useMemo(() => {
-    const s = ['path', 'name', 'body', 'level', 'goal', 'experience', 'days']
+    const s = ['path', 'name', 'body', 'level', 'goal', 'experience', 'safety', 'days']
     if (path === 'thorough') {
       s.push('runbefore')
       if (hasRun === true) s.push('runs')
@@ -178,6 +188,7 @@ export default function Onboarding() {
     }
     s.push('notes')
     if (step === 'clarify') s.push('clarify')
+    if (step === 'blocked') s.push('blocked')
     return s
   }, [path, hasRun, step])
 
@@ -238,7 +249,19 @@ export default function Onboarding() {
     days_per_week: daysPerWeek ? Number(daysPerWeek) : null,
     available_days: availableDays.length ? availableDays : null,
     coach_notes: notes.trim() || null,
+    pregnancy_status: pregnancyStatus || null,
+    weeks_postpartum: pregnancyStatus === 'postpartum' && weeksPostpartum !== '' ? Number(weeksPostpartum) : null,
+    pain_at_rest: painAtRest,
+    injury_last_12m: injury12m,
+    break_days: breakBand === '' || breakBand === 'never' ? null : Number(breakBand),
   })
+
+  /** Every question the safety gate can block on has an answer. */
+  const safetyAnswered =
+    Boolean(pregnancyStatus) &&
+    (pregnancyStatus !== 'postpartum' || weeksPostpartum !== '') &&
+    painAtRest !== null &&
+    injury12m !== null
 
   /**
    * "Skip for now" — save what we have, build no plan, go straight into the
@@ -265,12 +288,22 @@ export default function Onboarding() {
    * what to build. Builds straight away when there is nothing to ask.
    */
   const prepare = async (nextAnswers = answers) => {
+    // A draft saved before the safety step existed can resume past it: the
+    // gate must never run on unanswered safety questions.
+    if (!safetyAnswered) {
+      setStep('safety')
+      return
+    }
     setPreparing(true)
     setError('')
     try {
       const intake = path === 'thorough' ? buildIntake() : null
       const result = await previewPlan({ ...prof, ...profileFields() }, intake, nextAnswers)
       setPreview(result)
+      if (result.status === 'blocked') {
+        setStep('blocked')
+        return
+      }
       const unsafeUnchosen = result.status === 'ready' && result.verdict === 'unsafe' && !nextAnswers.safe_goal
       if (result.status === 'needs_answers' || unsafeUnchosen) {
         setStep('clarify')
@@ -321,7 +354,10 @@ export default function Onboarding() {
       await refreshProfile()
       navigate('/')
     } catch (err) {
-      if (err instanceof ClarificationNeededError) {
+      if (err instanceof PlanBlockedError) {
+        setPreview({ status: 'blocked', block: err.block })
+        setStep('blocked')
+      } else if (err instanceof ClarificationNeededError) {
         // The saved profile turned up something the preview did not (coach
         // memory, logged runs): ask rather than guess.
         setPreview({ status: 'needs_answers', questions: err.questions })
@@ -675,6 +711,67 @@ export default function Onboarding() {
         </div>
       )}
 
+      {step === 'safety' && (
+        <div className="animate-fade-up">
+          <h1 className="text-3xl font-extrabold">{t.onboarding.safetyTitle}</h1>
+          <p className="mt-3 rounded-2xl bg-zinc-900 px-4 py-3 text-xs leading-relaxed text-zinc-400">
+            {t.onboarding.safetyConsent}
+          </p>
+          <div className="mt-8 space-y-7">
+            <Choice
+              question={t.onboarding.pregnancyQuestion}
+              options={t.onboarding.pregnancyOptions}
+              value={pregnancyStatus}
+              onChange={setPregnancyStatus}
+            />
+            {pregnancyStatus === 'postpartum' && (
+              <div>
+                <label className="label">{t.onboarding.weeksPostpartum}</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="104"
+                  step="1"
+                  className="input mt-1"
+                  placeholder="12"
+                  value={weeksPostpartum}
+                  onChange={(e) => setWeeksPostpartum(e.target.value)}
+                />
+              </div>
+            )}
+            <Choice question={t.onboarding.painQuestion} options={YES_NO} value={painAtRest} onChange={setPainAtRest} />
+            <Choice question={t.onboarding.injuryQuestion} options={YES_NO} value={injury12m} onChange={setInjury12m} />
+            <Choice
+              question={t.onboarding.breakQuestion}
+              options={t.onboarding.breakOptions}
+              value={breakBand}
+              onChange={setBreakBand}
+            />
+          </div>
+          <button className="btn-primary mt-8 w-full" disabled={!safetyAnswered} onClick={() => go(1)}>
+            {t.common.continue}
+          </button>
+        </div>
+      )}
+
+      {step === 'blocked' && preview?.block && (
+        <div className="animate-fade-up">
+          <h1 className="text-3xl font-extrabold">{t.planning.gate.title}</h1>
+          <div className="card mt-6">
+            <p className="text-sm leading-relaxed text-zinc-200">{preview.block.message}</p>
+          </div>
+          <button className="btn-primary mt-6 w-full" onClick={skip}>
+            {t.onboarding.blockedToApp}
+          </button>
+          <button
+            onClick={() => setStep('safety')}
+            className="mt-4 w-full text-center text-xs text-zinc-500 underline underline-offset-4 hover:text-zinc-300"
+          >
+            {t.onboarding.blockedBack}
+          </button>
+        </div>
+      )}
+
       {step === 'days' && (
         <div className="animate-fade-up">
           <h1 className="text-3xl font-extrabold">{t.onboarding.daysTitle}</h1>
@@ -1002,6 +1099,33 @@ export default function Onboarding() {
         >
           {rebuilding ? t.onboarding.notNow : t.onboarding.skipForNow}
         </button>
+      </div>
+    </div>
+  )
+}
+
+const YES_NO = [
+  { value: true, label: t.onboarding.yes },
+  { value: false, label: t.onboarding.no },
+]
+
+/** One question answered with a tap. */
+function Choice({ question, options, value, onChange }) {
+  return (
+    <div>
+      <p className="font-semibold">{question}</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {options.map((o) => (
+          <button
+            key={String(o.value)}
+            onClick={() => onChange(o.value)}
+            className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+              value === o.value ? 'bg-primary text-white' : 'bg-zinc-900 text-zinc-300 hover:bg-zinc-800'
+            }`}
+          >
+            {o.label}
+          </button>
+        ))}
       </div>
     </div>
   )

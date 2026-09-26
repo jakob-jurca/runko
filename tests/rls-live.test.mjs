@@ -127,13 +127,19 @@ async function audit() {
   /** Remove both users' rows. Also run first, for rows a crashed run left behind. */
   async function cleanup() {
     for (const u of [A, B]) {
-      for (const table of ['coach_memory', 'chat_messages', 'workouts', 'training_plans']) {
+      for (const table of ['coach_memory', 'chat_messages', 'workouts', 'training_plans', 'health_profiles']) {
         await u.sb.from(table).delete().eq('user_id', u.id)
       }
       await u.sb.from('users').delete().eq('id', u.id)
     }
   }
   await cleanup()
+
+  // migration_v7 (safety columns + health_profiles) may not have been run on
+  // this project yet. Its checks are then listed as SKIPPED by the runner —
+  // visible before the verdict, never a silent pass.
+  const probe = await A.sb.from('health_profiles').select('user_id').limit(1)
+  const v7Missing = probe.error?.code === 'PGRST205' || probe.error?.code === '42P01'
 
   // --- A writes one row in every table --------------------------------------
   const created = {}
@@ -292,6 +298,42 @@ async function audit() {
     billing.data?.subscription_status !== 'active'
   )
 
+  // --- the health profile (migration_v7): special-category data -------------
+  if (!v7Missing) {
+    const safety = await A.sb
+      .from('users')
+      .update({ pregnancy_status: 'none', pain_at_rest: false, break_days: 0, injury_last_12m: false })
+      .eq('id', A.id)
+      .select()
+      .single()
+    check(detail('users: A can write its own safety answers', safety.error), safety.data?.pain_at_rest === false)
+
+    const hp = await A.sb
+      .from('health_profiles')
+      .upsert({ user_id: A.id, consent_at: new Date().toISOString(), sex: 'female', cardiac_symptoms: false })
+      .select()
+      .single()
+    check(detail('health_profiles: A can create its own profile', hp.error), hp.data?.user_id === A.id)
+
+    const noConsent = await B.sb.from('health_profiles').insert({ user_id: B.id, sex: 'male' }).select()
+    check('health_profiles: a row without consent_at is refused', refused(noConsent))
+
+    const bAll = await B.sb.from('health_profiles').select('*')
+    check("health_profiles: B's unfiltered select does not return A's row", !(bAll.data ?? []).some((r) => r.user_id === A.id))
+    const bOwn = await B.sb.from('health_profiles').select('*').eq('user_id', A.id)
+    check("health_profiles: B filtering on A's user_id gets nothing", (bOwn.data ?? []).length === 0)
+    check("health_profiles: B cannot update A's row",
+      refused(await B.sb.from('health_profiles').update({ sex: 'male' }).eq('user_id', A.id).select()))
+    check("health_profiles: B cannot delete A's row",
+      refused(await B.sb.from('health_profiles').delete().eq('user_id', A.id).select()))
+    check('health_profiles: B cannot insert a row owned by A',
+      refused(await B.sb.from('health_profiles').upsert({ user_id: A.id, consent_at: new Date().toISOString() }).select()))
+    const anonHp = await anon.from('health_profiles').select('*')
+    check('health_profiles: anonymous reads nothing', (anonHp.data ?? []).length === 0)
+    const mine = await A.sb.from('health_profiles').select('sex').eq('user_id', A.id).single()
+    check("health_profiles: A still sees its own row, unmodified by B", mine.data?.sex === 'female')
+  }
+
   // --- RLS must not over-block: A still sees its own data -------------------
   for (const { table, ownerCol } of TABLES) {
     const res = await A.sb.from(table).select('*')
@@ -305,17 +347,20 @@ async function audit() {
 
   await cleanup()
 
-  return summary('rls-live')
+  const result = summary('rls-live')
+  if (v7Missing) result.skipped = 'health_profiles and the safety columns — run supabase/migration_v7.sql'
+  return result
 }
 
 // `npm run audit:rls` runs this file directly; print a verdict and set an exit
 // code so it is usable on its own, not only through the runner.
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   console.log('')
-  if (result.skipped) {
+  if (result.skipped && !result.passes && !result.failures.length) {
     console.log(`RLS audit SKIPPED — ${result.skipped}`)
     process.exit(0)
   }
+  if (result.skipped) console.log(`PARTLY SKIPPED — ${result.skipped}`)
   if (result.failures.length) {
     console.log(`RLS AUDIT FAILED — ${result.failures.length} of ${result.passes + result.failures.length} checks`)
     for (const f of result.failures) console.log('  x ' + f)

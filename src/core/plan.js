@@ -25,6 +25,7 @@
  */
 import { describePlanSkeleton, mergeDescriptions, adaptWeeklyPlan } from './ai'
 import { runPlanningPipeline } from './planning/index.js'
+import { withNotices } from './planning/explain.js'
 import { enforceWeekRules, isAdaptable } from './planning/guard.js'
 import {
   enrichDays,
@@ -42,6 +43,8 @@ import {
   currentWeekNumber,
   getWorkouts,
   markPlanCreated,
+  getHealthProfile,
+  HEALTH_FIELDS,
 } from './db'
 import { getMemories } from './memory'
 import { hasPremium } from './subscription'
@@ -273,10 +276,25 @@ async function gatherMemories(profile) {
   }
 }
 
-/** The pipeline's input: the profile, with anything the intake adds on top. */
-function pipelineProfile(profile, intake) {
+/**
+ * The optional health profile. Unlike runs and memories, a read failure is
+ * NOT swallowed: a plan built without a "yes" the runner gave to a safety
+ * question would be built on a silent guess. (A database without the table
+ * reads as "no profile" in db.js.)
+ */
+async function gatherHealth(profile) {
+  if (!profile?.id) return null
+  return getHealthProfile(profile.id)
+}
+
+/** The pipeline's input: the profile, with the health profile and anything the intake adds on top. */
+function pipelineProfile(profile, intake, health = null) {
+  const healthFields = health
+    ? Object.fromEntries(HEALTH_FIELDS.map((k) => [k, health[k] ?? null]))
+    : {}
   return {
     ...profile,
+    ...healthFields,
     ...(intake?.hasRunBefore === false ? { hasRunBefore: false } : {}),
   }
 }
@@ -285,6 +303,18 @@ function pipelineProfile(profile, intake) {
  * Thrown by createInitialPlan when the pipeline needs answers first. The
  * plan is never built on a guess about something that changes its shape.
  */
+/**
+ * Thrown by createInitialPlan when the safety gate builds no plan (pregnant,
+ * under 15, pain at rest, …). `block.message` is the kind explanation to show.
+ */
+export class PlanBlockedError extends Error {
+  constructor(block) {
+    super(block.message)
+    this.name = 'PlanBlockedError'
+    this.block = block
+  }
+}
+
 export class ClarificationNeededError extends Error {
   constructor(questions) {
     super('The plan needs a few answers before it can be built.')
@@ -302,8 +332,10 @@ export class ClarificationNeededError extends Error {
  *   explain, proposal, ...)
  */
 export async function previewPlan(profile, intake = null, answers = {}) {
-  const [runs, memories] = await Promise.all([gatherRuns(profile, intake), gatherMemories(profile)])
-  return runPlanningPipeline({ profile: pipelineProfile(profile, intake), runs, memories, answers })
+  const [runs, memories, health] = await Promise.all([
+    gatherRuns(profile, intake), gatherMemories(profile), gatherHealth(profile),
+  ])
+  return runPlanningPipeline({ profile: pipelineProfile(profile, intake, health), runs, memories, answers })
 }
 
 /**
@@ -324,10 +356,13 @@ export async function createInitialPlan(profile, intake = null, answers = {}) {
   // is a one-line change.
   if (!canCreatePlan(profile)) throw new PlanLimitError(profile)
 
-  const [runs, memories] = await Promise.all([gatherRuns(profile, intake), gatherMemories(profile)])
+  const [runs, memories, health] = await Promise.all([
+    gatherRuns(profile, intake), gatherMemories(profile), gatherHealth(profile),
+  ])
 
   // --- 1. CODE decides everything structural ---------------------------------
-  const result = runPlanningPipeline({ profile: pipelineProfile(profile, intake), runs, memories, answers })
+  const result = runPlanningPipeline({ profile: pipelineProfile(profile, intake, health), runs, memories, answers })
+  if (result.status === 'blocked') throw new PlanBlockedError(result.block)
   if (result.status !== 'ready') throw new ClarificationNeededError(result.questions)
   const skeleton = result.skeleton
   if (DEBUG) {
@@ -378,7 +413,7 @@ export async function createInitialPlan(profile, intake = null, answers = {}) {
         goal_assessment: skeleton.goal_assessment,
         ai_described: aiDescribed,
         // The intro belongs to the plan, not a week — stored on week 1 only.
-        ...(week_number === 1 ? { intro: described.intro } : {}),
+        ...(week_number === 1 ? { intro: withNotices(described.intro, result.notices) } : {}),
       })
     )
   }

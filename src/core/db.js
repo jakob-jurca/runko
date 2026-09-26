@@ -83,6 +83,51 @@ export async function markPlanCreated(userId) {
   return updateProfile(userId, { last_plan_created_at: new Date().toISOString() })
 }
 
+// ---------- health_profiles (optional, special-category data) ----------
+
+/** Columns the plan engine reads; nothing else is ever stored (GDPR). */
+export const HEALTH_FIELDS = [
+  'sex', 'height_cm', 'cardiac_symptoms', 'known_condition', 'medical_clearance',
+  'caesarean', 'postpartum_cleared', 'marathons_completed',
+]
+
+const MISSING_TABLE = new Set(['PGRST205', '42P01'])
+
+/**
+ * The runner's health profile, or null if they have not filled one in.
+ * A database that has not run migration_v7 yet reads as "no profile".
+ */
+export async function getHealthProfile(userId) {
+  const { data, error } = await supabase
+    .from('health_profiles')
+    .select('*')
+    .eq('user_id', userId)
+    .maybeSingle()
+  if (error) {
+    if (MISSING_TABLE.has(error.code)) return null
+    throw error
+  }
+  return data
+}
+
+/**
+ * Save the health profile. Only called after the runner has accepted the
+ * consent line; `consent_at` records when. Unknown keys are dropped.
+ */
+export async function saveHealthProfile(userId, fields, consentAt) {
+  const row = { user_id: userId, consent_at: consentAt, updated_at: new Date().toISOString() }
+  for (const k of HEALTH_FIELDS) row[k] = fields[k] ?? null
+  const { data, error } = await supabase.from('health_profiles').upsert(row).select().single()
+  if (error) throw error
+  return data
+}
+
+/** Delete the health profile entirely (withdrawing consent). */
+export async function deleteHealthProfile(userId) {
+  const { error } = await supabase.from('health_profiles').delete().eq('user_id', userId)
+  if (error) throw error
+}
+
 // ---------- training_plans ----------
 
 /** All plan weeks, ascending. The full plan is one row per week. */

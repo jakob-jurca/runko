@@ -109,6 +109,8 @@ export function collectInputs({ profile = {}, runs = [], memories = [], answers 
     signals.returning = true
     signals.injury = true
   }
+  // A runner back after giving birth is coming back, whatever the notes say.
+  if (profile.pregnancy_status === 'postpartum') signals.returning = true
   if (answers.intent === 'maintain') signals.maintain = true
   if (answers.intent === 'build') signals.maintain = false
 

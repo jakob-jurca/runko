@@ -143,6 +143,14 @@ export function planningStored(result) {
 // ---------------------------------------------------------------------------
 
 export const SPECIFIC = {
+  // A safety notice from the gate, carried in the result AND in the intro.
+  notice: (r, p, id) => {
+    const n = (r.notices || []).find((x) => x.id === id)
+    if (!n) return { ok: false, detail: `notices: [${(r.notices || []).map((x) => x.id).join(', ')}]` }
+    return r.explain?.intro?.includes(n.text) ? { ok: true } : { ok: false, detail: 'notice missing from the intro' }
+  },
+  noNotice: (r, p, id) =>
+    (r.notices || []).some((x) => x.id === id) ? { ok: false, detail: `has notice ${id}` } : { ok: true },
   // b01 rules 9-13, read from the stored assessment.
   experienceLevel: (r, p, want) => {
     const got = r.stored?.planning?.assessment?.experience_level

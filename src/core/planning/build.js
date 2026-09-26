@@ -11,7 +11,7 @@
  * never reaches this file.
  */
 import {
-  pacesFromVdot, assignPhases, peakVolumeCap, PHASE_INTENT, DAYS,
+  pacesFromVdot, assignPhases, peakVolumeCap, PHASE_INTENT, DAYS, makeDay, enrichDays,
 } from '../periodization.js'
 import {
   SCENARIO_RULES, SAFE, MAX_PLAN_WEEKS, OPEN_GOAL_WEEKS, OLDER_RUNNER_AGE, GENTLE_START_AGE,
@@ -464,7 +464,26 @@ function returning(ctx, assessment, feasibility, inputs) {
  * @returns {{unit: 'time'|'distance'|'mixed', weeks: Array, run_days: string[], paces: object}}
  *   'mixed': minutes first (walk-run), kilometres later; each week has its own `unit`.
  */
-export function buildPlan(scenario, inputs, assessment, feasibility) {
+const HARD_TYPES = new Set(['tempo', 'interval', 'repetition'])
+
+/**
+ * The safety gate's "no hard sessions" restriction (b01 r4): every quality
+ * day becomes an easy run of the same length, so the week's load is kept and
+ * only the intensity goes.
+ */
+function withoutHardSessions(weeks, paces, age) {
+  return weeks.map((w) => {
+    if (!w.days.some((d) => HARD_TYPES.has(d.type))) return { ...w, allow_hard: false }
+    const days = w.days.map((d) => {
+      if (!HARD_TYPES.has(d.type)) return d
+      const easy = makeDay({ day: d.day, type: 'easy', distanceKm: d.distance_km, paceKey: 'easy', paces, intensity: 'easy' })
+      return enrichDays([easy], paces, age)[0]
+    })
+    return { ...w, days, allow_hard: false }
+  })
+}
+
+export function buildPlan(scenario, inputs, assessment, feasibility, restrictions = {}) {
   const ctx = context(scenario, inputs, assessment, feasibility)
   let built
   switch (scenario) {
@@ -491,7 +510,7 @@ export function buildPlan(scenario, inputs, assessment, feasibility) {
 
   // Scenario rules travel with every week, so later adaptation can enforce them.
   const rules = SCENARIO_RULES[scenario]
-  const weeks = sequence.map((w, i) => ({
+  const shaped = sequence.map((w, i) => ({
     ...w,
     intent: w.intent || intentFor(w.phase, w.is_recovery),
     allow_hard:
@@ -499,6 +518,7 @@ export function buildPlan(scenario, inputs, assessment, feasibility) {
         : rules.hard === 'late' ? i >= (rules.noIntensityWeeks ?? 0) && Boolean(w.allow_hard)
           : false,
   }))
+  const weeks = restrictions.noHardSessions ? withoutHardSessions(shaped, ctx.paces, inputs.age) : shaped
 
   return {
     unit: built.unit,

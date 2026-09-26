@@ -6,9 +6,10 @@ import { getMemories, deleteMemory } from '../core/memory'
 import { goalLabel } from '../core/periodization'
 import { maxHeartRate } from '../core/heart-rate'
 import { t } from '../core/strings'
+import HealthProfile from '../components/HealthProfile'
 
 export default function Settings() {
-  const { session, profile, signOut } = useAuth()
+  const { session, profile, signOut, refreshProfile } = useAuth()
   const navigate = useNavigate()
   const [notice, setNotice] = useState('')
 
@@ -62,6 +63,9 @@ export default function Settings() {
           <Row label={t.settings.maxHr} value={maxHeartRate(profile.age) ? `${maxHeartRate(profile.age)} bpm` : null} />
         </dl>
       </section>
+
+      {/* Optional health data — consent first, delete any time */}
+      <HealthProfile profile={profile} onChanged={refreshProfile} />
 
       {/* What the coach remembers */}
       <section className="card mt-4 animate-fade-up" style={{ animationDelay: '60ms' }}>

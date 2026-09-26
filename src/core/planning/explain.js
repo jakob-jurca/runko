@@ -32,7 +32,7 @@ function alternativeText(a) {
 /**
  * @returns {object} explanation, stored with the plan (plan_json.planning.explain)
  */
-export function explainPlan({ classification, feasibility, plan }) {
+export function explainPlan({ classification, feasibility, plan, notices = [] }) {
   const scenario = classification.scenario
   const verdict = feasibility.verdict
   const priorities = P.priorities[scenario] || []
@@ -53,6 +53,8 @@ export function explainPlan({ classification, feasibility, plan }) {
     parts.push(P.intro.foundation(plan.foundation_weeks, plan.weeks.length - plan.foundation_weeks))
   }
   parts.push(P.intro.priorities(priorities))
+  // Safety notices (see a doctor first, limited support) close the intro.
+  for (const n of notices) parts.push(n.text)
 
   return {
     scenario,
@@ -66,7 +68,21 @@ export function explainPlan({ classification, feasibility, plan }) {
     adopted_goal_text: goalText(adopted),
     fallback_text: fallbackText(feasibility.fallback_target),
     other_options: others.map(alternativeText),
+    notices: notices.map((n) => ({ id: n.id, text: n.text })),
     reasons: [...classification.reasons, ...feasibility.reasons],
     intro: parts.join(' '),
   }
+}
+
+/**
+ * The safety gate's notices ("see a doctor first", "limited support") closed
+ * onto the intro in code. They are never put in the AI prompt — some reveal
+ * health data (a known condition, a high BMI) that must not go to the AI
+ * provider — so an AI-written intro would otherwise lack them. The built-in
+ * intro already contains them; nothing is added twice.
+ */
+export function withNotices(intro, notices = []) {
+  let text = String(intro || '').trim()
+  for (const n of notices) if (!text.includes(n.text)) text = `${text} ${n.text}`.trim()
+  return text
 }

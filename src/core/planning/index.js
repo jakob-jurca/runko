@@ -3,6 +3,8 @@
  *
  *   1. collectInputs      everything the runner told us, normalised
  *   2. assessFitness      where they are today
+ *   2b. safetyGate        may Runko build a running plan at all? (block /
+ *                         restrict / notices) — before any question is asked
  *   3. classifyRunner     which of the seven scenarios they are
  *   4. checkFeasibility   feasible / stretch / unsafe, and the adopted goal
  *   5. clarifyQuestions   at most 3 questions — STOP here if any
@@ -23,6 +25,7 @@ import { buildPlan } from './build.js'
 import { explainPlan } from './explain.js'
 import { SCENARIO_RULES } from './rules.js'
 import { computeLimits } from './limits.js'
+import { safetyGate } from './gate.js'
 import { formatPace } from '../periodization.js'
 import { maxHeartRate, heartRateZones } from '../heart-rate.js'
 
@@ -53,6 +56,20 @@ export function runPlanningPipeline({ profile = {}, runs = [], memories = [], an
   // 1-3
   let inputs = collectInputs({ profile, runs, memories, answers, today })
   let assessment = assessFitness(inputs)
+  // 2b. No plan for someone the safety gate turns away — and no questions
+  // either: asking a pregnant runner about her weekly kilometres first would
+  // be both pointless and unkind.
+  const gate = safetyGate(inputs, assessment)
+  if (gate.outcome === 'block') {
+    return {
+      status: 'blocked',
+      questions: [],
+      weeks: [],
+      block: { reason: gate.reason, message: gate.message, rules: gate.rules },
+      planning: { version: PIPELINE_VERSION, inputs: inputsSummary(inputs), assessment, gate },
+    }
+  }
+
   let classification = classifyRunner(inputs, assessment)
 
   // 5 (before building anything): missing or contradictory essentials.
@@ -107,10 +124,10 @@ export function runPlanningPipeline({ profile = {}, runs = [], memories = [], an
   const limits = computeLimits(inputs, assessment)
 
   // 6
-  const plan = buildPlan(scenario, inputs, assessment, feasibility)
+  const plan = buildPlan(scenario, inputs, assessment, feasibility, gate.restrictions)
 
   // 7
-  const explain = explainPlan({ classification: buildClassification, feasibility, plan })
+  const explain = explainPlan({ classification: buildClassification, feasibility, plan, notices: gate.notices })
 
   const planning = {
     version: PIPELINE_VERSION,
@@ -120,6 +137,7 @@ export function runPlanningPipeline({ profile = {}, runs = [], memories = [], an
     feasibility,
     clarify: { answers: { ...answers }, assumptions },
     rules: SCENARIO_RULES[scenario],
+    gate: { restrictions: gate.restrictions, notices: gate.notices, rules: gate.rules },
     limits: { values: limits.values, rules: Object.fromEntries(Object.entries(limits.sources).map(([k, v]) => [k, v.rule])) },
     explain,
   }
@@ -143,6 +161,7 @@ export function runPlanningPipeline({ profile = {}, runs = [], memories = [], an
     originalGoal: feasibility.original_goal,
     proposal: feasibility.verdict === 'unsafe' ? { alternatives: feasibility.alternatives, adopted } : null,
     fallbackTarget: feasibility.fallback_target,
+    notices: gate.notices,
     explain,
     planning,
     weeks,

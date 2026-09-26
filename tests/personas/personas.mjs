@@ -303,6 +303,7 @@ export const PERSONAS = [
       longest_run_km: 28, target_distance_km: 50, event_date: sundayIn(20), days_per_week: 6,
     },
     expect: {
+      notice: 'ultra_limited',
       scenario: 'long_race', verdict: 'feasible',
       maxLongRunKm: 35, maxWeeklyIncreasePct: 10, taper: true, raceOnEventDay: true,
     },
@@ -429,6 +430,159 @@ export const PERSONAS = [
       questions: ['intent'],
       scenario: 'maintenance', verdict: 'feasible', flatVolumePct: 10, noTaper: true,
     },
+  },
+
+  // ------------------------------------------------------------ safety gate
+  // Onboarding's safety answers and the optional health profile
+  // (core/planning/gate.js). Who gets NO plan, and who gets one with limits.
+  {
+    id: 'pregnant-runner',
+    who: '31-year-old who ran 30 km/week before pregnancy, 16 weeks pregnant, wants to keep running',
+    profile: {
+      age: 31, fitness_level: 'intermediate', experience_months: 60, weekly_volume_km: 30,
+      longest_run_km: 12, days_per_week: 4, pregnancy_status: 'pregnant',
+      pain_at_rest: false, injury_last_12m: false, break_days: 0,
+    },
+    // Decision 4: the guideline source could not be verified, so no plan.
+    expect: { blocked: { reason: 'pregnant', mentions: ['zdravnik', 'babic'] } },
+  },
+  {
+    id: 'pregnant-non-runner',
+    who: 'Pregnant, never ran, wants to start running for fitness',
+    profile: {
+      age: 28, fitness_level: 'beginner', experience_months: 0, weekly_volume_km: 0,
+      target_distance_km: 5, days_per_week: 3, pregnancy_status: 'pregnant',
+      pain_at_rest: false, injury_last_12m: false,
+    },
+    expect: { blocked: { reason: 'pregnant', mentions: ['zdravnik', 'babic'] } },
+  },
+  {
+    id: 'twelve-year-old',
+    who: '12-year-old who wants to train for a 5 km school race',
+    profile: {
+      age: 12, fitness_level: 'beginner', experience_months: 6, weekly_volume_km: 5,
+      target_distance_km: 5, days_per_week: 3, pregnancy_status: 'none', pain_at_rest: false, injury_last_12m: false,
+    },
+    expect: { blocked: { reason: 'under_15', mentions: ['15'] } },
+  },
+  {
+    id: 'fourteen-year-old-club',
+    who: '14-year-old club runner, 20 km/week, wants a 10 km plan',
+    profile: {
+      age: 14, fitness_level: 'intermediate', experience_months: 24, weekly_volume_km: 20,
+      longest_run_km: 8, target_distance_km: 10, days_per_week: 4,
+      pregnancy_status: 'none', pain_at_rest: false, injury_last_12m: false,
+    },
+    // Slovenian digital-consent age is 15: Runko is not available yet.
+    expect: { blocked: { reason: 'under_15', mentions: ['15'] } },
+  },
+  {
+    id: 'rest-pain',
+    who: 'Runs 25 km/week, shin hurts even when walking, wants a 10 km plan',
+    profile: {
+      age: 34, fitness_level: 'intermediate', experience_months: 36, weekly_volume_km: 25,
+      longest_run_km: 10, target_distance_km: 10, days_per_week: 4,
+      pregnancy_status: 'none', pain_at_rest: true, injury_last_12m: true, break_days: 5,
+    },
+    expect: { blocked: { reason: 'pain_at_rest', mentions: ['fizioterapevt', 'zdravnik'] } },
+  },
+  {
+    id: 'chest-pain-on-effort',
+    who: '52-year-old starting out, reports chest pressure on stairs, no doctor visit yet',
+    profile: {
+      age: 52, fitness_level: 'beginner', experience_months: 0, weekly_volume_km: 0,
+      target_distance_km: 5, days_per_week: 3, pregnancy_status: 'none', pain_at_rest: false,
+      injury_last_12m: false, cardiac_symptoms: true,
+    },
+    expect: { blocked: { reason: 'cardiac_symptoms', mentions: ['zdravnik', '112'] } },
+  },
+  {
+    id: 'postpartum-4w',
+    who: 'Runner who gave birth 4 weeks ago, wants to start again',
+    profile: {
+      age: 33, fitness_level: 'intermediate', experience_months: 72, weekly_volume_km: 0,
+      days_per_week: 3, pregnancy_status: 'postpartum', weeks_postpartum: 4,
+      pain_at_rest: false, injury_last_12m: false, break_days: 90,
+    },
+    expect: { blocked: { reason: 'postpartum_early', mentions: ['babic', 'medenično dno'] } },
+  },
+  {
+    id: 'postpartum-9w-not-cleared',
+    who: 'Gave birth 9 weeks ago, no postpartum clearance recorded',
+    profile: {
+      age: 30, fitness_level: 'intermediate', experience_months: 48, weekly_volume_km: 0,
+      days_per_week: 3, pregnancy_status: 'postpartum', weeks_postpartum: 9,
+      pain_at_rest: false, injury_last_12m: false, break_days: 90,
+    },
+    // p03 r19: 6-12 weeks only with clearance and the load tests passed.
+    expect: { blocked: { reason: 'postpartum_not_cleared', mentions: ['babic', '3 tedne'] } },
+  },
+  {
+    id: 'postpartum-9w-cleared',
+    who: 'Gave birth 9 weeks ago, cleared by her midwife and a pelvic-health physio',
+    profile: {
+      age: 30, fitness_level: 'intermediate', experience_months: 48, weekly_volume_km: 0,
+      days_per_week: 3, pregnancy_status: 'postpartum', weeks_postpartum: 9,
+      pain_at_rest: false, injury_last_12m: false, break_days: 90, postpartum_cleared: true,
+      sex: 'female',
+    },
+    // A plan is built. Its shape (the Goom walk-run table) is Phase 5; for
+    // now it must at least be a gentle comeback with no hard sessions early.
+    expect: { scenario: 'returning', noHardSessions: { firstWeeks: 6 } },
+  },
+  {
+    id: 'bmi-42-walker',
+    who: 'BMI 42, walks daily, wants to start running',
+    profile: {
+      age: 45, fitness_level: 'beginner', experience_months: 0, weekly_volume_km: 0, weight: 128,
+      height_cm: 175, target_distance_km: 5, days_per_week: 3,
+      pregnancy_status: 'none', pain_at_rest: false, injury_last_12m: false,
+    },
+    // p05 r4: no running prescription at BMI >= 40 (walking plan comes in Phase 5).
+    expect: { blocked: { reason: 'bmi_40', mentions: ['hoja', 'zdravnik'] } },
+  },
+  {
+    id: 'diabetic-inactive',
+    who: 'Type 2 diabetes, not exercising, no clearance recorded',
+    profile: {
+      age: 58, fitness_level: 'beginner', experience_months: 0, weekly_volume_km: 0,
+      target_distance_km: 5, days_per_week: 3, pregnancy_status: 'none', pain_at_rest: false,
+      injury_last_12m: false, known_condition: true,
+    },
+    expect: { blocked: { reason: 'known_condition_inactive', mentions: ['zdravnik'] } },
+  },
+  {
+    id: 'diabetic-active-uncleared',
+    who: 'Type 2 diabetes, already runs 30 km/week, wants a 10 km time, no clearance recorded',
+    profile: {
+      age: 48, fitness_level: 'intermediate', experience_months: 48, weekly_volume_km: 30,
+      longest_run_km: 12, target_distance_km: 10, event_date: sundayIn(12), days_per_week: 5,
+      pregnancy_status: 'none', pain_at_rest: false, injury_last_12m: false, known_condition: true,
+    },
+    // b01 r4: a plan, but nothing above steady effort until cleared.
+    expect: { scenario: 'short_race', notice: 'known_condition', noHardSessions: true },
+  },
+  {
+    id: 'diabetic-active-cleared',
+    who: 'Same runner, doctor has cleared training',
+    profile: {
+      age: 48, fitness_level: 'intermediate', experience_months: 48, weekly_volume_km: 30,
+      longest_run_km: 12, target_distance_km: 10, event_date: sundayIn(12), days_per_week: 5,
+      pregnancy_status: 'none', pain_at_rest: false, injury_last_12m: false, known_condition: true,
+      medical_clearance: true,
+    },
+    expect: { scenario: 'short_race', noNotice: 'known_condition', minHardPerWeek: { phase: 'build', count: 1 } },
+  },
+  {
+    id: 'bmi-36-beginner',
+    who: 'BMI 36, never ran, wants to run 5 km',
+    profile: {
+      age: 40, fitness_level: 'beginner', experience_months: 0, weekly_volume_km: 0, weight: 110,
+      height_cm: 175, target_distance_km: 5, days_per_week: 3,
+      pregnancy_status: 'none', pain_at_rest: false, injury_last_12m: false,
+    },
+    // p05 r5: doctor visit recommended; the plan itself is built.
+    expect: { scenario: 'complete_beginner', notice: 'bmi_35', walkRun: true, noHardSessions: true },
   },
 ]
 
