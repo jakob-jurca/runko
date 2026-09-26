@@ -931,6 +931,12 @@ export function layOutWeek({
   runDays: fixedRunDays = null, // explicit weekdays to run on
   qualityPlan = null, // [{ type, paceKey }] — this week's quality sessions, in order
   longShare = LONG_RUN_SHARE,
+  // Share of `volumeKm` left for training in the race week. The scenario
+  // builders size race-week training directly from the taper (1).
+  raceTrainingShare = RACE_WEEK_TRAINING_SHARE,
+  // Treat longShare as a hard cap (research builders); the legacy skeleton
+  // lets the easy-day surplus top the long run up to its ramp ceiling.
+  capLongAtShare = false,
 }) {
   const wanted = constraints.maxRunDays ?? RUN_DAYS_BY_LEVEL[fitnessLevel] ?? 4
   const runDays = fixedRunDays ?? chooseRunDays({
@@ -965,12 +971,15 @@ export function layOutWeek({
   // On race week the race IS the week. Everything else shrinks to a couple of
   // shakeout runs; otherwise the race distance lands on top of a full taper
   // week and the "taper" ends up bigger than the week before it.
-  const budget = race ? volumeKm * RACE_WEEK_TRAINING_SHARE : volumeKm
+  const budget = race ? volumeKm * raceTrainingShare : volumeKm
 
   // 1. Long run — a share of the week, hard-capped by the ramp ceiling that
   //    starts at the runner's own longest run (see buildLongRunCurve).
   let longDistance = budget * (isRecovery ? longShare * 0.8 : longShare)
   if (maxLongRunKm) longDistance = Math.min(longDistance, maxLongRunKm)
+  // The long run's share of the week is a cap too (b04 r18): nothing below
+  // may push it past this — not the easy-day surplus, not rounding.
+  const longCeiling = Math.min(maxLongRunKm || Infinity, capLongAtShare ? budget * longShare : Infinity)
 
   // 2. Quality — the 20% in 80/20 is the FAST RUNNING, not the whole session:
   //    a tempo workout is a warm-up, the hard portion, then a cool-down, and
@@ -1012,7 +1021,7 @@ export function layOutWeek({
   if (easyDays.length && easyEach > easyCap) {
     const surplus = (easyEach - easyCap) * easyDays.length
     easyEach = easyCap
-    const headroom = Math.max(0, (maxLongRunKm || Infinity) - longDistance)
+    const headroom = Math.max(0, longCeiling - longDistance)
     longDistance += Math.min(surplus, headroom)
   }
 
@@ -1062,17 +1071,20 @@ export function layOutWeek({
     return makeDay({ day, type: 'easy', distanceKm: easyEach, paceKey: 'easy', paces, intensity: 'easy' })
   })
 
-  return settleRounding(built, budget, maxLongRunKm, paces)
+  return settleRounding(built, budget, Number.isFinite(longCeiling) ? longCeiling : null, paces)
 }
 
 /**
- * Give the rounding remainder to the long run.
+ * Settle the whole-kilometre rounding remainder so the week's total stays
+ * honest.
  *
- * Rounding every day to a whole kilometre loses up to half a kilometre per
- * day, which at beginner volumes is most of a week's 10% progression — two
- * consecutive weeks would round to exactly the same numbers. Pushing the
- * difference onto the long run keeps the week's total honest AND keeps
- * consecutive weeks distinct.
+ * Rounding every day to a whole kilometre loses or adds up to half a
+ * kilometre per day, which at beginner volumes is most of a week's
+ * progression. A kilometre SHORT goes to the long run first (up to its ramp
+ * ceiling), then to the easy days. A kilometre OVER comes off the easy days
+ * first, then the long run. The long run is protected both ways because the
+ * next week's long-run cap grows from it (the 30-day spike rule): shaving
+ * it to settle rounding would compound week after week.
  */
 function settleRounding(days, budget, maxLongRunKm, paces) {
   const target = Math.round(budget)
@@ -1083,19 +1095,40 @@ function settleRounding(days, budget, maxLongRunKm, paces) {
   let diff = target - sum
   if (diff === 0) return days
 
-  // The long run absorbs it; it is the least sensitive to a kilometre either
-  // way, and never past its ramp ceiling.
   const long = trainable.find((d) => d.type === 'long') ||
     trainable.reduce((a, b) => (b.distance_km > a.distance_km ? b : a))
   const ceiling = maxLongRunKm ? Math.round(maxLongRunKm) : Infinity
-  const adjusted = clamp(long.distance_km + diff, 1, ceiling)
-  if (adjusted === long.distance_km) return days
+  const withKm = (d, km) => ({ ...d, distance_km: km, duration_min: Math.round(km * (paces[d.pace_key] ?? paces.easy)) })
+  let out = days
+  let longKm = long.distance_km
+  const setLong = (km) => {
+    out = out.map((d) => (d.type === long.type && d.day === long.day ? withKm(d, km) : d))
+    longKm = km
+  }
+  const easyDays = () => out.filter((d) => d.type === 'easy' && d !== long)
 
-  return days.map((d) =>
-    d === long
-      ? { ...d, distance_km: adjusted, duration_min: Math.round(adjusted * (paces[d.pace_key] ?? paces.easy)) }
-      : d
-  )
+  if (diff > 0) {
+    const adjusted = clamp(longKm + diff, 1, Math.max(ceiling, longKm))
+    diff -= adjusted - longKm
+    if (adjusted !== longKm) setLong(adjusted)
+    while (diff > 0) {
+      const easy = easyDays().filter((d) => d.distance_km + 1 < longKm).sort((a, b) => a.distance_km - b.distance_km)[0]
+      if (!easy) break
+      out = out.map((d) => (d === easy ? withKm(d, d.distance_km + 1) : d))
+      diff--
+    }
+  } else {
+    while (diff < 0) {
+      // Never below 2 km: a shorter "run" is dropped as a fragment later,
+      // which would lose far more than the kilometre being settled.
+      const easy = easyDays().filter((d) => d.distance_km > 2).sort((a, b) => b.distance_km - a.distance_km)[0]
+      if (!easy) break
+      out = out.map((d) => (d === easy ? withKm(d, d.distance_km - 1) : d))
+      diff++
+    }
+    if (diff < 0) setLong(clamp(longKm + diff, 1, longKm))
+  }
+  return out
 }
 
 /** Structural fallback titles. The AI may replace these with Slovenian ones. */

@@ -8,10 +8,11 @@
  *
  * Every week's progression is computed from what the PREVIOUS week actually
  * prescribed (after rounding and caps), not from what it was meant to be, so
- * a week can never exceed +10% on the one before it.
+ * a week can never exceed the runner's weekly limit on the one before it,
+ * and no run exceeds 1.10 x the longest of the last 30 days (limits.js).
  */
 import { layOutWeek, enrichDays, restDay, formatPace } from '../periodization.js'
-import { SAFE, nextWeeklyLoad, nextLongRun } from './rules.js'
+import { DEFAULT_LOAD, nextWeeklyLoad, nextLongRun } from './rules.js'
 
 const round = Math.round
 const HARD = new Set(['tempo', 'interval', 'repetition'])
@@ -34,10 +35,12 @@ const longestKm = (days) => Math.max(0, ...days.filter((d) => d.type !== 'race')
  * @param {string}   c.progression      'build' | 'rolling' | 'hold'
  * @param {number}   c.startLongKm      their current longest run
  * @param {number}   c.peakLongKm
- * @param {boolean}  c.cautious
- * @param {number}   c.longShare
+ * @param {number|Function} c.longShare  share, or (weekVolumeKm) => share
+ * @param {object}   [c.limits]         resolved limit values (limits.js)
  * @param {number}   c.longMaxKm        duration cap as km at easy pace (binds always)
- * @param {number[]} c.taperFactors     weekly volume vs peak, per taper week
+ * @param {number[]} c.taperFactors     weekly volume vs peak_ref, per taper week
+ * @param {number[]} [c.taperLongFactors] long-run cap vs peak long run, per taper week
+ * @param {number}   [c.preTaperLong]   long-run cap in the week before the taper
  * @param {Function} c.qualityFor       (weekIndex, phase) => [{type, paceKey}]
  * @param {Function} [c.decorate]       (days, weekIndex, phase) => days
  * @param {object|null} c.race          { weekIndex, day, distanceKm, walkBreaks }
@@ -45,13 +48,19 @@ const longestKm = (days) => Math.max(0, ...days.filter((d) => d.type !== 'race')
  * @param {Function} c.intentFor        (phase, isRecovery) => string
  */
 export function buildDistancePlan(c) {
+  const L = { ...DEFAULT_LOAD, ...(c.limits || {}) }
+  const shareFor = typeof c.longShare === 'function' ? c.longShare : () => c.longShare
   const weeks = []
   let lastProgressive = null // actual km of the last progressive week
-  let peakReached = 0
+  const loadingWeeks = [] // actual km of every loading week, for peak_ref
+  const weekLongs = [] // longest run of each week, for the 30-day spike window
   let longMax = c.startLongKm || 0
   let peakLongReached = 0
   let atCeiling = 0
   let longAtPeak = 0
+  let afterRecovery = false
+
+  const taperCount = c.phases.filter((p) => p === 'taper').length
 
   for (let i = 0; i < c.totalWeeks; i++) {
     const phase = c.phases[i]
@@ -59,24 +68,35 @@ export function buildDistancePlan(c) {
     const isTaper = phase === 'taper'
     const isRaceWeek = Boolean(c.race) && i === c.race.weekIndex
     const taperIndex = c.phases.slice(0, i).filter((p) => p === 'taper').length
-    const taperCount = c.phases.filter((p) => p === 'taper').length
+    const preTaper = !isTaper && c.phases[i + 1] === 'taper'
+
+    // The longest run of the last 30 days: the previous four weeks, plus what
+    // they ran before the plan while the plan is younger than that.
+    const recent = weekLongs.slice(-4)
+    const longest30d = Math.max(0, ...recent, i < 4 ? c.startLongKm || 0 : 0)
 
     // --- this week's volume ---------------------------------------------------
     let volume
     if (isTaper) {
+      // b06 r10: peak_ref = mean of the three biggest loading weeks.
+      const top = [...loadingWeeks].sort((a, b) => b - a).slice(0, 3)
+      const peakRef = top.length ? top.reduce((a, b) => a + b, 0) / top.length : c.startWeeklyKm
       const factors = c.taperFactors
       const f = factors[factors.length - taperCount + taperIndex] ?? factors[factors.length - 1] ?? 0.6
-      volume = Math.max(2, round((peakReached || c.startWeeklyKm) * f))
+      volume = Math.max(2, round(peakRef * f))
     } else if (isRecovery) {
-      volume = Math.max(2, round((lastProgressive ?? c.startWeeklyKm) * SAFE.recoveryFactor))
+      volume = Math.max(2, round((lastProgressive ?? c.startWeeklyKm) * L.recoveryFactor))
     } else if (lastProgressive === null) {
       volume = Math.min(c.startWeeklyKm, c.peakWeeklyKm)
     } else if (c.progression === 'hold') {
       // Maintenance: the same week, with a slightly lighter one alternating so
       // consecutive weeks are not identical.
       volume = atCeiling++ % 2 === 1 ? round(c.peakWeeklyKm * 0.95) : c.peakWeeklyKm
+    } else if (afterRecovery) {
+      // b04 r15: the week after a recovery week repeats the last loading week.
+      volume = Math.min(c.peakWeeklyKm, lastProgressive)
     } else {
-      const next = Math.min(c.peakWeeklyKm, nextWeeklyLoad(lastProgressive))
+      const next = Math.min(c.peakWeeklyKm, nextWeeklyLoad(lastProgressive, 'distance', L))
       if (next >= c.peakWeeklyKm && lastProgressive >= c.peakWeeklyKm - 1) {
         // At the ceiling: alternate full and slightly lighter weeks.
         volume = atCeiling++ % 2 === 1 ? round(c.peakWeeklyKm * 0.92) : c.peakWeeklyKm
@@ -89,27 +109,34 @@ export function buildDistancePlan(c) {
     // --- this week's long-run ceiling -------------------------------------
     let longCap
     if (isTaper) {
-      const f = [0.65, 0.5, 0.4][Math.max(0, taperIndex - (taperCount - 3))] ?? 0.5
+      const f = c.taperLongFactors?.[c.taperLongFactors.length - taperCount + taperIndex] ?? 0.5
       longCap = Math.max(3, round((peakLongReached || longMax) * f))
     } else if (isRecovery) {
-      longCap = Math.max(3, round(longMax * 0.8))
+      // b06 r3: the recovery week's long run is 0.70 of the last one.
+      longCap = Math.max(3, round((weekLongs[weekLongs.length - 1] || longMax) * L.recoveryLongFactor))
     } else if (c.progression === 'hold') {
       longCap = Math.min(c.peakLongKm, Math.max(3, longMax))
     } else {
       // The peak is whichever binds first: the goal's distance or the
       // duration cap at this runner's pace.
       const peak = Math.min(c.peakLongKm, c.longMaxKm || Infinity)
-      const step = longMax > 0 ? nextLongRun(longMax, { cautious: c.cautious }) : 3
-      longCap = Math.max(3, Math.min(peak, step))
+      longCap = Math.max(3, Math.min(peak, nextLongRun(longest30d)))
       // Nobody runs their peak long run every week. Once it is reached,
       // alternate a full one with a shorter one until the taper.
       if (longCap >= peak && longMax >= peak - 0.5) {
         longCap = longAtPeak++ % 2 === 1 ? Math.max(3, round(peak * 0.85)) : peak
       }
     }
+    // b06 r23: before a one-week taper the last full-length long run is
+    // already >= 10 days out.
+    if (preTaper && c.preTaperLong) longCap = Math.min(longCap, Math.max(3, round((peakLongReached || longMax) * c.preTaperLong)))
 
-    // Duration binds before anything else (rules.js longRunMaxMinutes).
+    // b04 r16 [SAFETY]: no run over 1.10 x the 30-day longest (1 km step
+    // below 10 km), whatever the week; and duration binds before anything
+    // else. Whole kilometres, so settleRounding cannot round past either.
+    longCap = Math.min(longCap, Math.max(nextLongRun(longest30d), longest30d))
     if (c.longMaxKm) longCap = Math.min(longCap, c.longMaxKm)
+    longCap = Math.floor(longCap)
 
     const qualityPlan = isRecovery ? [] : c.qualityFor(i, phase)
     let days = layOutWeek({
@@ -119,8 +146,11 @@ export function buildDistancePlan(c) {
       paces: c.paces,
       runDays: c.runDays,
       qualityPlan,
-      longShare: c.longShare,
+      longShare: shareFor(volume),
       maxLongRunKm: longCap,
+      // The taper factors are the race week's training WITHOUT the race.
+      raceTrainingShare: 1,
+      capLongAtShare: true,
       goalPaceKey: c.goalPaceKey,
       race: isRaceWeek ? { day: c.race.day, distanceKm: c.race.distanceKm } : null,
     })
@@ -152,9 +182,11 @@ export function buildDistancePlan(c) {
     const actual = trainingKm(days)
     if (!isRecovery && !isTaper && !isRaceWeek) {
       lastProgressive = actual
-      peakReached = Math.max(peakReached, actual)
+      loadingWeeks.push(actual)
     }
+    afterRecovery = isRecovery
     const long = longestKm(days)
+    weekLongs.push(long)
     longMax = Math.max(longMax, long)
     if (!isTaper) peakLongReached = Math.max(peakLongReached, long)
 

@@ -7,6 +7,12 @@
  * limit to get there — which is exactly the "squeezed plan" this pipeline
  * exists to prevent.
  *
+ * The numbers are runko-research's engine rules (rule references in the
+ * comments). Which of them apply to one runner — an age cap, a level floor —
+ * is decided in limits.js; the helpers here take that runner's resolved
+ * limits (`L`) and fall back to DEFAULT_LOAD, the rules for an adult under
+ * 50 with no other population rule.
+ *
  * Pure data and arithmetic. See ../README.md for the core rules.
  */
 
@@ -15,68 +21,102 @@
 // ---------------------------------------------------------------------------
 
 export const SAFE = {
-  /** Weekly load may grow by at most 10% on the progressive trend... */
+  /** b04 r8: weekly load grows by at most 10% on the progressive trend... */
   weeklyIncrease: 0.1,
-  /** ...or by one whole kilometre, where 10% rounds to nothing. */
-  weeklyFloorKm: 1,
-  /** Time-based plans: 10% or five minutes a week. */
+  /** ...b04 r12 [SAFETY]: and never by more than 20%, for anyone. */
+  weeklyCeiling: 0.2,
+  /** Time-based plans: 10% or five minutes a week (walk-run rules: phase 3). */
   weeklyFloorMin: 5,
 
-  /** Longest-run growth per week for runners with a real base. */
-  longStepKm: 2,
-  longStepPct: 0.15,
-  /** Beginners and returning runners: tendons adapt slower than lungs. */
-  cautiousLongStepKm: 1,
-  cautiousLongStepPct: 0.1,
+  /**
+   * b04 r16 [SAFETY]: no run longer than 1.10 x the longest run of the last
+   * 30 days. Distances are whole kilometres, so under 10 km the smallest
+   * possible step is 1 km — the kilometre version of the walk-run "+5 min"
+   * floor (5-7 min at easy pace).
+   */
+  longSpike: 0.1,
+  longSpikeFloorKm: 1,
 
-  /** The long run's share of the week, by run days (fewer days, larger share). */
+  /** Layout preference: the long run's share of the week by run days. */
   longShareByDays: { 2: 0.65, 3: 0.55, 4: 0.5, 5: 0.45, 6: 0.4, 7: 0.35 },
 
   /**
-   * THE long-run cap is duration, not distance: time on feet is what loads
-   * tendons and bones, and a slow runner covering 30 km is out for far longer
-   * than a fast one. 2.5 h for most runners, up to 3 h in marathon plans
-   * (knowledge/methodology.md).
+   * THE long-run cap is duration, not distance (decision 1, b04 r20): time on
+   * feet is what loads tendons and bones, and a slow runner covering 30 km
+   * is out for far longer than a fast one.
    */
   longRunMaxMinutes: 150,
   marathonLongRunMaxMinutes: 180,
 
   /**
-   * Above ~50 km a week the long run is GUIDED to ~30% of the week (Daniels).
-   * Guidance, not a cap: where the goal needs a longer run (marathon builds)
-   * the duration cap is what binds.
+   * Long-run share of the week (b04 r18, decisions 1 and 5). Above ~50 km a
+   * week it is guidance (36%) that a goal may exceed, the duration cap
+   * binding instead; below it, a cap: 60% on 2 run days, 45% on 3, and on
+   * 4+ days 45% under 40 km (or a first marathon), 36% from 40 km.
    */
   highVolumeKm: 50,
-  highVolumeLongShare: 0.3,
+  lowVolumeKm: 40,
+  longShareDefault: 0.36,
+  longShareLowVolume: 0.45,
+  longShareByRuns: { 2: 0.6, 3: 0.45 },
+  /** Above ~50 km a goal may take the long run past 36% — never past half the week. */
+  goalDrivenMaxShare: 0.5,
 
   /** Distance ceilings the goal-derived peak never exceeds (secondary to duration). */
   longRunMaxKm: 32,
   ultraLongRunMaxKm: 35,
 
+  /** b06 r1-3: a lighter week every 4th (3:1), at 0.75 of the last loading week, long run 0.70. */
   recoveryEvery: 4,
   recoveryFactor: 0.75,
+  recoveryLongFactor: 0.7,
+
+  /** b04 r2: a self-reported weekly volume is started at 90%. */
+  statedVolumeFactor: 0.9,
 }
+
+/** b04 r9: the absolute weekly step allowed where 10% rounds to nothing, by level. */
+export const WEEKLY_FLOOR_KM = { none: 2, beginner: 2, novice: 2, intermediate: 3, advanced: 5, elite: 5 }
+
+/** The load rules for an adult under 50 with no population rule (see limits.js). */
+export const DEFAULT_LOAD = {
+  weeklyIncreasePct: SAFE.weeklyIncrease,
+  weeklyCeilingPct: SAFE.weeklyCeiling,
+  weeklyFloorKm: WEEKLY_FLOOR_KM.novice,
+  recoveryEvery: SAFE.recoveryEvery,
+  recoveryFactor: SAFE.recoveryFactor,
+  recoveryLongFactor: SAFE.recoveryLongFactor,
+  startVolumeFactor: 1,
+  longRunMaxMin: null,
+}
+
+const load = (L) => ({ ...DEFAULT_LOAD, ...(L || {}) })
 
 /**
- * The long run's share of the week. By run days; above ~50 km a week, guided
- * down to ~30% unless the goal itself needs the long run (goalDriven).
+ * The long run's share of a week of `weeklyKm` on `runDays` days.
+ * goalDriven: a long race whose goal needs the long run — above ~50 km the
+ * 36% is then only guidance and the progression and duration caps bind.
  */
-export function longShareFor(runDays, { weeklyKm = 0, goalDriven = false } = {}) {
+export function longShareFor(runDays, { weeklyKm = 0, goalDriven = false, firstMarathon = false } = {}) {
   const days = Math.min(7, Math.max(2, Math.round(runDays || 3)))
   const byDays = SAFE.longShareByDays[days]
-  if (!goalDriven && weeklyKm >= SAFE.highVolumeKm) return Math.min(byDays, SAFE.highVolumeLongShare)
-  return byDays
+  if (weeklyKm >= SAFE.highVolumeKm) {
+    return goalDriven ? SAFE.goalDrivenMaxShare : Math.min(byDays, SAFE.longShareDefault)
+  }
+  const cap = SAFE.longShareByRuns[days] ??
+    (weeklyKm < SAFE.lowVolumeKm || firstMarathon ? SAFE.longShareLowVolume : SAFE.longShareDefault)
+  return Math.min(byDays, cap)
 }
 
-/** Longest a long run may last, in minutes: 3 h for marathon-and-longer plans, else 2.5 h. */
+/** Longest a long run may last, in minutes: 3 h for marathon-and-longer plans, else 2.5 h (b04 r20). */
 export function longRunMaxMinutes(distanceKm) {
   return distanceKm >= 42.2 ? SAFE.marathonLongRunMaxMinutes : SAFE.longRunMaxMinutes
 }
 
-/** The duration cap as kilometres at this runner's easy pace (min/km). */
-export function longRunDurationCapKm(distanceKm, easyPaceMinPerKm) {
-  if (!(easyPaceMinPerKm > 0)) return Infinity
-  return Math.floor(longRunMaxMinutes(distanceKm) / easyPaceMinPerKm)
+/** A duration cap (minutes) as whole kilometres at this runner's easy pace (min/km). */
+export function longRunDurationCapKm(maxMinutes, easyPaceMinPerKm) {
+  if (!(easyPaceMinPerKm > 0) || !(maxMinutes > 0)) return Infinity
+  return Math.floor(maxMinutes / easyPaceMinPerKm)
 }
 
 /** Absolute long-run ceiling for a goal distance. */
@@ -85,19 +125,29 @@ export function longRunCeiling(distanceKm) {
 }
 
 /**
- * Next week's load on the progressive trend, never more than the limit.
- * Floors the 10% so rounding can never push a week over it.
+ * Next week's load on the progressive trend (b04 r8-12): the runner's weekly
+ * percentage, or their level's absolute floor where the percentage rounds to
+ * nothing, and never past the 20% ceiling. Whole kilometres: below 5 km a
+ * week the smallest possible step (1 km) is allowed even though it is more
+ * than 20%.
  */
-export function nextWeeklyLoad(previous, unit = 'distance') {
-  const floor = unit === 'time' ? SAFE.weeklyFloorMin : SAFE.weeklyFloorKm
-  return Math.max(previous + floor, Math.floor(previous * (1 + SAFE.weeklyIncrease)))
+export function nextWeeklyLoad(previous, unit = 'distance', L) {
+  const r = load(L)
+  if (unit === 'time') {
+    return Math.max(previous + SAFE.weeklyFloorMin, Math.floor(previous * (1 + r.weeklyIncreasePct)))
+  }
+  const grown = Math.max(previous + r.weeklyFloorKm, Math.floor(previous * (1 + r.weeklyIncreasePct)))
+  const ceiling = Math.max(previous + 1, Math.floor(previous * (1 + r.weeklyCeilingPct)))
+  return Math.min(grown, ceiling)
 }
 
-/** Next long-run ceiling from the longest run so far. */
-export function nextLongRun(previous, { cautious = false } = {}) {
-  const km = cautious ? SAFE.cautiousLongStepKm : SAFE.longStepKm
-  const pct = cautious ? SAFE.cautiousLongStepPct : SAFE.longStepPct
-  return Math.max(previous + km, previous * (1 + pct))
+/**
+ * The longest any run may be, from the longest run of the last 30 days
+ * (b04 r16 [SAFETY]): +10%, or the 1 km whole-kilometre step below 10 km.
+ */
+export function nextLongRun(longest30d) {
+  if (!(longest30d > 0)) return 3
+  return Math.floor(Math.max(longest30d * (1 + SAFE.longSpike), longest30d + SAFE.longSpikeFloorKm))
 }
 
 // ---------------------------------------------------------------------------
@@ -164,12 +214,44 @@ export function readinessFor(distanceKm) {
 export const WALK_BREAK_LONG_SHARE = 0.6
 export const WALK_BREAK_MAX_KM = 10
 
-/** Taper length (weeks, race week included) and volume factors, by distance. */
-export function taperFor(distanceKm) {
-  if (!(distanceKm > 0)) return { weeks: 0, factors: [] }
-  if (distanceKm <= 10) return { weeks: 2, factors: [0.85, 0.6] }
-  if (distanceKm <= 30) return { weeks: 2, factors: [0.75, 0.5] }
-  return { weeks: 3, factors: [0.8, 0.6, 0.45] }
+/**
+ * Taper (b06 rules 9-16, 22-23): weeks (race week included), each week's
+ * volume as a fraction of peak_ref (the mean of the three biggest loading
+ * weeks; the race-week figure is its training EXCLUDING the race), and the
+ * long-run cap in each week as a fraction of the peak long run.
+ *
+ *   5 km      7 days    race week 0.65 (beginner/novice 0.75)
+ *   10 km     7 days    race week 0.60 (0.70); advanced/elite 2 weeks, 0.85 first
+ *   half      14 days   0.70, 0.50; novice 10 days (week -2 is 4 normal days
+ *                       and 3 at 0.70: 0.87)
+ *   marathon  21 days   0.75, 0.60, 0.40 when the peak is >= 40 km a week;
+ *             14 days   0.70, 0.45 below that
+ *
+ * `preTaperLong` caps the long run of the week BEFORE a short taper, so the
+ * last full-length long run is >= 10 days out for 5 and 10 km.
+ */
+const BEGINNERS = new Set(['none', 'beginner', 'novice'])
+
+export function taperFor(distanceKm, { level = 'novice', peakKm = 0 } = {}) {
+  if (!(distanceKm > 0)) return { weeks: 0, factors: [], longFactors: [], preTaperLong: null, rule: null }
+  const novice = BEGINNERS.has(level)
+  const advanced = level === 'advanced' || level === 'elite'
+  if (distanceKm <= 5) {
+    return { weeks: 1, factors: [novice ? 0.75 : 0.65], longFactors: [0.4], preTaperLong: 0.85, rule: 'b06 r15' }
+  }
+  if (distanceKm <= 10) {
+    if (advanced) return { weeks: 2, factors: [0.85, 0.6], longFactors: [0.7, 0.4], preTaperLong: null, rule: 'b06 r14' }
+    return { weeks: 1, factors: [novice ? 0.7 : 0.6], longFactors: [0.4], preTaperLong: 0.85, rule: 'b06 r14' }
+  }
+  if (distanceKm <= 30) {
+    return novice
+      ? { weeks: 2, factors: [0.87, 0.5], longFactors: [0.75, 0.4], preTaperLong: null, rule: 'b06 r13 (novice, 10 days)' }
+      : { weeks: 2, factors: [0.7, 0.5], longFactors: [0.65, 0.4], preTaperLong: null, rule: 'b06 r13' }
+  }
+  if (peakKm >= 40) {
+    return { weeks: 3, factors: [0.75, 0.6, 0.4], longFactors: [0.78, 0.6, 0.35], preTaperLong: null, rule: 'b06 r11, r22' }
+  }
+  return { weeks: 2, factors: [0.7, 0.45], longFactors: [0.65, 0.35], preTaperLong: null, rule: 'b06 r12' }
 }
 
 // ---------------------------------------------------------------------------
@@ -192,7 +274,6 @@ export const SCENARIOS = [
  *
  *   unit        'time' prescribes minutes (walk-run), 'distance' kilometres
  *   hard        whether tempo / interval / repetition sessions may appear
- *   cautious    long-run steps of 1 km / 10% rather than 2 km / 15%
  *   backToBack  whether two run days may be adjacent
  *   maxRunDays  cap on run days, whatever the runner offered
  *   progression 'build' grows toward a goal, 'hold' keeps volume flat,
@@ -200,31 +281,31 @@ export const SCENARIOS = [
  */
 export const SCENARIO_RULES = {
   complete_beginner: {
-    unit: 'time', hard: false, cautious: true, backToBack: false, maxRunDays: 3,
+    unit: 'time', hard: false, backToBack: false, maxRunDays: 3,
     progression: 'build', weeks: null,
   },
   beginner_with_deadline: {
-    unit: 'distance', hard: false, cautious: true, backToBack: false, maxRunDays: 4,
+    unit: 'distance', hard: false, backToBack: false, maxRunDays: 4,
     progression: 'build', weeks: null, walkBreaksInEvent: true,
   },
   recreational: {
-    unit: 'distance', hard: false, cautious: true, backToBack: true, maxRunDays: 5,
+    unit: 'distance', hard: false, backToBack: true, maxRunDays: 5,
     progression: 'rolling', weeks: 12,
   },
   short_race: {
-    unit: 'distance', hard: true, cautious: false, backToBack: true, maxRunDays: 7,
+    unit: 'distance', hard: true, backToBack: true, maxRunDays: 7,
     progression: 'build', weeks: null,
   },
   long_race: {
-    unit: 'distance', hard: true, cautious: false, backToBack: true, maxRunDays: 7,
+    unit: 'distance', hard: true, backToBack: true, maxRunDays: 7,
     progression: 'build', weeks: null,
   },
   returning: {
-    unit: 'distance', hard: 'late', cautious: true, backToBack: true, maxRunDays: 5,
+    unit: 'distance', hard: 'late', backToBack: true, maxRunDays: 5,
     progression: 'build', weeks: 12, noIntensityWeeks: 6,
   },
   maintenance: {
-    unit: 'distance', hard: true, cautious: false, backToBack: true, maxRunDays: 7,
+    unit: 'distance', hard: true, backToBack: true, maxRunDays: 7,
     progression: 'hold', weeks: 12,
   },
 }

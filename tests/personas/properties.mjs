@@ -13,9 +13,36 @@ import { ALL_DAYS } from './personas.mjs'
 
 export const HARD_TYPES = new Set(['tempo', 'interval', 'repetition'])
 
-/** Floor on a week-to-week increase: a whole kilometre, or 5 minutes. */
-const FLOOR_KM = 1
+/**
+ * runko-research load rules, written out here from the research text (not
+ * imported from the engine, so the engine is never checked against itself):
+ *
+ *   b04 r8-12  weekly increase: the runner's percentage (10%; p04: 8% at
+ *              50-59, 5% at 60+), or the level's absolute floor where the
+ *              percentage rounds to nothing (+2 km beginner/novice, +3
+ *              intermediate, +5 advanced/elite; masters +1 km), never more
+ *              than 20% — whole kilometres, so +1 km is always allowed.
+ *   b04 r16    no run over 1.10 x the longest run of the last 30 days; with
+ *              whole kilometres the smallest step is +1 km.
+ *   b04 r20    long run <= 150 min, 180 in marathon plans; p04 r21: 150 at
+ *              60+, 120 at 70+, unless >= 2 marathons.
+ */
 const FLOOR_MIN = 5
+const LEVEL_FLOOR_KM = { none: 2, beginner: 2, novice: 2, intermediate: 3, advanced: 5, elite: 5 }
+
+/** p04 r6-8: the weekly percentage for this runner's age. */
+export function agePct(persona) {
+  const age = persona.profile.age ?? 0
+  const seasoned = (persona.profile.experience_months ?? 0) >= 120 && persona.profile.injury_last_12m === false
+  if (age >= 60) return seasoned ? 7 : 5
+  if (age >= 50) return 8
+  return 10
+}
+
+function floorKm(result, persona) {
+  if ((persona.profile.age ?? 0) >= 50) return 1
+  return LEVEL_FLOOR_KM[result.stored?.planning?.assessment?.experience_level] ?? 2
+}
 
 const runDaysOf = (week) => week.days.filter((d) => d.type !== 'rest')
 const isRace = (d) => d.type === 'race'
@@ -55,10 +82,14 @@ export function restDaysRespected(result, persona) {
   return { ok: true }
 }
 
-export function weeklyIncreaseWithinLimit(result, persona, pct = 10) {
+export function weeklyIncreaseWithinLimit(result, persona, pct = agePct(persona)) {
   const unit = result.unit
-  const floor = unit === 'time' ? FLOOR_MIN : FLOOR_KM
-  const limit = (prev) => Math.max(prev * (1 + pct / 100), prev + floor)
+  const kmFloor = floorKm(result, persona)
+  // Walk-run minutes keep the pre-research 10% / 5 min check until the
+  // walk-run rules (decision 6) replace it.
+  const limit = (prev, u = unit) => u === 'time'
+    ? Math.max(prev * 1.1, prev + FLOOR_MIN)
+    : Math.min(Math.max(prev * (1 + pct / 100), prev + kmFloor), Math.max(prev * 1.2, prev + 1))
 
   // Week 1 against what they do now.
   const current = Number(persona.profile.weekly_volume_km) || 0
@@ -79,7 +110,7 @@ export function weeklyIncreaseWithinLimit(result, persona, pct = 10) {
     const u = w.unit ?? unit
     const load = weekLoad(w, unit)
     const prev = last && (last.unit === u ? last.load : u === 'distance' ? last.km : null)
-    if (prev && load > limit(prev) + 0.01) {
+    if (prev && load > limit(prev, u) + 0.01) {
       return {
         ok: false,
         detail: `week ${w.week_number}: ${load} ${u === 'time' ? 'min' : 'km'} after ${prev} in week ${last.week} (+${Math.round((load / prev - 1) * 100)}%)`,
@@ -92,23 +123,19 @@ export function weeklyIncreaseWithinLimit(result, persona, pct = 10) {
 
 export function longRunProgressionSafe(result, persona) {
   const stated = Number(persona.profile.longest_run_km) || 0
-  let prev = stated || null
-  let firstChecked = false
-  for (const w of result.weeks) {
-    if (w.is_recovery || w.phase === 'taper' || hasRaceDay(w)) continue
-    const long = Math.max(0, ...runDaysOf(w).map((d) => Number(d.distance_km) || 0))
-    if (!long) continue
-    if (prev !== null) {
-      const cap = Math.max(prev + 2, prev * 1.15)
+  const longs = []
+  for (const [i, w] of result.weeks.entries()) {
+    const long = Math.max(0, ...runDaysOf(w).filter((d) => !isRace(d)).map((d) => Number(d.distance_km) || 0))
+    // The last 30 days: the four weeks before, and their stated longest
+    // while the plan is younger than that.
+    const m30 = Math.max(0, ...longs.slice(-4), i < 4 ? stated : 0)
+    if ((w.unit ?? result.unit) === 'distance' && m30 > 0) {
+      const cap = Math.floor(Math.max(m30 * 1.1, m30 + 1))
       if (long > cap + 0.01) {
-        return {
-          ok: false,
-          detail: `week ${w.week_number}: longest run ${long} km after ${prev} km${firstChecked ? '' : ' (their current longest)'}`,
-        }
+        return { ok: false, detail: `week ${w.week_number}: longest run ${long} km, 30-day longest ${m30} km (cap ${cap})` }
       }
     }
-    firstChecked = true
-    prev = Math.max(prev ?? 0, long)
+    longs.push(long)
   }
   return { ok: true }
 }
@@ -117,14 +144,45 @@ export function longRunProgressionSafe(result, persona) {
  * The long-run cap is DURATION: no training run over 2.5 h, or 3 h in a
  * marathon-or-longer plan (knowledge/methodology.md).
  */
-export function runDurationWithinCap(result) {
-  const cap = (result.goal?.distance_km ?? 0) >= 42.2 ? 180 : 150
+export function runDurationWithinCap(result, persona) {
+  let cap = (result.goal?.distance_km ?? 0) >= 42.2 ? 180 : 150
+  const age = persona?.profile?.age ?? 0
+  if (age >= 60 && !((persona.profile.marathons_completed ?? 0) >= 2)) cap = Math.min(cap, age >= 70 ? 120 : 150)
   for (const w of result.weeks) {
     for (const d of runDaysOf(w)) {
       if (isRace(d)) continue
       if ((d.duration_min || 0) > cap) {
         return { ok: false, detail: `week ${w.week_number}: ${d.distance_km} km ${d.type} lasts ${d.duration_min} min (cap ${cap})` }
       }
+    }
+  }
+  return { ok: true }
+}
+
+/**
+ * b04 r18 with decisions 1 and 5: below 50 km a week the long run is at most
+ * 60% of the week on 2 run days, 45% on 3, and on 4+ days 45% under 40 km (or
+ * a first marathon, marathons_completed = 0) and 36% from 40 km. Above 50 km
+ * the 36% is guidance a long-race goal may exceed, never past half the week.
+ * One kilometre of tolerance for whole-kilometre rounding.
+ */
+export function longRunShareWithinCap(result, persona) {
+  const firstMarathon = (result.goal?.distance_km ?? 0) >= 42.2 && persona.profile.marathons_completed === 0
+  const longRace = (result.goal?.distance_km ?? 0) > 10
+  for (const w of result.weeks) {
+    if ((w.unit ?? result.unit) !== 'distance' || hasRaceDay(w)) continue
+    const runs = runDaysOf(w)
+    const km = weekLoad(w, 'distance')
+    if (!runs.length || !km) continue
+    const long = Math.max(...runs.map((d) => d.distance_km || 0))
+    let cap
+    if (km >= 50) cap = longRace ? 0.5 : 0.36
+    else if (runs.length <= 2) cap = 0.6
+    else if (runs.length === 3) cap = 0.45
+    else cap = km < 40 || firstMarathon ? 0.45 : 0.36
+    // A week of a single run (fragments dropped) has nothing to share with.
+    if (runs.length > 1 && long > km * cap + 1) {
+      return { ok: false, detail: `week ${w.week_number}: long run ${long} km of ${km} km (${Math.round((long / km) * 100)}%, cap ${cap * 100}%)` }
     }
   }
   return { ok: true }
@@ -244,12 +302,21 @@ export const SPECIFIC = {
       ? { ok: true }
       : { ok: false, detail: 'no short fast reps anywhere' },
 
+  // b06 r9-17: the race week carries less training than the peak, and every
+  // taper week less than the one before it (no rebound inside a taper).
   taper: (r) => {
     const raceIdx = r.weeks.findIndex(hasRaceDay)
     if (raceIdx < 1) return { ok: false, detail: 'no race week' }
     const peak = Math.max(...r.weeks.slice(0, raceIdx).map((w) => weekLoad(w, r.unit)))
-    const before = weekLoad(r.weeks[raceIdx - 1], r.unit)
-    return before < peak ? { ok: true } : { ok: false, detail: `week before the race is ${before}, peak ${peak}` }
+    const race = weekLoad(r.weeks[raceIdx], r.unit)
+    if (!(race < peak)) return { ok: false, detail: `race week training ${race}, peak ${peak}` }
+    const first = r.weeks.findIndex((w) => w.phase === 'taper')
+    for (let i = Math.max(1, first); first !== -1 && i <= raceIdx; i++) {
+      const a = weekLoad(r.weeks[i - 1], r.unit)
+      const b = weekLoad(r.weeks[i], r.unit)
+      if (b >= a) return { ok: false, detail: `taper week ${r.weeks[i].week_number}: ${b} after ${a}` }
+    }
+    return { ok: true }
   },
 
   noTaper: (r) =>
@@ -365,6 +432,33 @@ export const SPECIFIC = {
   },
 
   /** The weeks before the race block are labelled as their own phase. */
+  // b06 r1, p04 r14: at most n-1 loading weeks between two recovery weeks.
+  recoveryCycle: (r, p, n) => {
+    const idx = r.weeks.map((w, i) => (w.is_recovery ? i : -1)).filter((i) => i >= 0)
+    if (!idx.length) return { ok: false, detail: 'no recovery week' }
+    for (let k = 1; k < idx.length; k++) {
+      if (idx[k] - idx[k - 1] > n) return { ok: false, detail: `recovery weeks ${idx[k - 1] + 1} and ${idx[k] + 1}: ${idx[k] - idx[k - 1] - 1} loading weeks between` }
+    }
+    return { ok: true }
+  },
+
+  // b06 r2, p04 r14: a recovery week is at most f x the loading week before it.
+  recoveryDepth: (r, p, f) => {
+    for (const [i, w] of r.weeks.entries()) {
+      if (!w.is_recovery || i === 0 || (w.unit ?? r.unit) !== 'distance') continue
+      const before = weekLoad(r.weeks[i - 1], 'distance')
+      const load = weekLoad(w, 'distance')
+      if (load > before * f + 1) return { ok: false, detail: `week ${w.week_number}: ${load} km after ${before} (> ${f})` }
+    }
+    return { ok: true }
+  },
+
+  // b06 r9: taper length in weeks, race week included.
+  taperWeeks: (r, p, n) => {
+    const got = r.weeks.filter((w) => w.phase === 'taper').length
+    return got === n ? { ok: true } : { ok: false, detail: `${got} taper weeks, expected ${n}` }
+  },
+
   foundationFirst: (r, p, weeks) => {
     const lead = r.weeks.findIndex((w) => w.phase !== 'foundation')
     return lead === weeks ? { ok: true } : { ok: false, detail: `${lead === -1 ? r.weeks.length : lead} foundation weeks, expected ${weeks}` }

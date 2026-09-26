@@ -1,15 +1,17 @@
 /**
  * progression.js — how long safe progression takes.
  *
- * Simulates week-by-week growth under the limits in rules.js (10% weekly,
- * capped long-run steps, a recovery week every 4th) and answers "how many
- * weeks until this runner could safely be ready for that distance?". Both
- * classify (is the deadline too soon for a beginner?) and feasibility use
- * this, so they can never disagree.
+ * Simulates week-by-week growth under this runner's limits (rules.js with
+ * the values from limits.js: weekly percentage, level floor, 20% ceiling,
+ * the 10% long-run spike rule, a recovery week every 3rd or 4th week and a
+ * hold the week after it) and answers "how many weeks until this runner
+ * could safely be ready for that distance?". Both classify (is the deadline
+ * too soon for a beginner?) and feasibility use this, so they can never
+ * disagree — and the builder uses the same helpers.
  */
 import {
-  SAFE, nextWeeklyLoad, nextLongRun, longShareFor, readinessFor, taperFor, longRunDurationCapKm,
-  WALK_BREAK_LONG_SHARE, WALK_BREAK_MAX_KM,
+  DEFAULT_LOAD, nextWeeklyLoad, nextLongRun, longShareFor, readinessFor, taperFor, longRunDurationCapKm,
+  longRunMaxMinutes, WALK_BREAK_LONG_SHARE, WALK_BREAK_MAX_KM,
 } from './rules.js'
 
 /** Weeks of walk-run before a complete beginner runs 20 minutes non-stop. */
@@ -30,20 +32,35 @@ const HORIZON = 156 // three years; beyond this, "not in one block" is the answe
  * Weeks of safe progression (recovery weeks included, taper excluded) until
  * the runner reaches both the weekly volume and the long run.
  *
+ * @param {object} opts
+ * @param {object} [opts.limits] - resolved limit values (limits.js); defaults otherwise
+ * @param {boolean} [opts.goalDriven] - a long race: the long-run share may exceed the 36% guidance
  * @returns {number} Infinity when it takes longer than the horizon
  */
-export function weeksToReach({ startWeekly, startLong, needWeekly, needLong, runDays = 4, cautious = false }) {
+export function weeksToReach({
+  startWeekly, startLong, needWeekly, needLong, runDays = 4, limits = DEFAULT_LOAD,
+  goalDriven = false, firstMarathon = false,
+}) {
+  const L = { ...DEFAULT_LOAD, ...limits }
   let weekly = Math.max(0, startWeekly || 0)
   let longest = Math.max(0, startLong || 0)
   if (weekly >= needWeekly && longest >= needLong) return 0
 
-  const share = longShareFor(runDays)
   let lastProgressive = weekly
+  let afterRecovery = false
   for (let week = 1; week <= HORIZON; week++) {
-    if (week % SAFE.recoveryEvery === 0) continue // recovery: time passes, nothing gained
-    const volume = week === 1 ? Math.max(weekly, 1) : nextWeeklyLoad(lastProgressive)
+    if (week % L.recoveryEvery === 0) {
+      afterRecovery = true // recovery: time passes, nothing gained
+      continue
+    }
+    // b04 r15: the week after a recovery week repeats the last loading week.
+    const volume = week === 1 ? Math.max(weekly, 1)
+      : afterRecovery ? lastProgressive
+        : nextWeeklyLoad(lastProgressive, 'distance', L)
+    afterRecovery = false
     lastProgressive = volume
-    const long = Math.min(nextLongRun(Math.max(longest, 1), { cautious }), volume * share)
+    const share = longShareFor(runDays, { weeklyKm: volume, goalDriven, firstMarathon })
+    const long = Math.min(nextLongRun(Math.max(longest, 1)), volume * share)
     longest = Math.max(longest, long)
     if (volume >= needWeekly && longest >= needLong) return week
   }
@@ -59,19 +76,27 @@ export function weeksToReach({ startWeekly, startLong, needWeekly, needLong, run
  * @param {number} opts.distanceKm
  * @param {number} opts.runDays
  * @param {boolean} [opts.walkBreaks] - a beginner event where walking is allowed
- * @param {boolean} [opts.cautious]
  * @param {boolean} [opts.gentle] - older / walking-only beginners
+ * @param {object} [opts.limits] - resolved limit values (limits.js)
+ * @param {boolean} [opts.firstMarathon]
  */
-export function weeksNeeded({ assessment, distanceKm, runDays, walkBreaks = false, cautious = false, gentle = false }) {
+export function weeksNeeded({
+  assessment, distanceKm, runDays, walkBreaks = false, gentle = false, limits = DEFAULT_LOAD, firstMarathon = false,
+}) {
+  const L = { ...DEFAULT_LOAD, ...limits }
   const req = readinessFor(distanceKm)
   if (!req) return { min: 0, comfortable: 0, requirements: null }
-  const taper = taperFor(distanceKm).weeks
+  const level = assessment.experience_level
+  const taper = taperFor(distanceKm, { level, peakKm: req.weeklyComf }).weeks
 
   // Walk breaks lower what it takes to FINISH a short event, not to run it well.
   const walkable = walkBreaks && distanceKm <= WALK_BREAK_MAX_KM
   // No long run is ever required beyond the duration cap: a slow runner is
   // ready for a marathon on 3 hours of long running, not on 30 km.
-  const durationCap = longRunDurationCapKm(distanceKm, assessment.easy_pace_min_per_km)
+  // The age cap from limits.js, but never more than this distance allows
+  // (a marathon's 3 hours do not apply to a 10 km alternative).
+  const maxMin = Math.min(L.longRunMaxMin ?? Infinity, longRunMaxMinutes(distanceKm))
+  const durationCap = longRunDurationCapKm(maxMin, assessment.easy_pace_min_per_km)
   const minReq = walkable
     ? { weekly: Math.min(req.weeklyMin, distanceKm * 0.8), long: distanceKm * WALK_BREAK_LONG_SHARE }
     : { weekly: req.weeklyMin, long: Math.min(req.longMin, durationCap) }
@@ -82,12 +107,16 @@ export function weeksNeeded({ assessment, distanceKm, runDays, walkBreaks = fals
   const ladder = fromZero ? WALK_RUN_WEEKS[gentle ? 'gentle' : 'standard'] : 0
   const start = fromZero
     ? AFTER_WALK_RUN
-    : { weeklyKm: assessment.weekly_km ?? 0, longKm: assessment.longest_km ?? (assessment.weekly_km ?? 0) * 0.3 }
+    : {
+        weeklyKm: (assessment.weekly_km ?? 0) * (L.startVolumeFactor ?? 1),
+        longKm: assessment.longest_km ?? (assessment.weekly_km ?? 0) * 0.3,
+      }
 
   const build = (need) =>
     weeksToReach({
       startWeekly: start.weeklyKm, startLong: start.longKm,
-      needWeekly: need.weekly, needLong: need.long, runDays, cautious: cautious || fromZero,
+      needWeekly: need.weekly, needLong: need.long, runDays, limits: L,
+      goalDriven: distanceKm > 10, firstMarathon,
     })
 
   let min = ladder + build(minReq) + taper

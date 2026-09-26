@@ -17,7 +17,7 @@
 import { assessGoal, raceTimeForVdot, DAYS } from '../periodization.js'
 import { SCENARIO_RULES, GENTLE_START_AGE } from './rules.js'
 import { weeksNeeded } from './progression.js'
-import { effectiveRunDays } from './classify.js'
+import { effectiveRunDays, isFirstMarathon } from './classify.js'
 
 /** Distances offered as safer alternatives, longest first. */
 const STANDARD_DISTANCES = [42.2, 21.1, 10, 5]
@@ -37,7 +37,7 @@ const round2 = (n) => Math.round(n * 100) / 100
 /**
  * @returns {object} the feasibility record, stored verbatim in plan_json
  */
-export function checkFeasibility(inputs, assessment, classification) {
+export function checkFeasibility(inputs, assessment, classification, limits) {
   const scenario = classification.scenario
   const rules = SCENARIO_RULES[scenario]
   const { goal } = inputs
@@ -76,7 +76,8 @@ export function checkFeasibility(inputs, assessment, classification) {
   // exactly the stretch fallback offered below — so walk breaks count toward
   // MINIMUM readiness for every scenario. They never count toward comfortable.
   const need = weeksNeeded({
-    assessment, distanceKm: goal.distanceKm, runDays, walkBreaks: true, cautious: rules.cautious, gentle,
+    assessment, distanceKm: goal.distanceKm, runDays, walkBreaks: true, gentle, limits,
+    firstMarathon: isFirstMarathon(inputs, goal.distanceKm),
   })
   const req = need.requirements
   const available = hasEvent ? goal.weeksToEvent : null
@@ -147,7 +148,9 @@ export function checkFeasibility(inputs, assessment, classification) {
   if (verdict === 'unsafe') {
     // Shorter distance on the same date (or with no date, if there was none).
     for (const d of STANDARD_DISTANCES.filter((x) => x < goal.distanceKm)) {
-      const n = weeksNeeded({ assessment, distanceKm: d, runDays, walkBreaks: true, cautious: rules.cautious, gentle })
+      const n = weeksNeeded({
+        assessment, distanceKm: d, runDays, walkBreaks: true, gentle, limits, firstMarathon: isFirstMarathon(inputs, d),
+      })
       if (runDays < n.requirements.run_days_min) continue
       if (available !== null && available < n.min) continue
       alternatives.push({

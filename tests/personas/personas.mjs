@@ -61,8 +61,12 @@ export const PERSONAS = [
   ...[
     { id: 'zero-to-5k-race-26w', km: 5, weeks: 26 },
     { id: 'zero-to-10k-race-36w', km: 10, weeks: 36 },
-    { id: 'zero-to-half-race-52w', km: 21.1, weeks: 52 },
-  ].map(({ id, km, weeks }) => ({
+    // REVIEW (phase 2): 2:1 cycles for beginners, a hold after each
+    // recovery week (b04 r15) and the 45% long-run cap on 3 run days make a
+    // comfortable half take ~57 weeks from zero: 52 is a stretch, built by
+    // the deadline builder — still walk-run first, then kilometres.
+    { id: 'zero-to-half-race-52w', km: 21.1, weeks: 52, scenario: 'beginner_with_deadline', verdict: 'stretch' },
+  ].map(({ id, km, weeks, scenario = 'complete_beginner', verdict = 'feasible' }) => ({
     id,
     who: `Never ran, ${km} km race ${weeks} weeks away`,
     profile: {
@@ -70,7 +74,7 @@ export const PERSONAS = [
       target_distance_km: km, event_date: sundayIn(weeks), days_per_week: 3,
     },
     expect: {
-      scenario: 'complete_beginner', verdict: 'feasible',
+      scenario, verdict,
       walkRun: true, walkRunThenDistance: true, noHardSessions: true, noBackToBack: true, maxRunDays: 3,
       reachesRaceDay: true, raceOnEventDay: true, noEarlyRace: true, taper: true,
     },
@@ -122,11 +126,11 @@ export const PERSONAS = [
       age: 31, fitness_level: 'beginner', experience_months: 4, weekly_volume_km: 8,
       longest_run_km: 4, target_distance_km: 10, event_date: sundayIn(8), days_per_week: 3,
     },
+    // REVIEW (phase 2): even the walk-break minimum (a 6 km long run)
+    // needs ~13 km a week at the 45% cap on 3 days, 15 weeks from 8 km.
     expect: {
-      experienceLevel: 'beginner',
-      scenario: 'beginner_with_deadline', verdict: 'stretch',
-      hasFallbackTarget: true, noHardSessions: true, raceWalkBreaks: true,
-      maxWeeklyIncreasePct: 10, maxLongRunKm: 9,
+      scenario: 'beginner_with_deadline', verdict: 'unsafe', proposesSaferGoal: true,
+      originalGoalNotBuilt: true, noHardSessions: true,
     },
   },
   {
@@ -180,9 +184,10 @@ export const PERSONAS = [
       longest_run_km: 5, target_distance_km: 10, event_date: sundayIn(6), days_per_week: 4,
       coach_notes: 'Štiri mesece nisem tekel, zdaj se vračam.',
     },
+    // REVIEW (phase 2): 90% start (b04 r2), a hold after the
+    // recovery week and a 1-week taper leave 5 building weeks: not enough.
     expect: {
-      scenario: 'returning', verdict: 'stretch', hasFallbackTarget: true,
-      noHardSessions: { firstWeeks: 4 }, maxWeeklyIncreasePct: 10,
+      scenario: 'returning', verdict: 'unsafe', proposesSaferGoal: true, originalGoalNotBuilt: true,
     },
   },
 
@@ -201,6 +206,7 @@ export const PERSONAS = [
       { date: daysAgo(8), distance: 15, duration: 85, effort: 3 },
     ],
     expect: {
+      taperWeeks: 1,
       experienceLevel: 'intermediate',
       scenario: 'short_race', verdict: 'stretch', hasFallbackTarget: true,
       minHardPerWeek: { phase: 'build', count: 2 }, maxLongRunKm: 18,
@@ -217,6 +223,7 @@ export const PERSONAS = [
     },
     runs: [{ date: daysAgo(4), distance: 5, duration: 19.6, effort: 5 }],
     expect: {
+      taperWeeks: 1,
       experienceLevel: 'advanced',
       scenario: 'short_race', verdict: 'feasible',
       minHardPerWeek: { phase: 'build', count: 2 }, hasRepetitionWork: true,
@@ -247,6 +254,7 @@ export const PERSONAS = [
       longest_run_km: 12, target_distance_km: 21.1, event_date: sundayIn(16), days_per_week: 4,
     },
     expect: {
+      taperWeeks: 2,
       scenario: 'long_race', verdict: 'feasible',
       reachesLongRunKm: 16, maxLongRunKm: 21, maxWeeklyIncreasePct: 10, taper: true,
     },
@@ -259,6 +267,7 @@ export const PERSONAS = [
       longest_run_km: 24, target_distance_km: 42.2, event_date: sundayIn(18), days_per_week: 5,
     },
     expect: {
+      taperWeeks: 3, recoveryCycle: 4,
       experienceLevel: 'advanced',
       scenario: 'long_race', verdict: 'feasible',
       reachesLongRunKm: 29, maxLongRunKm: 32, maxWeeklyIncreasePct: 10, taper: true,
@@ -290,9 +299,10 @@ export const PERSONAS = [
       age: 27, fitness_level: 'intermediate', experience_months: 18, weekly_volume_km: 20,
       longest_run_km: 8, target_distance_km: 21.1, event_date: sundayIn(10), days_per_week: 4,
     },
+    // REVIEW (phase 2): a 15 km long run needs ~34 km a week at the
+    // 45% cap (b04 r18) and +10% long-run steps (b04 r16): 17 weeks, not 10.
     expect: {
-      scenario: 'long_race', verdict: 'stretch', hasFallbackTarget: true,
-      maxWeeklyIncreasePct: 10, maxLongRunKm: 18, taper: true,
+      verdict: 'unsafe', proposesSaferGoal: true, originalGoalNotBuilt: true,
     },
   },
   {
@@ -329,7 +339,9 @@ export const PERSONAS = [
     },
     expect: {
       scenario: 'long_race', maxWeeklyIncreasePct: 10, reachesRaceDay: true,
-      raceOnEventDay: true, noEarlyRace: true, taper: true, foundationFirst: 15,
+      raceOnEventDay: true, noEarlyRace: true, taper: true, reachesLongRunKm: 24,
+      // The build needs 40 of the 45 weeks at research progression rates.
+      foundationFirst: 5,
     },
   },
 
@@ -356,7 +368,8 @@ export const PERSONAS = [
     },
     expect: {
       scenario: 'recreational', verdict: 'feasible',
-      noHardSessions: true, noTaper: true, noBackToBack: true, maxWeeklyIncreasePct: 10,
+      noHardSessions: true, noTaper: true, noBackToBack: true, maxWeeklyIncreasePct: 5,
+      recoveryCycle: 3, recoveryDepth: 0.7,
     },
   },
   {
@@ -583,6 +596,80 @@ export const PERSONAS = [
     },
     // p05 r5: doctor visit recommended; the plan itself is built.
     expect: { scenario: 'complete_beginner', notice: 'bmi_35', walkRun: true, noHardSessions: true },
+  },
+
+  // ------------------------------------------------------------- masters
+  // p04 rules 6-8, 14, 21 and b06 rules 1-2: the load side of the age rules
+  // (spacing and quality counts come with the intensity rules).
+  {
+    id: 'masters-62-seasoned-half',
+    who: '62, running for 15 years, no injury this year, 30 km/week, half marathon in 20 weeks',
+    profile: {
+      age: 62, fitness_level: 'intermediate', experience_months: 180, weekly_volume_km: 30,
+      longest_run_km: 12, target_distance_km: 21.1, event_date: sundayIn(20), days_per_week: 4,
+      pregnancy_status: 'none', pain_at_rest: false, injury_last_12m: false, break_days: 0,
+    },
+    // >= 10 years and injury-free: 7% a week instead of 5%.
+    expect: {
+      scenario: 'long_race', maxWeeklyIncreasePct: 7, recoveryCycle: 3, recoveryDepth: 0.7,
+      taperWeeks: 2, taper: true, raceOnEventDay: true,
+    },
+  },
+  {
+    id: 'masters-62-injured-half',
+    who: 'Same runner, but injured this year',
+    profile: {
+      age: 62, fitness_level: 'intermediate', experience_months: 180, weekly_volume_km: 30,
+      longest_run_km: 12, target_distance_km: 21.1, event_date: sundayIn(20), days_per_week: 4,
+      pregnancy_status: 'none', pain_at_rest: false, injury_last_12m: true, break_days: 0,
+    },
+    // REVIEW (phase 2): literal research rules compound here — 90% start,
+    // 5%/week with a 1 km floor, 2:1 cycles, a hold after each recovery week
+    // (b04 r15: +1 km every three weeks) and the 45% long-run cap — so a
+    // runner already at 30 km/week with a 12 km long run needs 22 weeks for
+    // a half. The engine offers a 10 km on the date instead.
+    expect: {
+      verdict: 'unsafe', proposesSaferGoal: true, originalGoalNotBuilt: true,
+      maxWeeklyIncreasePct: 5, recoveryCycle: 3, recoveryDepth: 0.7,
+    },
+  },
+  {
+    id: 'masters-55-10k',
+    who: '55, 3 years running, 25 km/week, 10 km race in 14 weeks',
+    profile: {
+      age: 55, fitness_level: 'intermediate', experience_months: 36, weekly_volume_km: 25,
+      longest_run_km: 10, target_distance_km: 10, event_date: sundayIn(14), days_per_week: 4,
+      pregnancy_status: 'none', pain_at_rest: false, injury_last_12m: false, break_days: 0,
+    },
+    expect: { scenario: 'short_race', maxWeeklyIncreasePct: 8, recoveryCycle: 3, recoveryDepth: 0.75, taperWeeks: 1 },
+  },
+  {
+    id: 'masters-71-slow-half',
+    who: '71, 20 years running at 7:30/km, 30 km/week, half marathon in 24 weeks',
+    profile: {
+      age: 71, fitness_level: 'intermediate', experience_months: 240, weekly_volume_km: 30,
+      longest_run_km: 14, target_distance_km: 21.1, event_date: sundayIn(24), days_per_week: 4,
+      pregnancy_status: 'none', pain_at_rest: false, injury_last_12m: false, break_days: 0,
+    },
+    runs: [
+      { date: daysAgo(3), distance: 10, duration: 75, effort: 3 },
+      { date: daysAgo(6), distance: 14, duration: 105, effort: 3 },
+      { date: daysAgo(10), distance: 8, duration: 60, effort: 3 },
+    ],
+    // p04 r21: no run over 120 min at 70+ (universal duration check).
+    expect: { scenario: 'long_race', recoveryCycle: 3, recoveryDepth: 0.7, maxRunMinutes: 120 },
+  },
+  {
+    id: 'first-marathon-declared',
+    who: '34, 3 years running, 45 km/week, first marathon (declared) in 24 weeks',
+    profile: {
+      age: 34, fitness_level: 'intermediate', experience_months: 36, weekly_volume_km: 45,
+      longest_run_km: 18, target_distance_km: 42.2, event_date: sundayIn(24), days_per_week: 4,
+      pregnancy_status: 'none', pain_at_rest: false, injury_last_12m: false, break_days: 0,
+      marathons_completed: 0,
+    },
+    // b04 r18: a first marathon may use 45% below 50 km (universal share check).
+    expect: { scenario: 'long_race', taperWeeks: 3, taper: true, raceOnEventDay: true },
   },
 ]
 

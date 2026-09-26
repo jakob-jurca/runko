@@ -20,7 +20,7 @@
  *
  * Pure data. See ../README.md for the core rules.
  */
-import { SAFE } from './rules.js'
+import { SAFE, WEEKLY_FLOOR_KM, longRunMaxMinutes } from './rules.js'
 
 /** Precedence levels, highest first (_RULE-PRECEDENCE section 1). */
 export const LEVEL = {
@@ -98,12 +98,12 @@ export function resolveLimits(set) {
 }
 
 /**
- * The limits for this runner.
+ * The load limits for this runner (runko-research b04, b06, p04 and the
+ * product decisions). Later phases add the remaining population rules.
  *
- * The rules added here reproduce the engine as it stands; later phases add
- * the age, population and medical rules. Builders still read rules.js
- * directly — this record is stored with the plan and is what they will read
- * once the research rules replace the old constants.
+ * Unknown optional data counts at the conservative end: no years of running
+ * or injury history means no masters exception, no marathon count means no
+ * "experienced marathoner" exception.
  *
  * @param {object} inputs - from collectInputs()
  * @param {object} assessment - from assessFitness()
@@ -112,16 +112,49 @@ export function resolveLimits(set) {
 export function computeLimits(inputs, assessment) {
   const set = createLimits()
   const distance = inputs.goal?.distanceKm ?? 0
+  const age = inputs.age ?? null
+  const level = assessment.experience_level || 'beginner'
+  const years = (inputs.experienceMonths ?? 0) / 12
+  const injuryFree = inputs.safety?.injuryLast12m === false
+  const marathons = inputs.health?.marathonsCompleted ?? 0
 
+  // --- weekly progression (b04 r8-12, p04 r6-8) -------------------------------
   addLimit(set, 'weeklyIncreasePct', SAFE.weeklyIncrease, { rule: 'b04 r8', level: LEVEL.DEFAULT })
-  addLimit(set, 'weeklyIncreasePct', 0.2, { rule: 'b04 r12', level: LEVEL.SAFETY })
-
-  addLimit(set, 'longRunMaxMin', distance >= 42.2 ? SAFE.marathonLongRunMaxMinutes : SAFE.longRunMaxMinutes, {
-    rule: 'b04 r20', level: LEVEL.PLAN,
+  addLimit(set, 'weeklyIncreasePct', SAFE.weeklyCeiling, { rule: 'b04 r12', level: LEVEL.SAFETY })
+  addLimit(set, 'weeklyCeilingPct', SAFE.weeklyCeiling, { rule: 'b04 r12', level: LEVEL.SAFETY })
+  if (age !== null && age >= 60) {
+    const seasoned = years >= 10 && injuryFree
+    addLimit(set, 'weeklyIncreasePct', seasoned ? 0.07 : 0.05, { rule: 'p04 r8', level: LEVEL.AGE })
+  } else if (age !== null && age >= 50) {
+    addLimit(set, 'weeklyIncreasePct', 0.08, { rule: 'p04 r7', level: LEVEL.AGE })
+  }
+  addLimit(set, 'weeklyFloorKm', WEEKLY_FLOOR_KM[level] ?? WEEKLY_FLOOR_KM.novice, { rule: 'b04 r9', level: LEVEL.PLAN })
+  if (age !== null && age >= 50) {
+    // An age cap would be meaningless under a +2/+3/+5 km floor: masters
+    // step by the smallest whole kilometre instead.
+    addLimit(set, 'weeklyFloorKm', 1, { rule: 'p04 r7-8 (whole-km step)', level: LEVEL.AGE })
+  }
+  // b04 r2: a stated (not logged) weekly volume is started at 90%.
+  addLimit(set, 'startVolumeFactor', assessment.weekly_source === 'stated' ? SAFE.statedVolumeFactor : 1, {
+    rule: 'b04 r2', level: LEVEL.PLAN,
   })
 
+  // --- long run duration (decision 1, b04 r20, p04 r21) --------------------------
+  addLimit(set, 'longRunMaxMin', longRunMaxMinutes(distance), { rule: 'b04 r20', level: LEVEL.PLAN })
+  if (age !== null && age >= 60 && marathons < 2) {
+    addLimit(set, 'longRunMaxMin', age >= 70 ? 120 : 150, { rule: 'p04 r21', level: LEVEL.AGE })
+  }
+
+  // --- recovery weeks (b06 r1-3, p04 r14) ------------------------------------------
   addLimit(set, 'recoveryEvery', SAFE.recoveryEvery, { rule: 'b06 r1', level: LEVEL.DEFAULT })
+  if (level === 'none' || level === 'beginner') {
+    // 2:1 for beginners on kilometre plans; walk-run weeks follow their ladder.
+    addLimit(set, 'recoveryEvery', 3, { rule: 'b06 r1 (beginner)', level: LEVEL.PLAN })
+  }
+  if (age !== null && age >= 50) addLimit(set, 'recoveryEvery', 3, { rule: 'p04 r14', level: LEVEL.AGE })
   addLimit(set, 'recoveryFactor', SAFE.recoveryFactor, { rule: 'b06 r2', level: LEVEL.PLAN })
+  if (age !== null && age >= 60) addLimit(set, 'recoveryFactor', 0.7, { rule: 'p04 r14', level: LEVEL.AGE })
+  addLimit(set, 'recoveryLongFactor', SAFE.recoveryLongFactor, { rule: 'b06 r3', level: LEVEL.PLAN })
 
   addLimit(set, 'hardGapHours', 48, { rule: 'b05 r3', level: LEVEL.DEFAULT })
 

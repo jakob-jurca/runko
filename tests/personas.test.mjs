@@ -9,7 +9,7 @@
 import { PERSONAS } from './personas/personas.mjs'
 import {
   SPECIFIC, restDaysRespected, weeklyIncreaseWithinLimit, longRunProgressionSafe, planningStored,
-  runDurationWithinCap,
+  runDurationWithinCap, agePct, longRunShareWithinCap,
 } from './personas/properties.mjs'
 import { planFor, ENGINE } from './personas/engines.mjs'
 import { check, summary } from './harness.mjs'
@@ -65,9 +65,10 @@ for (const persona of PERSONAS) {
     record('builds once answered', { ok: false, detail: `still ${result.status}: ${(result.questions || []).map((q) => q.id).join(', ')}` })
   } else if (result) {
     record('rest days respected', restDaysRespected(result, persona))
-    record('weekly increase ≤ 10%', weeklyIncreaseWithinLimit(result, persona, 10))
-    record('long-run progression safe', longRunProgressionSafe(result, persona))
-    record('run duration ≤ 2.5 h (3 h marathon)', runDurationWithinCap(result, persona))
+    record(`weekly increase ≤ ${agePct(persona)}% (or the level floor)`, weeklyIncreaseWithinLimit(result, persona))
+    record('no run over 1.10 × the 30-day longest', longRunProgressionSafe(result, persona))
+    record('run duration within the cap', runDurationWithinCap(result, persona))
+    record('long-run share within the cap', longRunShareWithinCap(result, persona))
     record('steps 2-4 stored in plan_json', planningStored(result))
     for (const [key, want] of Object.entries(persona.expect)) {
       if (key === 'questions' || key === 'blocked') continue

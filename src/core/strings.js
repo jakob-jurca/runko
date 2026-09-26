@@ -530,7 +530,7 @@ export const t = {
       maintenance: [
         'stabilen obseg, brez nadgradnje',
         'en do dva kakovostna treninga na teden',
-        'lažji teden vsak 4. teden',
+        'lažji teden vsak 3. ali 4. teden',
       ],
     },
 

@@ -14,9 +14,10 @@ import {
   pacesFromVdot, assignPhases, peakVolumeCap, PHASE_INTENT, DAYS, makeDay, enrichDays,
 } from '../periodization.js'
 import {
-  SCENARIO_RULES, SAFE, MAX_PLAN_WEEKS, OPEN_GOAL_WEEKS, OLDER_RUNNER_AGE, GENTLE_START_AGE,
+  SCENARIO_RULES, DEFAULT_LOAD, MAX_PLAN_WEEKS, OPEN_GOAL_WEEKS, OLDER_RUNNER_AGE, GENTLE_START_AGE,
   longShareFor, longRunCeiling, readinessFor, taperFor, longRunDurationCapKm, longRunMaxMinutes,
 } from './rules.js'
+import { isFirstMarathon } from './classify.js'
 import { pickRunDays } from './days.js'
 import { buildTimePlan } from './build-time.js'
 import { buildDistancePlan } from './build-distance.js'
@@ -40,7 +41,8 @@ function intentFor(phase, isRecovery) {
 }
 
 /** Everything a builder needs about the runner's week and the adopted goal. */
-function context(scenario, inputs, assessment, feasibility) {
+function context(scenario, inputs, assessment, feasibility, limits) {
+  const L = { ...DEFAULT_LOAD, ...(limits || {}) }
   const rules = SCENARIO_RULES[scenario]
   const adopted = feasibility.adopted_goal
   const goalInputs = withGoal(inputs, {
@@ -63,22 +65,47 @@ function context(scenario, inputs, assessment, feasibility) {
 
   // A race further out than one useful block is never cut short: the
   // scenario's block is built to end on race day, and a steady foundation
-  // phase (foundationPlan) fills the weeks before it.
+  // phase (foundationPlan) fills the weeks before it. The block is at least
+  // as long as feasibility said the safe build takes — holding volume flat
+  // for weeks the build needs would make a "feasible" plan fall short.
   const hasEvent = Boolean(g.eventDate && g.weeksToEvent)
-  const raceBlockWeeks = hasEvent ? Math.min(g.weeksToEvent, MAX_PLAN_WEEKS) : null
+  const needed = feasibility.weeks_needed_comfortable ?? 0
+  const raceBlockWeeks = hasEvent ? Math.min(g.weeksToEvent, Math.max(MAX_PLAN_WEEKS, needed)) : null
+  // b04 r2: a stated weekly volume starts at 90%.
+  const weekly = round((assessment.weekly_km ?? 0) * L.startVolumeFactor)
+  const level = assessment.experience_level
+  const firstMarathon = isFirstMarathon(inputs, g.distanceKm)
+  const longMaxMinutes = L.longRunMaxMin ?? longRunMaxMinutes(g.distanceKm ?? 0)
   return {
-    rules, adopted, goal: g, runDays, available, noBackToBack, paces,
+    rules, adopted, goal: g, runDays, available, noBackToBack, paces, needed,
     hasEvent,
     raceBlockWeeks,
     foundationWeeks: hasEvent ? g.weeksToEvent - raceBlockWeeks : 0,
-    weekly: assessment.weekly_km ?? 0,
+    weekly,
+    // What they run now, unscaled: peak targets grow from this, not from
+    // the cautious 90% start.
+    current: assessment.weekly_km ?? 0,
+    level,
+    limits: L,
     longest: assessment.longest_km ?? round((assessment.weekly_km ?? 0) * 0.3),
     goalPaceKey: paces.goal ? 'goal' : 'marathon',
     age: inputs.age,
-    // 2.5 h (3 h for marathon plans) at this runner's easy pace.
-    longMaxKm: longRunDurationCapKm(g.distanceKm ?? 0, paces.easy),
-    longMaxMinutes: longRunMaxMinutes(g.distanceKm ?? 0),
-    share: (opts = {}) => longShareFor(runDays.length, { weeklyKm: assessment.weekly_km ?? 0, ...opts }),
+    // 2.5 h (3 h for marathon plans, less for older runners) at easy pace.
+    longMaxKm: longRunDurationCapKm(longMaxMinutes, paces.easy),
+    longMaxMinutes,
+    // The long-run share of a week, as a function of that week's volume
+    // (rules.js longShareFor: a cap below ~50 km, guidance above).
+    share: (opts = {}) => (weeklyKm) => longShareFor(runDays.length, { weeklyKm, firstMarathon, ...opts }),
+    // b06 r1, r7: a lighter week every 3rd or 4th week (limits.js); never in
+    // the two weeks before a marathon taper, nor right before any taper (the
+    // first taper week would then be no lighter than the week before it,
+    // b06 r17).
+    recovery: (phases, raceWeekIndex = -1) =>
+      recoveryPattern(phases, raceWeekIndex, L.recoveryEvery, (g.distanceKm ?? 0) >= 42.2 ? 2 : 1),
+    // b06 r9-16, with the planned peak deciding the 14- or 21-day marathon taper.
+    taper: (d) => taperFor(d, {
+      level, peakKm: Math.max(weekly, readinessFor(d)?.weeklyComf ?? 0),
+    }),
   }
 }
 
@@ -89,9 +116,11 @@ function planLength(ctx, feasibility, fallbackWeeks) {
   return clamp(feasibility.weeks_needed_comfortable ?? fallbackWeeks, OPEN_GOAL_WEEKS.min, OPEN_GOAL_WEEKS.max)
 }
 
-function recoveryPattern(phases, raceWeekIndex = -1) {
+function recoveryPattern(phases, raceWeekIndex = -1, every = DEFAULT_LOAD.recoveryEvery, protectBeforeTaper = 0) {
+  const firstTaper = phases.indexOf('taper')
   return phases.map((phase, i) =>
-    (i + 1) % SAFE.recoveryEvery === 0 && phase !== 'taper' && i !== raceWeekIndex && i !== phases.length - 1
+    (i + 1) % every === 0 && phase !== 'taper' && i !== raceWeekIndex && i !== phases.length - 1 &&
+    !(firstTaper !== -1 && i >= firstTaper - protectBeforeTaper && i < firstTaper)
   )
 }
 
@@ -111,6 +140,16 @@ function racePhases(ctx, totalWeeks, taperWeeks) {
 }
 
 /**
+ * The long run foundation weeks hold: what they run now, within the week's
+ * long-run share and the duration cap. The race block after them starts its
+ * 30-day spike window from THIS, not from a long run months earlier.
+ */
+function foundationLong(ctx, weeklyKm, longestKm, longMaxKm) {
+  const volume = Math.max(weeklyKm, 5)
+  return Math.max(3, Math.min(longestKm || round(volume * 0.3), round(volume * ctx.share()(volume)), longMaxKm))
+}
+
+/**
  * The weeks before a race block, when the race is further away than one
  * block: what they run now, held steady — easy running, the long run they
  * already do, strides for variety, a lighter week every fourth. The block
@@ -121,14 +160,14 @@ function foundationPlan(ctx, totalWeeks, {
 } = {}) {
   const volume = Math.max(weeklyKm, 5)
   const share = ctx.share()
-  const long = Math.max(3, Math.min(longestKm || round(volume * 0.3), round(volume * share), longMaxKm))
+  const long = foundationLong(ctx, weeklyKm, longestKm, longMaxKm)
   const phases = Array(totalWeeks).fill('foundation')
   return buildDistancePlan({
-    longMaxKm,
-    totalWeeks, phases, recoveryWeeks: recoveryPattern(phases),
+    longMaxKm, limits: ctx.limits,
+    totalWeeks, phases, recoveryWeeks: ctx.recovery(phases),
     runDays: ctx.runDays, paces, age: ctx.age,
     startWeeklyKm: volume, peakWeeklyKm: volume, progression: 'hold',
-    startLongKm: long, peakLongKm: long, cautious: true, longShare: share,
+    startLongKm: long, peakLongKm: long, longShare: share,
     taperFactors: [], qualityFor: () => [], race: null, goalPaceKey: 'easy', intentFor,
     decorate: (days, i, phase, isRecovery) => {
       if (isRecovery) return days
@@ -183,7 +222,7 @@ function completeBeginner(ctx) {
 function beginnerToRace(ctx, { runPace, ladder }) {
   const d = ctx.goal.distanceKm
   const totalWeeks = ctx.goal.weeksToEvent
-  const taper = taperFor(d)
+  const taper = ctx.taper(d)
 
   const draft = buildTimePlan({
     totalWeeks, ladder, runDayCount: ctx.runDays.length, available: ctx.runDays,
@@ -201,22 +240,23 @@ function beginnerToRace(ctx, { runPace, ladder }) {
   const longestKm = Math.max(0, ...last.map((day) => day.distance_km || 0))
   // Their pace, not a VDOT guess: nobody who just learned to run holds 6:00/km.
   const paces = { ...ctx.paces, easy: runPace }
-  const longMaxKm = longRunDurationCapKm(d, runPace)
+  const longMaxKm = longRunDurationCapKm(ctx.longMaxMinutes, runPace)
 
-  const block = Math.min(remaining, MAX_PLAN_WEEKS)
+  const block = Math.min(remaining, Math.max(MAX_PLAN_WEEKS, ctx.needed - timeWeeks.length))
   const lead = remaining - block
+  const blockStartLong = lead ? foundationLong(ctx, weeklyKm, longestKm, longMaxKm) : longestKm
   const req = readinessFor(d)
   const phases = racePhases(ctx, block, taper.weeks)
     .map((p) => (p === 'taper' || p === 'base' ? p : 'build'))
   const race = raceFor(ctx, block, Boolean(ctx.adopted.walk_breaks))
   const raceWeeks = buildDistancePlan({
-    longMaxKm,
-    totalWeeks: block, phases, recoveryWeeks: recoveryPattern(phases, race.weekIndex),
+    longMaxKm, limits: ctx.limits,
+    totalWeeks: block, phases, recoveryWeeks: ctx.recovery(phases, race.weekIndex),
     runDays: ctx.runDays, paces, age: ctx.age,
     startWeeklyKm: weeklyKm, peakWeeklyKm: Math.max(weeklyKm, round(req.weeklyComf)), progression: 'build',
-    startLongKm: longestKm, peakLongKm: Math.max(longestKm, round(req.longComf)), cautious: true,
+    startLongKm: blockStartLong, peakLongKm: Math.max(longestKm, round(req.longComf)),
     longShare: ctx.share(),
-    taperFactors: taper.factors,
+    taperFactors: taper.factors, taperLongFactors: taper.longFactors, preTaperLong: taper.preTaperLong,
     qualityFor: () => [],
     race, goalPaceKey: 'easy', intentFor,
   }).weeks
@@ -238,8 +278,15 @@ function deadlineBeginner(ctx, assessment, feasibility) {
   const total = ctx.goal.weeksToEvent ?? 12
   const walkBreaks = Boolean(ctx.adopted.walk_breaks) || (ctx.goal.distanceKm ?? 0) <= 10
   if (assessment.band === 'none') {
-    // From zero: the walk-run ladder, as far as the date allows, then the event.
+    // From zero: walk-run in minutes, then kilometres to race day, when the
+    // date leaves room for a real build after the ladder.
     const runPace = Math.max(ctx.paces.easy, BEGINNER_RUN_PACE)
+    const ladder = (ctx.age ?? 0) >= GENTLE_START_AGE ? 'gentle' : 'standard'
+    if (ctx.hasEvent && ctx.goal.distanceKm) {
+      const toRace = beginnerToRace(ctx, { runPace, ladder })
+      if (toRace) return toRace
+    }
+    // Otherwise the walk-run ladder, as far as the date allows, then the event.
     const d = ctx.goal.distanceKm ?? 5
     const plan = buildTimePlan({
       totalWeeks: total,
@@ -256,22 +303,22 @@ function deadlineBeginner(ctx, assessment, feasibility) {
   }
   // Already runs a little: kilometres, no speed work, finish safely.
   const req = readinessFor(ctx.goal.distanceKm)
-  const taper = taperFor(ctx.goal.distanceKm)
+  const taper = ctx.taper(ctx.goal.distanceKm)
   const block = ctx.raceBlockWeeks ?? total
   const phases = racePhases(ctx, block, taper.weeks).map((p) => (p === 'taper' ? 'taper' : 'base'))
   const race = raceFor(ctx, block, walkBreaks)
   return {
     unit: 'distance',
     weeks: buildDistancePlan({
-      longMaxKm: ctx.longMaxKm,
-      totalWeeks: block, phases, recoveryWeeks: recoveryPattern(phases, race?.weekIndex ?? -1),
+      longMaxKm: ctx.longMaxKm, limits: ctx.limits,
+      totalWeeks: block, phases, recoveryWeeks: ctx.recovery(phases, race?.weekIndex ?? -1),
       runDays: ctx.runDays, paces: ctx.paces, age: ctx.age,
       startWeeklyKm: Math.max(ctx.weekly, 4),
-      peakWeeklyKm: Math.max(ctx.weekly, round(req.weeklyComf)),
+      peakWeeklyKm: Math.max(ctx.current, round(req.weeklyComf)),
       progression: 'build',
-      startLongKm: ctx.longest, peakLongKm: round(req.longComf), cautious: true,
+      startLongKm: ctx.longest, peakLongKm: round(req.longComf),
       longShare: ctx.share(),
-      taperFactors: taper.factors,
+      taperFactors: taper.factors, taperLongFactors: taper.longFactors, preTaperLong: taper.preTaperLong,
       qualityFor: () => [],
       race, goalPaceKey: 'easy', intentFor,
     }).weeks,
@@ -281,18 +328,19 @@ function deadlineBeginner(ctx, assessment, feasibility) {
 function recreational(ctx) {
   const total = SCENARIO_RULES.recreational.weeks
   const start = Math.max(ctx.weekly, 6)
-  const peak = Math.max(start + 2, Math.min(round(start * 1.25), start + 10))
+  const now = Math.max(ctx.current, 6)
+  const peak = Math.max(now + 2, Math.min(round(now * 1.25), now + 10))
   const longStart = Math.max(3, ctx.longest || round(start * 0.35))
   const phases = Array(total).fill('consistency')
   return {
     unit: 'distance',
     weeks: buildDistancePlan({
-      longMaxKm: ctx.longMaxKm,
-      totalWeeks: total, phases, recoveryWeeks: recoveryPattern(phases),
+      longMaxKm: ctx.longMaxKm, limits: ctx.limits,
+      totalWeeks: total, phases, recoveryWeeks: ctx.recovery(phases),
       runDays: ctx.runDays, paces: ctx.paces, age: ctx.age,
       startWeeklyKm: start, peakWeeklyKm: peak, progression: 'rolling',
       startLongKm: longStart, peakLongKm: Math.min(16, Math.max(longStart, round(longStart * 1.3))),
-      cautious: true, longShare: ctx.share(),
+      longShare: ctx.share(),
       taperFactors: [], qualityFor: () => [], race: null, goalPaceKey: 'easy', intentFor,
       // Optional variety: strides on one easy run in normal weeks. Still easy
       // running — a few 20-second pick-ups, not a workout.
@@ -311,17 +359,17 @@ function maintenance(ctx, assessment) {
   const total = SCENARIO_RULES.maintenance.weeks
   const volume = Math.max(ctx.weekly, 10)
   const share = ctx.share()
-  const long = Math.max(3, Math.min(ctx.longest || round(volume * 0.3), round(volume * share), ctx.longMaxKm))
+  const long = Math.max(3, Math.min(ctx.longest || round(volume * 0.3), round(volume * share(volume)), ctx.longMaxKm))
   const experienced = assessment.history === 'experienced'
   const phases = Array(total).fill('maintain')
   return {
     unit: 'distance',
     weeks: buildDistancePlan({
-      longMaxKm: ctx.longMaxKm,
-      totalWeeks: total, phases, recoveryWeeks: recoveryPattern(phases),
+      longMaxKm: ctx.longMaxKm, limits: ctx.limits,
+      totalWeeks: total, phases, recoveryWeeks: ctx.recovery(phases),
       runDays: ctx.runDays, paces: ctx.paces, age: ctx.age,
       startWeeklyKm: volume, peakWeeklyKm: volume, progression: 'hold',
-      startLongKm: long, peakLongKm: long, cautious: false, longShare: share,
+      startLongKm: long, peakLongKm: long, longShare: share,
       taperFactors: [],
       // Enough quality to keep what they have: threshold every week, and a
       // faster session alternating with repetitions for bigger weeks.
@@ -340,20 +388,20 @@ function maintenance(ctx, assessment) {
 function race(ctx, assessment, feasibility, kind) {
   const d = ctx.goal.distanceKm
   const req = readinessFor(d)
-  const taper = taperFor(d)
+  const taper = ctx.taper(d)
   const total = planLength(ctx, feasibility, 12)
   const phases = racePhases(ctx, total, taper.weeks)
   const raceWeek = raceFor(ctx, total)
   const level = assessment.history === 'experienced' ? 'advanced'
     : assessment.history === 'developing' ? 'intermediate' : 'beginner'
-  const volumeCap = Math.max(ctx.weekly, peakVolumeCap(level, d))
+  const volumeCap = Math.max(ctx.current, peakVolumeCap(level, d))
   const experienced = assessment.history === 'experienced'
   const days = ctx.runDays.length
 
   if (kind === 'short') {
     // Speed-led: repetitions from the start, intervals and threshold in the
     // build, race-specific work late. Long runs deliberately short.
-    const peakWeekly = clamp(Math.max(round(req.weeklyComf), round(ctx.weekly * 1.15)), ctx.weekly, volumeCap)
+    const peakWeekly = clamp(Math.max(round(req.weeklyComf), round(ctx.current * 1.15)), ctx.current, volumeCap)
     const longCeiling = Math.min(18, Math.max(ctx.longest, round(d + 6)))
     const maxQuality = experienced || assessment.history === 'developing' ? 2 : 1
     const q = {
@@ -365,13 +413,13 @@ function race(ctx, assessment, feasibility, kind) {
     return {
       unit: 'distance',
       weeks: buildDistancePlan({
-      longMaxKm: ctx.longMaxKm,
-        totalWeeks: total, phases, recoveryWeeks: recoveryPattern(phases, raceWeek?.weekIndex ?? -1),
+      longMaxKm: ctx.longMaxKm, limits: ctx.limits,
+        totalWeeks: total, phases, recoveryWeeks: ctx.recovery(phases, raceWeek?.weekIndex ?? -1),
         runDays: ctx.runDays, paces: ctx.paces, age: ctx.age,
         startWeeklyKm: Math.max(ctx.weekly, 5), peakWeeklyKm: Math.max(peakWeekly, 5), progression: 'build',
-        startLongKm: ctx.longest, peakLongKm: longCeiling, cautious: !experienced,
-        longShare: Math.min(ctx.share(), 0.35),
-        taperFactors: taper.factors,
+        startLongKm: ctx.longest, peakLongKm: longCeiling,
+        longShare: (v) => Math.min(ctx.share()(v), 0.35),
+        taperFactors: taper.factors, taperLongFactors: taper.longFactors, preTaperLong: taper.preTaperLong,
         qualityFor: (i, phase) => (q[phase] || []).slice(0, maxQuality),
         race: raceWeek, goalPaceKey: ctx.goalPaceKey, intentFor,
       }).weeks,
@@ -379,7 +427,7 @@ function race(ctx, assessment, feasibility, kind) {
   }
 
   // Long race: the long run is the backbone; quality supports it.
-  const peakWeekly = clamp(Math.max(round(req.weeklyComf), round(ctx.weekly * 1.2)), ctx.weekly, volumeCap)
+  const peakWeekly = clamp(Math.max(round(req.weeklyComf), round(ctx.current * 1.2)), ctx.current, volumeCap)
   const peakLong = Math.min(longRunCeiling(d), Math.max(req.longComf, Math.min(d, 32), ctx.longest))
   const q = {
     base: experienced ? [{ type: 'tempo', paceKey: 'threshold' }] : [],
@@ -390,14 +438,14 @@ function race(ctx, assessment, feasibility, kind) {
   return {
     unit: 'distance',
     weeks: buildDistancePlan({
-      longMaxKm: ctx.longMaxKm,
-      totalWeeks: total, phases, recoveryWeeks: recoveryPattern(phases, raceWeek?.weekIndex ?? -1),
+      longMaxKm: ctx.longMaxKm, limits: ctx.limits,
+      totalWeeks: total, phases, recoveryWeeks: ctx.recovery(phases, raceWeek?.weekIndex ?? -1),
       runDays: ctx.runDays, paces: ctx.paces, age: ctx.age,
       startWeeklyKm: Math.max(ctx.weekly, 5), peakWeeklyKm: Math.max(peakWeekly, 5), progression: 'build',
-      startLongKm: ctx.longest, peakLongKm: round(peakLong), cautious: assessment.history !== 'experienced',
+      startLongKm: ctx.longest, peakLongKm: round(peakLong),
       // Goal-driven: the ~30% guidance may be exceeded; duration still binds.
       longShare: ctx.share({ goalDriven: true }),
-      taperFactors: taper.factors,
+      taperFactors: taper.factors, taperLongFactors: taper.longFactors, preTaperLong: taper.preTaperLong,
       qualityFor: (i, phase) => q[phase] || [],
       race: raceWeek, goalPaceKey: ctx.goalPaceKey, intentFor,
     }).weeks,
@@ -408,7 +456,7 @@ function returning(ctx, assessment, feasibility, inputs) {
   const noIntensity = SCENARIO_RULES.returning.noIntensityWeeks
   const d = ctx.goal.distanceKm
 
-  if (ctx.weekly < RETURN_TIME_BASED_BELOW_KM) {
+  if (ctx.current < RETURN_TIME_BASED_BELOW_KM) {
     // Back from (almost) nothing: minutes, a short walk-run bridge, then
     // continuous. A kilometre plan at this volume is 1 km fragments. The
     // ladder is its own foundation, so it runs all the way to race day.
@@ -425,7 +473,7 @@ function returning(ctx, assessment, feasibility, inputs) {
 
   const total = ctx.raceBlockWeeks ?? SCENARIO_RULES.returning.weeks
   const req = d ? readinessFor(d) : null
-  const taper = d ? taperFor(d) : { weeks: 0, factors: [] }
+  const taper = d ? ctx.taper(d) : { weeks: 0, factors: [], longFactors: [], preTaperLong: null }
   const raceWeek = raceFor(ctx, total)
   const taperWeeks = raceWeek ? taper.weeks : 0
   const phases = Array.from({ length: total }, (_, i) => {
@@ -434,21 +482,21 @@ function returning(ctx, assessment, feasibility, inputs) {
     return i < (total - taperWeeks) * 0.75 ? 'base' : 'build'
   })
   const peakWeekly = req
-    ? Math.max(ctx.weekly, Math.min(round(req.weeklyComf), round(ctx.weekly * 2)))
-    : Math.max(ctx.weekly + 3, Math.min(round(ctx.weekly * 2), ctx.weekly + 15))
+    ? Math.max(ctx.current, Math.min(round(req.weeklyComf), round(ctx.current * 2)))
+    : Math.max(ctx.current + 3, Math.min(round(ctx.current * 2), ctx.current + 15))
   const peakLong = req
     ? Math.max(ctx.longest, round(req.longComf))
     : Math.max(ctx.longest, Math.min(16, round(Math.max(ctx.longest, 4) * 1.8)))
   return {
     unit: 'distance',
     weeks: buildDistancePlan({
-      longMaxKm: ctx.longMaxKm,
-      totalWeeks: total, phases, recoveryWeeks: recoveryPattern(phases, raceWeek?.weekIndex ?? -1),
+      longMaxKm: ctx.longMaxKm, limits: ctx.limits,
+      totalWeeks: total, phases, recoveryWeeks: ctx.recovery(phases, raceWeek?.weekIndex ?? -1),
       runDays: ctx.runDays, paces: ctx.paces, age: ctx.age,
       startWeeklyKm: ctx.weekly, peakWeeklyKm: peakWeekly, progression: 'build',
-      startLongKm: ctx.longest, peakLongKm: peakLong, cautious: true,
+      startLongKm: ctx.longest, peakLongKm: peakLong,
       longShare: ctx.share(),
-      taperFactors: taper.factors,
+      taperFactors: taper.factors, taperLongFactors: taper.longFactors, preTaperLong: taper.preTaperLong,
       // Intensity only once the body has had six weeks to re-adapt, and then
       // one short threshold session at most.
       qualityFor: (i, phase) =>
@@ -483,8 +531,10 @@ function withoutHardSessions(weeks, paces, age) {
   })
 }
 
-export function buildPlan(scenario, inputs, assessment, feasibility, restrictions = {}) {
-  const ctx = context(scenario, inputs, assessment, feasibility)
+export function buildPlan(scenario, inputs, assessment, feasibility, restrictions = {}, limits = null) {
+  const ctx = context(scenario, inputs, assessment, feasibility, limits)
+  // Foundation weeks come first: the block's long run starts from theirs.
+  if (ctx.foundationWeeks) ctx.longest = foundationLong(ctx, ctx.weekly, ctx.longest, ctx.longMaxKm)
   let built
   switch (scenario) {
     case 'complete_beginner': built = completeBeginner(ctx); break

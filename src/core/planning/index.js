@@ -70,7 +70,11 @@ export function runPlanningPipeline({ profile = {}, runs = [], memories = [], an
     }
   }
 
-  let classification = classifyRunner(inputs, assessment)
+  // The caps and gaps every research rule sets for this runner, resolved by
+  // precedence (limits.js), with the rule behind each value. Classification,
+  // feasibility and the builder all read the same values.
+  let limits = computeLimits(inputs, assessment)
+  let classification = classifyRunner(inputs, assessment, limits.values)
 
   // 5 (before building anything): missing or contradictory essentials.
   const { questions, assumptions, unasked } = clarifyQuestions(inputs, assessment, classification)
@@ -89,11 +93,12 @@ export function runPlanningPipeline({ profile = {}, runs = [], memories = [], an
     for (const id of unasked) filled[id] = DEFAULT_ANSWERS[id](inputs)
     inputs = collectInputs({ profile, runs, memories, answers: filled, today })
     assessment = assessFitness(inputs)
-    classification = classifyRunner(inputs, assessment)
+    limits = computeLimits(inputs, assessment)
+    classification = classifyRunner(inputs, assessment, limits.values)
   }
 
   // 4
-  const feasibility = checkFeasibility(inputs, assessment, classification)
+  const feasibility = checkFeasibility(inputs, assessment, classification, limits.values)
 
   // An unsafe goal is never built. If the adopted (safer) goal changes what
   // kind of plan this is — a 10 km instead of a marathon — the scenario is
@@ -104,7 +109,7 @@ export function runPlanningPipeline({ profile = {}, runs = [], memories = [], an
     const adoptedInputs = withGoal(inputs, {
       distanceKm: adopted.distance_km, eventDate: adopted.event_date, targetTimeMin: null,
     })
-    const again = classifyRunner(adoptedInputs, assessment)
+    const again = classifyRunner(adoptedInputs, assessment, limits.values)
     if (again.scenario !== classification.scenario) {
       buildClassification = {
         ...again,
@@ -119,12 +124,15 @@ export function runPlanningPipeline({ profile = {}, runs = [], memories = [], an
   }
   const scenario = buildClassification.scenario
 
-  // The caps and gaps every research rule sets for this runner, resolved by
-  // precedence (limits.js), with the rule behind each value.
-  const limits = computeLimits(inputs, assessment)
+  // The plan is built for the ADOPTED goal, whose limits may differ (a
+  // marathon's 3-hour long-run cap is not a 10 km's).
+  const adoptedGoal = feasibility.adopted_goal
+  const buildLimits = adoptedGoal.distance_km === inputs.goal.distanceKm
+    ? limits
+    : computeLimits(withGoal(inputs, { distanceKm: adoptedGoal.distance_km, eventDate: adoptedGoal.event_date }), assessment)
 
   // 6
-  const plan = buildPlan(scenario, inputs, assessment, feasibility, gate.restrictions)
+  const plan = buildPlan(scenario, inputs, assessment, feasibility, gate.restrictions, buildLimits.values)
 
   // 7
   const explain = explainPlan({ classification: buildClassification, feasibility, plan, notices: gate.notices })
@@ -138,7 +146,7 @@ export function runPlanningPipeline({ profile = {}, runs = [], memories = [], an
     clarify: { answers: { ...answers }, assumptions },
     rules: SCENARIO_RULES[scenario],
     gate: { restrictions: gate.restrictions, notices: gate.notices, rules: gate.rules },
-    limits: { values: limits.values, rules: Object.fromEntries(Object.entries(limits.sources).map(([k, v]) => [k, v.rule])) },
+    limits: { values: buildLimits.values, rules: Object.fromEntries(Object.entries(buildLimits.sources).map(([k, v]) => [k, v.rule])) },
     explain,
   }
 

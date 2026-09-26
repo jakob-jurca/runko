@@ -14,6 +14,14 @@ import { weeksNeeded } from './progression.js'
 /** Weekly km at which a runner with no goal counts as "already fit". */
 export const FIT_WEEKLY_KM = 25
 
+/**
+ * A first marathon (b04 r18: the long run may take 45% of the week). Only a
+ * stated count of zero counts — unknown takes the stricter 36%.
+ */
+export function isFirstMarathon(inputs, distanceKm) {
+  return (distanceKm ?? 0) >= 42.2 && inputs.health?.marathonsCompleted === 0
+}
+
 /** Distances up to this are short races; above it, long races. */
 export const SHORT_RACE_MAX_KM = 10
 
@@ -31,7 +39,7 @@ export function effectiveRunDays(inputs, scenario = null) {
  *   pending: facts the classification had to guess at, which the clarify
  *   step may turn into questions.
  */
-export function classifyRunner(inputs, assessment) {
+export function classifyRunner(inputs, assessment, limits) {
   const reasons = []
   const pending = []
   const { goal, signals } = inputs
@@ -58,8 +66,9 @@ export function classifyRunner(inputs, assessment) {
         distanceKm: goal.distanceKm,
         runDays: effectiveRunDays(inputs, 'beginner_with_deadline'),
         walkBreaks: true,
-        cautious: true,
         gentle: (inputs.age ?? 0) >= GENTLE_START_AGE,
+        limits,
+        firstMarathon: isFirstMarathon(inputs, goal.distanceKm),
       })
       if (goal.weeksToEvent < need.comfortable) {
         reasons.push(
