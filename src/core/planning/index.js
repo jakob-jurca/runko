@@ -27,7 +27,7 @@ import { SCENARIO_RULES } from './rules.js'
 import { computeLimits } from './limits.js'
 import { safetyGate } from './gate.js'
 import { formatPace } from '../periodization.js'
-import { maxHeartRate, heartRateZones } from '../heart-rate.js'
+import { maxHeartRate, heartRateZones, formulaAge } from '../heart-rate.js'
 
 export const PIPELINE_VERSION = 1
 
@@ -194,8 +194,8 @@ export function runPlanningPipeline({ profile = {}, runs = [], memories = [], an
       goal_assessment: adopted.distance_km === feasibility.original_goal.distance_km ? feasibility.time_goal : null,
       start_volume_km: assessment.weekly_km,
       peak_volume_km: Math.max(0, ...weeks.map((w) => w.target_volume_km || 0)),
-      hr_max: maxHeartRate(inputs.age),
-      hr_zones: heartRateZones(inputs.age),
+      hr_max: maxHeartRate(formulaAge(inputs.age, inputs.health?.sex)),
+      hr_zones: heartRateZones(formulaAge(inputs.age, inputs.health?.sex)),
       constraints: { ...inputs.constraints, noBackToBack: plan.no_back_to_back },
       weeks,
     },

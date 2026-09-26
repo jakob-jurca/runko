@@ -27,6 +27,21 @@ export function maxHeartRate(age) {
 }
 
 /**
+ * Women's maximum heart rate is better estimated by Gulati et al. (2010),
+ * 206 - 0.88 x age, than by Tanaka. The rest of the code computes zones from an
+ * age with Tanaka; this returns the age at which Tanaka gives the Gulati
+ * value, so a woman's zones can flow through unchanged. Without a known sex
+ * (the optional health profile) the age is returned as it is.
+ * @returns {number|null}
+ */
+export function formulaAge(age, sex = null) {
+  if (age === null || age === undefined) return null
+  const years = Number(age)
+  if (sex !== 'female' || !Number.isFinite(years) || years < MIN_AGE || years > MAX_AGE) return Number.isFinite(years) ? years : null
+  return (2 + 0.88 * years) / 0.7
+}
+
+/**
  * The five training zones, as a fraction of max HR.
  * `key` matches the pace keys in periodization.js where they correspond.
  */

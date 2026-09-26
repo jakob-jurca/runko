@@ -612,6 +612,18 @@ export const t = {
         'Posvetuj se z osebnim zdravnikom; ko boš 45–60 minut hodil(a) brez bolečin in ti zdravnik tek odobri (označi to ' +
         'v Zdravstvenem profilu), ti Runko pripravi postopen prehod na hojo-tek. Hojo lahko dopolniš s kolesarjenjem, ' +
         'plavanjem ali tekom v vodi.',
+      caesareanWait: (weeks) =>
+        `Po carskem rezu je privzeti začetek teka 16. teden po porodu (najprej 12., z zdravniškim dovoljenjem in zaceljeno brazgotino). Počakaj še približno ${weeks} ${weeks === 1 ? 'teden' : 'tednov'}, hodi in krepi medenično dno; potem ti Runko sestavi načrt.`,
+      severeTear:
+        'Po poškodbi presredka 3. ali 4. stopnje je pred tekom potreben pregled pri fizioterapevtu za medenično dno. Ko ti tek odobri, to označi v Zdravstvenem profilu in Runko ti sestavi načrt.',
+      pelvicFloor:
+        'Uhajanje urina, teža ali pritisk v mednožju ob teku so znak, da medenično dno še ni pripravljeno. Zaustavi tek in obišči fizioterapevta za medenično dno; ko ti tek odobri, ti Runko sestavi previden načrt.',
+      pelvicFloorTraining:
+        'Prvo leto po porodu vsak dan dodaj vaje za mišice medeničnega dna (3 serije po 8–12 stiskov).',
+      caesareanUnknown:
+        'Če je bil porod s carskim rezom, je privzeti začetek teka 16. teden po porodu; to lahko označiš v Zdravstvenem profilu.',
+      fewDays:
+        'Že 1–2 teka na teden sta povezana z bistveno manjšim tveganjem za zgodnjo smrt kot brez teka. Na proste dni dodaj 30–45 minut kolesarjenja, plavanja ali hitre hoje.',
       knownConditionActive:
         'Zaradi znane bolezni načrt ne vsebuje trdih treningov, dokler ti jih zdravnik ne odobri (označi v Zdravstvenem profilu).',
       bmi35: 'Pred začetkom teka priporočamo pregled pri osebnem zdravniku. Načrt je previden, s hojo kot delom treninga.',
@@ -677,6 +689,10 @@ export const t = {
       caesarean: 'Je bil porod s carskim rezom?',
       postpartumCleared:
         'Ti je zdravnik ali babica po porodu odobril(a) tek in so opravljeni testi obremenitve (npr. pri fizioterapevtu)?',
+      pelvicFloor:
+        'Ali med tekom ali po njem občutiš uhajanje urina, pritisk ali težo v mednožju ali bolečino v mednožju?',
+      severeTear: 'Je bila pri porodu poškodba presredka 3. ali 4. stopnje?',
+      heightGain: 'Za koliko centimetrov si zrasel(a) v zadnjih 3 mesecih?',
       marathons: 'Koliko maratonov si že pretekel(a)?',
       save: 'Shrani',
       saved: 'Shranjeno. Upoštevano bo pri naslednjem načrtu.',

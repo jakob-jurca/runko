@@ -36,7 +36,12 @@ check('advanced on 4 days: 2', qualityCap({ level: 'advanced', phase: 'build', r
 check('50+: 2 in build at most', qualityCap({ level: 'advanced', phase: 'build', age: 55, runDays: 6 }) === 2)
 check('70+: 1 at most', qualityCap({ level: 'advanced', phase: 'build', age: 72, runDays: 6 }) === 1)
 check('teenagers: 2 at most', qualityCap({ level: 'elite', phase: 'build', age: 16, runDays: 6 }) === 2)
-check('3 run days: 1 at most; 2 run days: none', qualityCap({ level: 'advanced', phase: 'build', runDays: 3 }) === 1 && qualityCap({ level: 'advanced', phase: 'build', runDays: 2 }) === 0)
+check('3 run days: 1 with a recent injury, 2 without (p07 r8)',
+  qualityCap({ level: 'advanced', phase: 'build', runDays: 3 }) === 1 &&
+  qualityCap({ level: 'advanced', phase: 'build', runDays: 3, injuryFree: true }) === 2 &&
+  qualityCap({ level: 'novice', phase: 'build', runDays: 3, injuryFree: true }) === 1)
+check('2 run days: none below intermediate, one from intermediate (p07 r6-7)',
+  qualityCap({ level: 'novice', phase: 'build', runDays: 2 }) === 0 && qualityCap({ level: 'intermediate', phase: 'build', runDays: 2 }) === 1)
 
 // -- gaps, race week, clocks ----------------------------------------------------
 check('gap: 48 h = 2 days, 60 h = 3, 72 h = 3', hardGapDays(48) === 2 && hardGapDays(60) === 3 && hardGapDays(72) === 3)
@@ -59,7 +64,7 @@ check('post-marathon: 2 days off, weeks at 30/50/70/85%', cm.no_running_days ===
 }
 {
   const w = week([rest('Monday'), day('Tuesday', 'interval', 9, 4, 'interval'), day('Wednesday', 'easy', 8), day('Thursday', 'tempo', 9, 5, 'threshold'), day('Friday', 'easy', 8), day('Saturday', 'long', 14), rest('Sunday')])
-  check('a 3-run-day runner keeps one quality session', hardOf(run(w, { runDays: 3 })).length === 1)
+  check('a 3-run-day runner with a recent injury keeps one quality session', hardOf(run(w, { runDays: 3 })).length === 1)
   check('a 72-year-old keeps one', hardOf(run(w, { age: 72, level: 'advanced' })).length === 1)
   check('a 16-year-old keeps at most two', hardOf(run(w, { age: 16, level: 'advanced', runDays: 6 })).length <= 2)
 }

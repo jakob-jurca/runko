@@ -128,6 +128,17 @@ export function computeLimits(inputs, assessment) {
     addLimit(set, 'weeklyIncreasePct', seasoned ? 0.07 : 0.05, { rule: 'p04 r8', level: LEVEL.AGE })
   } else if (age !== null && age >= 50) {
     addLimit(set, 'weeklyIncreasePct', 0.08, { rule: 'p04 r7', level: LEVEL.AGE })
+  } else if (age !== null && age >= 40) {
+    // The 40-49 tier: the ordinary 10% and a 48 h gap, recorded so
+    // the rule behind each value is the masters one (p04 r6, r9, r14).
+    addLimit(set, 'weeklyIncreasePct', 0.1, { rule: 'p04 r6', level: LEVEL.AGE })
+    addLimit(set, 'hardGapHours', 48, { rule: 'p04 r9', level: LEVEL.AGE })
+    addLimit(set, 'recoveryFactor', 0.75, { rule: 'p04 r14', level: LEVEL.AGE })
+  }
+  if (age !== null && age >= 50 && age < 60) addLimit(set, 'recoveryFactor', 0.75, { rule: 'p04 r14', level: LEVEL.AGE })
+  // p04 r27: a beginner from 60 runs three days a week, never on consecutive days.
+  if (age !== null && age >= 60 && (level === 'none' || level === 'beginner')) {
+    addLimit(set, 'maxRunDays', 3, { rule: 'p04 r27', level: LEVEL.AGE })
   }
   addLimit(set, 'weeklyFloorKm', WEEKLY_FLOOR_KM[level] ?? WEEKLY_FLOOR_KM.novice, { rule: 'b04 r9', level: LEVEL.PLAN })
   if (age !== null && age >= 50) {
@@ -152,6 +163,17 @@ export function computeLimits(inputs, assessment) {
     addLimit(set, 'noIntensityWeeks', easyOnlyWeeks(breakDays, { injury: Boolean(inputs.signals.injury) }), {
       rule: inputs.signals.injury ? 'p06 r28' : 'b07 r15', level: LEVEL.PLAN,
     })
+  }
+
+  // --- time-crunched, 1-3 days a week (p07 r1, r15, r17) ---------------------------
+  const daysOffered = inputs.constraints?.maxRunDays ?? inputs.daysPerWeek ?? null
+  if (daysOffered !== null && daysOffered <= 3) {
+    if (daysOffered <= 1) addLimit(set, 'maxGoalKm', 5, { rule: 'p07 r1', level: LEVEL.POPULATION })
+    else if (daysOffered <= 2) {
+      // r15: no marathon on two days. r17: a half needs a strong base (the
+      // "previous half completed" it also asks for is not known here).
+      addLimit(set, 'maxGoalKm', levelAtLeast(level, 'intermediate') ? 21.1 : 10, { rule: 'p07 r15-17', level: LEVEL.POPULATION })
+    }
   }
 
   // --- long run duration (decision 1, b04 r20, p04 r21) --------------------------
@@ -188,6 +210,10 @@ export function computeLimits(inputs, assessment) {
     // r11: at most two build weeks in a row, then a lighter one.
     addLimit(set, 'recoveryEvery', 3, { rule: 'p08 r11', level: LEVEL.MEDICAL })
     addLimit(set, 'weeklyIncreasePct', 0.1, { rule: 'p08 r11', level: LEVEL.MEDICAL })
+    // r12: a growth spurt (2 cm or more in three months) caps the week at 5%.
+    if ((inputs.health?.heightGain3moCm ?? 0) >= 2) {
+      addLimit(set, 'weeklyIncreasePct', 0.05, { rule: 'p08 r12', level: LEVEL.MEDICAL })
+    }
   }
 
   // --- heavier beginners, BMI 30+ (p05 r12, r15, r17, r29) -------------------------

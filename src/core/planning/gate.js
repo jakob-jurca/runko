@@ -52,6 +52,19 @@ export function safetyGate(inputs, assessment) {
     if (weeks < 12 && health.postpartumCleared !== true) {
       return withDefaults(block('postpartum_not_cleared', G.postpartumNotCleared(12 - weeks), ['p03 r19']))
     }
+    // r21: after a caesarean the default start is week 16 (12 at the earliest,
+    // with the scar healed and a provider's clearance).
+    if (health.caesarean === true && weeks < 16 && health.postpartumCleared !== true) {
+      return withDefaults(block('caesarean_wait', G.caesareanWait(16 - weeks), ['p03 r21']))
+    }
+    // r22: a grade 3-4 tear needs a pelvic-health physiotherapist first.
+    if (health.severeTear === true && health.postpartumCleared !== true) {
+      return withDefaults(block('postpartum_tear', G.severeTear, ['p03 r22']))
+    }
+    // r23: symptoms with running stop it until a physiotherapist has seen her.
+    if (health.pelvicFloorSymptoms === true) {
+      return withDefaults(block('pelvic_floor', G.pelvicFloor, ['p03 r23']))
+    }
   }
   if (safety.painAtRest === true) {
     return withDefaults(block('pain_at_rest', G.painAtRest, ['b01 r7', 'p06 r1']))
@@ -82,6 +95,19 @@ export function safetyGate(inputs, assessment) {
     result.notices.push({ id: 'bmi_40', text: G.bmi40, rule: 'p05 r4' })
   } else if (health.bmi !== null && health.bmi >= 35) {
     result.notices.push({ id: 'bmi_35', text: G.bmi35, rule: 'p05 r5' })
+  }
+  // p03 r17, r21: pelvic-floor training is prompted for a year after birth; the
+  // delivery type is optional, so an unknown one gets the conservative advice.
+  if (safety.pregnancyStatus === 'postpartum') {
+    result.notices.push({ id: 'pelvic_floor_training', text: G.pelvicFloorTraining, rule: 'p03 r17' })
+    if (health.caesarean === null && (safety.weeksPostpartum ?? 0) < 16) {
+      result.notices.push({ id: 'caesarean_unknown', text: G.caesareanUnknown, rule: 'p03 r21' })
+    }
+  }
+  // p07 r4, r22: one or two runs a week still count, and cross-training fills the gaps.
+  const offered = inputs.constraints?.maxRunDays ?? inputs.daysPerWeek ?? null
+  if (offered !== null && offered <= 2) {
+    result.notices.push({ id: 'few_days', text: G.fewDays, rule: 'p07 r4' })
   }
   if ((goal.distanceKm ?? 0) > 42.2) {
     result.notices.push({ id: 'ultra_limited', text: G.ultraLimited, rule: 'decision: road races only' })

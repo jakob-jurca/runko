@@ -775,6 +775,51 @@ export const PERSONAS = [
     // is a warning, not a refusal.
     expect: { verdict: 'stretch' },
   },
+  // ------------------------------------------------------ Group C: populations
+  {
+    id: 'masters-45-half',
+    who: '45, 6 years running, 35 km/week, half marathon in 16 weeks',
+    profile: {
+      age: 45, fitness_level: 'intermediate', experience_months: 72, weekly_volume_km: 35,
+      longest_run_km: 14, target_distance_km: 21.1, event_date: sundayIn(16), days_per_week: 5,
+      pregnancy_status: 'none', pain_at_rest: false, injury_last_12m: false, break_days: 0,
+    },
+    // p04 r6, r9, r14: 10% a week, a 48 h gap, a lighter week every 4th.
+    expect: { scenario: 'long_race', maxWeeklyIncreasePct: 10, recoveryCycle: 4 },
+  },
+  {
+    id: 'crunched-1-day-half',
+    who: 'One run day a week, wants a half marathon',
+    profile: {
+      age: 33, fitness_level: 'intermediate', experience_months: 48, weekly_volume_km: 12,
+      longest_run_km: 8, target_distance_km: 21.1, event_date: sundayIn(20), days_per_week: 1,
+      pregnancy_status: 'none', pain_at_rest: false, injury_last_12m: false,
+    },
+    // p07 r1: on one day a week the longest goal is a 5 km.
+    expect: { verdict: 'unsafe', proposesSaferGoal: true, originalGoalNotBuilt: true, maxRunDays: 1, notice: 'few_days' },
+  },
+  {
+    id: 'crunched-3-days-10k',
+    who: '3 years running, 25 km/week on three days, 10 km in 12 weeks, no injury',
+    profile: {
+      age: 34, fitness_level: 'intermediate', experience_months: 36, weekly_volume_km: 25,
+      longest_run_km: 10, target_distance_km: 10, event_date: sundayIn(12), days_per_week: 3,
+      pregnancy_status: 'none', pain_at_rest: false, injury_last_12m: false,
+    },
+    // p07 r8-10: two quality sessions at most, never on consecutive days.
+    expect: { scenario: 'short_race', maxRunDays: 3 },
+  },
+  {
+    id: 'teen-16-growth-spurt',
+    who: '16-year-old who grew 3 cm in three months, 30 km/week, 10 km in 12 weeks',
+    profile: {
+      age: 16, fitness_level: 'intermediate', experience_months: 30, weekly_volume_km: 30,
+      longest_run_km: 12, target_distance_km: 10, event_date: sundayIn(12), days_per_week: 5,
+      pregnancy_status: 'none', pain_at_rest: false, injury_last_12m: false, height_gain_cm_3mo: 3,
+    },
+    // p08 r12: growth spurt, at most 5% a week.
+    expect: { maxWeeklyIncreasePct: 5, maxWeeklyKm: 45 },
+  },
 ]
 
 export { ALL_DAYS }

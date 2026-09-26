@@ -22,6 +22,9 @@ const EMPTY = {
   caesarean: null,
   postpartum_cleared: null,
   marathons_completed: '',
+  pelvic_floor_symptoms: null,
+  severe_tear: null,
+  height_gain_cm_3mo: '',
 }
 
 /**
@@ -53,6 +56,7 @@ export default function HealthProfile({ profile, onChanged }) {
             ...Object.fromEntries(Object.keys(EMPTY).map((k) => [k, row[k] ?? EMPTY[k]])),
             height_cm: row.height_cm ?? '',
             marathons_completed: row.marathons_completed ?? '',
+            height_gain_cm_3mo: row.height_gain_cm_3mo ?? '',
           })
         }
       })
@@ -64,6 +68,7 @@ export default function HealthProfile({ profile, onChanged }) {
 
   const set = (key) => (value) => setForm((f) => ({ ...f, [key]: value }))
   const postpartum = profile.pregnancy_status === 'postpartum'
+  const teen = Number(profile.age) > 0 && Number(profile.age) < 18
   const needsClearance = form.cardiac_symptoms === true || form.known_condition === true
 
   const save = async () => {
@@ -77,6 +82,9 @@ export default function HealthProfile({ profile, onChanged }) {
         medical_clearance: needsClearance ? form.medical_clearance : null,
         caesarean: postpartum ? form.caesarean : null,
         postpartum_cleared: postpartum ? form.postpartum_cleared : null,
+        pelvic_floor_symptoms: postpartum ? form.pelvic_floor_symptoms : null,
+        severe_tear: postpartum ? form.severe_tear : null,
+        height_gain_cm_3mo: teen && form.height_gain_cm_3mo !== '' ? Number(form.height_gain_cm_3mo) : null,
       }
       const row = await saveHealthProfile(profile.id, fields, stored?.consent_at || new Date().toISOString())
       setStored(row)
@@ -154,7 +162,24 @@ export default function HealthProfile({ profile, onChanged }) {
                 onChange={set('postpartum_cleared')}
                 options={YES_NO}
               />
+              <Choice label={H.pelvicFloor} value={form.pelvic_floor_symptoms} onChange={set('pelvic_floor_symptoms')} options={YES_NO} />
+              <Choice label={H.severeTear} value={form.severe_tear} onChange={set('severe_tear')} options={YES_NO} />
             </>
+          )}
+          {teen && (
+            <div>
+              <label className="label">{H.heightGain}</label>
+              <input
+                type="number"
+                min="0"
+                max="20"
+                step="0.5"
+                className="input"
+                placeholder="0"
+                value={form.height_gain_cm_3mo}
+                onChange={(e) => set('height_gain_cm_3mo')(e.target.value)}
+              />
+            </div>
           )}
           <div>
             <label className="label">{H.marathons}</label>

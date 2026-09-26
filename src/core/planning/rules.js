@@ -240,12 +240,17 @@ export const WALKING_PLAN = { sessions: 4, minutes: [20, 20, 25, 30, 30, 35, 40,
  * 10 km: 8; half: 10 for novices (none, beginner, novice), 8 above;
  * marathon: 16 for novices, 12 above.
  */
-export function minPlanWeeks(distanceKm, level) {
+export function minPlanWeeks(distanceKm, level, runDays = 4, longestKm = 0) {
   const novice = ['none', 'beginner', 'novice'].includes(level)
-  if (distanceKm <= 5) return level === 'none' ? 9 : 6
-  if (distanceKm <= 10) return 8
-  if (distanceKm <= 21.1) return novice ? 10 : 8
-  return novice ? 16 : 12
+  let weeks
+  if (distanceKm <= 5) weeks = level === 'none' ? 9 : 6
+  else if (distanceKm <= 10) weeks = 8
+  else if (distanceKm <= 21.1) weeks = novice ? 10 : 8
+  else weeks = novice ? 16 : 12
+  // p07 r16-18: few run days need more weeks for the same distance.
+  if (runDays <= 3 && distanceKm > 21.1) weeks = Math.max(weeks, longestKm >= 16 && !novice ? 16 : 20)
+  else if (runDays <= 3 && distanceKm > 10) weeks = Math.max(weeks, runDays <= 2 ? 12 : novice ? 14 : 10)
+  return weeks
 }
 
 /**

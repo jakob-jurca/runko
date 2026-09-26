@@ -21,6 +21,21 @@ check('15-year-old is not blocked for age', gateFor({ age: 15 }).outcome === 'cl
 check('14-year-old is blocked', gateFor({ age: 14 }).reason === 'under_15')
 check('unknown age is not blocked (onboarding requires it)', gateFor({}).outcome === 'clear')
 
+// Caesarean, tear, pelvic floor (p03 r21-23) and the delivery-type default.
+const pp = (weeks, extra = {}) => ({ pregnancy_status: 'postpartum', weeks_postpartum: weeks, postpartum_cleared: false, ...extra })
+check('caesarean at 14 weeks, no clearance → wait until 16',
+  gateFor(pp(14, { caesarean: true })).reason === 'caesarean_wait')
+check('caesarean at 14 weeks, cleared → plan', gateFor(pp(14, { caesarean: true, postpartum_cleared: true })).outcome === 'clear')
+check('caesarean at 16 weeks → plan', gateFor(pp(16, { caesarean: true })).outcome === 'clear')
+check('delivery type unknown at 13 weeks → plan, with the conservative note',
+  (() => { const g = gateFor(pp(13)); return g.outcome === 'clear' && g.notices.some((n) => n.id === 'caesarean_unknown') })())
+check('a grade 3-4 tear without clearance → physiotherapist first', gateFor(pp(20, { severe_tear: true })).reason === 'postpartum_tear')
+check('pelvic-floor symptoms → stop running, see a physiotherapist', gateFor(pp(30, { pelvic_floor_symptoms: true })).reason === 'pelvic_floor')
+check('unknown tear and symptoms unlock nothing but block nothing', gateFor(pp(30)).outcome === 'clear')
+check('postpartum: a daily pelvic-floor prompt in the notices', gateFor(pp(30)).notices.some((n) => n.id === 'pelvic_floor_training'))
+check('one or two run days: the health message and cross-training',
+  gateFor({ days_per_week: 2 }).notices.some((n) => n.id === 'few_days') && !gateFor({ days_per_week: 4 }).notices.some((n) => n.id === 'few_days'))
+
 // Postpartum boundaries (p03 r18-20). Unknown weeks = the earliest case.
 check('postpartum, weeks unknown → blocked as early', gateFor({ pregnancy_status: 'postpartum' }).reason === 'postpartum_early')
 check('postpartum 5 weeks → blocked even if cleared',

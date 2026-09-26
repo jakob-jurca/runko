@@ -24,6 +24,7 @@ import { buildTimePlan, buildWalkingPlan } from './build-time.js'
 import { buildDistancePlan } from './build-distance.js'
 import { withGoal } from './collect.js'
 import { applyIntensityRules, postRaceClocks } from './intensity.js'
+import { formulaAge } from '../heart-rate.js'
 
 const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n))
 const round = Math.round
@@ -94,6 +95,8 @@ function context(scenario, inputs, assessment, feasibility, limits) {
     longest: assessment.longest_km ?? round((assessment.weekly_km ?? 0) * 0.3),
     goalPaceKey: paces.goal ? 'goal' : 'marathon',
     age: inputs.age,
+    // Women's zones use Gulati when sex is known (heart-rate.js).
+    hrAge: formulaAge(inputs.age, inputs.health?.sex),
     // 2.5 h (3 h for marathon plans, less for older runners) at easy pace.
     longMaxKm: longRunDurationCapKm(longMaxMinutes, paces.easy),
     longMaxMinutes,
@@ -169,7 +172,7 @@ function foundationPlan(ctx, totalWeeks, {
   return buildDistancePlan({
     longMaxKm, limits: ctx.limits,
     totalWeeks, phases, recoveryWeeks: ctx.recovery(phases),
-    runDays: ctx.runDays, paces, age: ctx.age,
+    runDays: ctx.runDays, paces, age: ctx.hrAge,
     startWeeklyKm: volume, peakWeeklyKm: volume, progression: 'hold',
     startLongKm: long, peakLongKm: long, longShare: share,
     taperFactors: [], qualityFor: () => [], race: null, goalPaceKey: 'easy', intentFor,
@@ -200,7 +203,7 @@ function completeBeginner(ctx) {
     : 30
   const draft = buildTimePlan({
     totalWeeks: OPEN_GOAL_WEEKS.max, ladder, runDayCount: ctx.runDays.length, available: ctx.runDays,
-    runPace, age: ctx.age, targetLongMin, targetEasyMin: 30, walkBase: ctx.walkBase,
+    runPace, age: ctx.hrAge, targetLongMin, targetEasyMin: 30, walkBase: ctx.walkBase,
   })
   // Stop the week after the target is first reached: that is the programme.
   const done = draft.weeks.findIndex((w) =>
@@ -230,7 +233,7 @@ function beginnerToRace(ctx, { runPace, ladder }) {
 
   const draft = buildTimePlan({
     totalWeeks, ladder, runDayCount: ctx.runDays.length, available: ctx.runDays,
-    runPace, age: ctx.age, targetLongMin: CONTINUOUS_TARGET_MIN, targetEasyMin: CONTINUOUS_TARGET_MIN,
+    runPace, age: ctx.hrAge, targetLongMin: CONTINUOUS_TARGET_MIN, targetEasyMin: CONTINUOUS_TARGET_MIN,
     walkBase: ctx.walkBase,
   })
   const ready = draft.weeks.findIndex((w) =>
@@ -257,7 +260,7 @@ function beginnerToRace(ctx, { runPace, ladder }) {
   const raceWeeks = buildDistancePlan({
     longMaxKm, limits: ctx.limits,
     totalWeeks: block, phases, recoveryWeeks: ctx.recovery(phases, race.weekIndex),
-    runDays: ctx.runDays, paces, age: ctx.age,
+    runDays: ctx.runDays, paces, age: ctx.hrAge,
     startWeeklyKm: weeklyKm, peakWeeklyKm: Math.max(weeklyKm, round(req.weeklyComf)), progression: 'build',
     startLongKm: blockStartLong, peakLongKm: Math.max(longestKm, round(req.longComf)),
     longShare: ctx.share(),
@@ -299,7 +302,7 @@ function deadlineBeginner(ctx, assessment, feasibility) {
       runDayCount: Math.min(3, ctx.runDays.length),
       available: ctx.runDays,
       runPace,
-      age: ctx.age,
+      age: ctx.hrAge,
       targetLongMin: clamp(round(d * 0.6 * runPace), 30, 75),
       targetEasyMin: 30,
       walkBase: ctx.walkBase,
@@ -318,7 +321,7 @@ function deadlineBeginner(ctx, assessment, feasibility) {
     weeks: buildDistancePlan({
       longMaxKm: ctx.longMaxKm, limits: ctx.limits,
       totalWeeks: block, phases, recoveryWeeks: ctx.recovery(phases, race?.weekIndex ?? -1),
-      runDays: ctx.runDays, paces: ctx.paces, age: ctx.age,
+      runDays: ctx.runDays, paces: ctx.paces, age: ctx.hrAge,
       startWeeklyKm: Math.max(ctx.weekly, 4),
       peakWeeklyKm: Math.max(ctx.current, round(req.weeklyComf)),
       progression: 'build',
@@ -343,7 +346,7 @@ function recreational(ctx) {
     weeks: buildDistancePlan({
       longMaxKm: ctx.longMaxKm, limits: ctx.limits,
       totalWeeks: total, phases, recoveryWeeks: ctx.recovery(phases),
-      runDays: ctx.runDays, paces: ctx.paces, age: ctx.age,
+      runDays: ctx.runDays, paces: ctx.paces, age: ctx.hrAge,
       startWeeklyKm: start, peakWeeklyKm: peak, progression: 'rolling',
       startLongKm: longStart, peakLongKm: Math.min(16, Math.max(longStart, round(longStart * 1.3))),
       longShare: ctx.share(),
@@ -373,7 +376,7 @@ function maintenance(ctx, assessment) {
     weeks: buildDistancePlan({
       longMaxKm: ctx.longMaxKm, limits: ctx.limits,
       totalWeeks: total, phases, recoveryWeeks: ctx.recovery(phases),
-      runDays: ctx.runDays, paces: ctx.paces, age: ctx.age,
+      runDays: ctx.runDays, paces: ctx.paces, age: ctx.hrAge,
       startWeeklyKm: volume, peakWeeklyKm: volume, progression: 'hold',
       startLongKm: long, peakLongKm: long, longShare: share,
       taperFactors: [],
@@ -422,7 +425,7 @@ function race(ctx, assessment, feasibility, kind) {
       weeks: buildDistancePlan({
       longMaxKm: ctx.longMaxKm, limits: ctx.limits,
         totalWeeks: total, phases, recoveryWeeks: ctx.recovery(phases, raceWeek?.weekIndex ?? -1),
-        runDays: ctx.runDays, paces: ctx.paces, age: ctx.age,
+        runDays: ctx.runDays, paces: ctx.paces, age: ctx.hrAge,
         startWeeklyKm: Math.max(ctx.weekly, 5), peakWeeklyKm: Math.max(peakWeekly, 5), progression: 'build',
         startLongKm: ctx.longest, peakLongKm: longCeiling,
         longShare: (v) => Math.min(ctx.share()(v), 0.35),
@@ -447,7 +450,7 @@ function race(ctx, assessment, feasibility, kind) {
     weeks: buildDistancePlan({
       longMaxKm: ctx.longMaxKm, limits: ctx.limits,
       totalWeeks: total, phases, recoveryWeeks: ctx.recovery(phases, raceWeek?.weekIndex ?? -1),
-      runDays: ctx.runDays, paces: ctx.paces, age: ctx.age,
+      runDays: ctx.runDays, paces: ctx.paces, age: ctx.hrAge,
       startWeeklyKm: Math.max(ctx.weekly, 5), peakWeeklyKm: Math.max(peakWeekly, 5), progression: 'build',
       startLongKm: ctx.longest, peakLongKm: round(peakLong),
       // Goal-driven: the ~30% guidance may be exceeded; duration still binds.
@@ -481,7 +484,7 @@ function returning(ctx, assessment, feasibility, inputs) {
     const plan = buildTimePlan({
       totalWeeks: ctx.hasEvent ? ctx.goal.weeksToEvent : SCENARIO_RULES.returning.weeks, ladder: postpartumLadder(inputs),
       runDayCount: Math.min(ctx.runDays.length, 4), available: ctx.runDays,
-      runPace, age: ctx.age, targetLongMin: d ? clamp(round(d * runPace * 0.8), 30, 90) : 45, targetEasyMin: 35,
+      runPace, age: ctx.hrAge, targetLongMin: d ? clamp(round(d * runPace * 0.8), 30, 90) : 45, targetEasyMin: 35,
       race: ctx.hasEvent && d ? { distanceKm: d, walkBreaks: false, day: ctx.goal.eventWeekday } : null,
       ladderPhase: 'return',
     })
@@ -509,7 +512,7 @@ function returning(ctx, assessment, feasibility, inputs) {
     weeks: buildDistancePlan({
       longMaxKm: ctx.longMaxKm, limits: ctx.limits,
       totalWeeks: total, phases, recoveryWeeks: ctx.recovery(phases, raceWeek?.weekIndex ?? -1),
-      runDays: ctx.runDays, paces: ctx.paces, age: ctx.age,
+      runDays: ctx.runDays, paces: ctx.paces, age: ctx.hrAge,
       startWeeklyKm: ctx.weekly, peakWeeklyKm: peakWeekly, progression: 'build',
       startLongKm: ctx.longest, peakLongKm: peakLong,
       longShare: ctx.share(),
@@ -557,7 +560,7 @@ export function buildPlan(scenario, inputs, assessment, feasibility, restriction
   if (restrictions.walkOnly) {
     // p05 r4: walking only until a clinician agrees.
     built = { unit: 'time', weeks: buildWalkingPlan({
-      available: inputs.constraints.availableDays ?? inputs.availableDays, age: inputs.age,
+      available: inputs.constraints.availableDays ?? inputs.availableDays, age: ctx.hrAge,
       days: inputs.constraints.maxRunDays ?? inputs.daysPerWeek ?? undefined,
     }).weeks }
   } else switch (scenario) {
@@ -597,11 +600,12 @@ export function buildPlan(scenario, inputs, assessment, feasibility, restriction
   // b03 r18-21, b05 r2-29: quality per week, hard-session gaps, the
   // low-intensity floor, race week, easy-run limits, strides, strength notes.
   const intense = applyIntensityRules(shaped, {
-    level: assessment.experience_level, age: inputs.age, runDays: ctx.runDays.length,
+    level: assessment.experience_level, age: inputs.age, hrAge: ctx.hrAge, runDays: ctx.runDays.length,
     distanceKm: ctx.goal.distanceKm, paces: ctx.paces, hardGapHours: ctx.limits.hardGapHours, strength: true,
+    injuryFree: inputs.safety?.injuryLast12m === false,
   }).map((w, i) => ({ ...w, allow_hard: Boolean(shaped[i].allow_hard) && w.allow_hard }))
   const noIntensityWeeks = restrictions.noHardSessions ? Infinity : ctx.limits.noIntensityWeeks ?? 0
-  const weeks = noIntensityWeeks ? withoutHardSessions(intense, ctx.paces, inputs.age, noIntensityWeeks) : intense
+  const weeks = noIntensityWeeks ? withoutHardSessions(intense, ctx.paces, ctx.hrAge, noIntensityWeeks) : intense
 
   return {
     unit: built.unit,

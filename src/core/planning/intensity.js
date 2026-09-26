@@ -51,16 +51,19 @@ const QUALITY_BY_LEVEL = {
  * @param {string} o.phase
  * @param {number|null} o.age
  * @param {number} o.runDays
+ * @param {boolean} [o.injuryFree] - no running injury for the last 6+ months (p07 r8)
  */
-export function qualityCap({ level, phase, age = null, runDays = 4 }) {
+export function qualityCap({ level, phase, age = null, runDays = 4, injuryFree = false }) {
   const col = ['base', 'build', 'peak'].indexOf(column(phase))
   let cap = (QUALITY_BY_LEVEL[level] || QUALITY_BY_LEVEL.beginner)[col]
   // b05 section 2, "any, age >= 50": 1 / 2 / 2, the long run included.
   if (age !== null && age >= 50) cap = Math.min(cap, [1, 2, 2][col])
   // The layouts for 3-5 days carry two at most, and 3 days one (b05 section 4).
   if (runDays <= 5 && cap > 2) cap = 2
-  if (runDays <= 3) cap = Math.min(cap, 1)
-  if (runDays <= 2) cap = 0
+  // p07 r6-8: 3 runs: 1 (novice), 2 for intermediate or better without a recent
+  // injury; 2 runs: none below intermediate, then 1 with the long run as the other.
+  if (runDays === 3) cap = Math.min(cap, ['intermediate', 'advanced', 'elite'].includes(level) && injuryFree ? 2 : 1)
+  if (runDays <= 2) cap = ['intermediate', 'advanced', 'elite'].includes(level) ? Math.min(cap, 1) : 0
   // p04 (70+): at most one; p08 r9-10 (teenagers): at most two.
   if (age !== null && age >= 70) cap = Math.min(cap, 1)
   if (age !== null && age < 18) cap = Math.min(cap, 2)
@@ -111,11 +114,13 @@ const restOf = (d) => ({
  * @param {object} ctx.paces
  * @param {number} [ctx.hardGapHours]
  * @param {number|null} [ctx.qualityCapOverride] - a population cap (time-crunched)
+ * @param {boolean} [ctx.injuryFree] - no running injury in the last 12 months
  * @param {boolean} [ctx.strength] - add optional strength notes
  * @returns {Array} weeks
  */
 export function applyIntensityRules(weeks, ctx) {
   const { level, age, paces } = ctx
+  const hr = ctx.hrAge ?? age // heart-rate zones may use a sex-specific formula
   const gap = hardGapDays(ctx.hardGapHours ?? 48)
   const minLow = ctx.runDays <= 3 ? 0.7 : 0.75
   const d = ctx.distanceKm ?? 0
@@ -130,11 +135,11 @@ export function applyIntensityRules(weeks, ctx) {
     const isRace = days.some((x) => x.type === 'race')
     const quality = () => days.filter((x) => HARD_TYPES.has(x.type))
     const demote = (x) => {
-      days = days.map((y) => (y.day === x.day ? toStrideRun(y, paces, age) : y))
+      days = days.map((y) => (y.day === x.day ? toStrideRun(y, paces, hr) : y))
     }
 
     // -- 1. quality cap ---------------------------------------------------------
-    const base = qualityCap({ level, phase: week.phase, age, runDays: ctx.runDays })
+    const base = qualityCap({ level, phase: week.phase, age, runDays: ctx.runDays, injuryFree: ctx.injuryFree })
     const cap = ctx.qualityCapOverride != null ? Math.min(ctx.qualityCapOverride, base) : base
     // Polarized final weeks (b03 r21, m11): no threshold work beside intervals
     // for a trained 5-10 km runner in the last 8 weeks.
@@ -148,7 +153,7 @@ export function applyIntensityRules(weeks, ctx) {
           day: x.day, type: 'repetition', distanceKm: km(x),
           hardKm: Math.min(x.hard_km || 0, 0.05 * wk, 8), paceKey: 'repetition', paces, intensity: 'hard',
         })
-        days = days.map((y) => (y.day === x.day ? enrichDays([rep], paces, age)[0] : y))
+        days = days.map((y) => (y.day === x.day ? enrichDays([rep], paces, hr)[0] : y))
       }
     }
     while (quality().length > cap) demote([...quality()].sort((a, b) => priority(a) - priority(b))[0])
@@ -216,14 +221,14 @@ export function applyIntensityRules(weeks, ctx) {
         if (km(x) * paces.easy < 20 && !week.is_recovery) { freed += km(x); return restOf(x) }
         if (km(x) > ceiling) {
           freed += km(x) - ceiling
-          return toEasy(x, paces, age, ceiling, { title: x.title, variant: x.variant })
+          return toEasy(x, paces, hr, ceiling, { title: x.title, variant: x.variant })
         }
         return x
       })
       for (const x of days.filter((y) => y.type === 'easy' && km(y) < ceiling)) {
         const add = Math.min(ceiling - km(x), Math.floor(freed))
         if (add >= 1 && (km(x) + add) * paces.easy >= 20) {
-          days = days.map((y) => (y.day === x.day ? toEasy(y, paces, age, km(x) + add, { title: y.title, variant: y.variant }) : y))
+          days = days.map((y) => (y.day === x.day ? toEasy(y, paces, hr, km(x) + add, { title: y.title, variant: y.variant }) : y))
           freed -= add
         }
       }

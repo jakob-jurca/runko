@@ -91,7 +91,7 @@ export function checkFeasibility(inputs, assessment, classification, limits) {
   const overCeiling = goal.distanceKm > goalCeiling
   if (overCeiling) {
     verdict = 'unsafe'
-    reasons.push(`At this age the longest goal is ${goalCeiling} km; a ${goal.distanceKm} km is not offered.`)
+    reasons.push(`For your age or weekly schedule the longest goal offered is ${goalCeiling} km; a ${goal.distanceKm} km is not.`)
   }
   if (runDays < req.run_days_min) {
     verdict = 'unsafe'

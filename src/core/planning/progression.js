@@ -134,7 +134,7 @@ export function weeksNeeded({
   // b03 r9-11: no plan shorter than the minimum — unless it is an intermediate
   // or better runner already at 80% of what the distance asks (then it is a
   // warning, not a refusal), or a walk-run completion of a short event.
-  const planFloor = minPlanWeeks(distanceKm, level)
+  const planFloor = minPlanWeeks(distanceKm, level, runDays, assessment.longest_km ?? 0)
   const softFloor = levelAtLeast(level, 'intermediate') && (assessment.weekly_km ?? 0) >= 0.8 * req.weeklyMin
   const hardPlanFloor = walkable || softFloor ? 0 : planFloor
   const floor = Math.max(L.raceFloor ? raceFloorWeeks(distanceKm) : 0, gate, hardPlanFloor)

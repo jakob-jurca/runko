@@ -143,4 +143,12 @@ check('but every week is still complete', ageless.weeks.every((w) => w.days.leng
 check('and HR is simply absent, not zero',
   ageless.weeks.flatMap((w) => w.days).every((d) => d.hr === null))
 
+// Gulati (2010) for women when sex is known: 206 - 0.88 x age.
+import { formulaAge } from '../src/core/heart-rate.js'
+check('Gulati for a 40-year-old woman: 171 bpm (Tanaka would say 180)',
+  maxHeartRate(formulaAge(40, 'female')) === 171 && maxHeartRate(40) === 180)
+check('Gulati for a 60-year-old woman: 153 bpm', maxHeartRate(formulaAge(60, 'female')) === 153)
+check('unknown sex or a man keeps Tanaka', maxHeartRate(formulaAge(40, null)) === 180 && maxHeartRate(formulaAge(40, 'male')) === 180)
+check('a missing age stays missing', formulaAge(null, 'female') === null && maxHeartRate(formulaAge(null, 'female')) === null)
+
 export default summary('heart rate + segments')

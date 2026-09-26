@@ -553,7 +553,7 @@ export function intensityRulesKept(result, persona) {
   for (const w of result.weeks) {
     if ((w.unit ?? result.unit) === 'time') continue
     const q = w.days.filter((d) => HARD_TYPES.has(d.type))
-    const cap = qualityCap({ level, phase: w.phase, age, runDays })
+    const cap = qualityCap({ level, phase: w.phase, age, runDays, injuryFree: persona.profile.injury_last_12m === false })
     if (q.length > cap) return { ok: false, detail: `week ${w.week_number}: ${q.length} quality sessions, cap ${cap}` }
     const km = w.days.reduce((s, d) => s + (d.distance_km || 0), 0)
     const hard = w.days.filter((d) => HARD_TYPES.has(d.type) || d.type === 'race')

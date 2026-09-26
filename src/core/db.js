@@ -89,6 +89,7 @@ export async function markPlanCreated(userId) {
 export const HEALTH_FIELDS = [
   'sex', 'height_cm', 'cardiac_symptoms', 'known_condition', 'medical_clearance',
   'caesarean', 'postpartum_cleared', 'marathons_completed',
+  'pelvic_floor_symptoms', 'severe_tear', 'height_gain_cm_3mo',
 ]
 
 const MISSING_TABLE = new Set(['PGRST205', '42P01'])

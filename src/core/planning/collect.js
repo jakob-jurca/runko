@@ -148,6 +148,9 @@ export function collectInputs({ profile = {}, runs = [], memories = [], answers 
     medicalClearance: bool(profile.medical_clearance),
     caesarean: bool(profile.caesarean),
     postpartumCleared: bool(profile.postpartum_cleared),
+    pelvicFloorSymptoms: bool(profile.pelvic_floor_symptoms),
+    severeTear: bool(profile.severe_tear),
+    heightGain3moCm: numberOrNull(profile.height_gain_cm_3mo),
     marathonsCompleted: numberOrNull(profile.marathons_completed),
   }
 
