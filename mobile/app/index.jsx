@@ -1,14 +1,13 @@
-import { View, Text } from 'react-native'
-import { t } from '../../src/core/strings'
-import { vdotFromRace } from '../../src/core/periodization'
-import { isSupabaseConfigured } from '../../src/core/supabase'
-import { allDocuments } from '../../src/core/knowledge'
+import { Redirect } from 'expo-router'
+import { useAuth } from '../context/AuthContext'
+import { FullScreenSpinner } from '../components/ui'
 
-export default function Home() {
-  return (
-    <View className="flex-1 items-center justify-center bg-canvas">
-      <Text className="text-white text-2xl">{t.app?.name ?? 'Runko'}</Text>
-      <Text className="text-primary">core ok: VDOT {vdotFromRace(5, 25).toFixed(1)}, supabase {String(isSupabaseConfigured)}, docs {allDocuments().length}</Text>
-    </View>
-  )
+/** Entry: sends the runner to the right place. Recovery always wins. */
+export default function Index() {
+  const { session, profile, loading, recovery } = useAuth()
+  if (loading) return <FullScreenSpinner />
+  if (recovery) return <Redirect href="/reset-password" />
+  if (!session) return <Redirect href="/auth" />
+  if (!profile) return <Redirect href="/onboarding" />
+  return <Redirect href="/(tabs)" />
 }

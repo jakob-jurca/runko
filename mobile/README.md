@@ -41,3 +41,14 @@ the secure-store session are native only (the browser uses AsyncStorage).
 - `npm test` runs the mobile tests (platform adapter and pure logic).
 - After editing `../knowledge/*.md` run `npm run gen:knowledge` (start scripts do it for you).
 - Store submission steps: `STORE_CHECKLIST.md`.
+
+## Password reset link (Supabase setting you must add)
+
+In the Supabase dashboard: **Authentication → URL Configuration → Redirect URLs**, add:
+
+- `runko://reset-password` (installed builds: the email link opens the app on the reset screen)
+- `exp://**` (only for testing in Expo Go; the reset link is then `exp://<your-pc-ip>:8081/--/reset-password`)
+
+The web app's own redirect URL stays as it is. The app uses the implicit flow like the web app,
+so it reads the tokens from the link itself (`lib/auth-link.js`). Until the password is changed
+the recovery session cannot enter the app (same protection as the web).
