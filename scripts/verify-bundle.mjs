@@ -165,6 +165,63 @@ if (/api\.groq\.com/.test(js)) {
   note('bundle calls api.groq.com directly', 'dist/*.js', 'AI calls must go through the Edge Function')
 }
 
+// --- 7. the landing route must preload its own CSS --------------------------
+//
+// main.jsx loads either the landing or the app with a dynamic import(). Vite
+// attaches a preload list to each import() call, and the landing CSS is only
+// fetched if it is in that list. Once, the minifier merged the two import()
+// calls into one and Vite kept only the app's list, so production served the
+// landing page unstyled while `npm run dev` looked fine. Read the entry chunk
+// and check the preload list that covers the landing import.
+const ASSETS = path.join(DIST, 'assets')
+const assetNames = fs.existsSync(ASSETS) ? fs.readdirSync(ASSETS) : []
+const landingCss = assetNames.filter((n) => /^Landing-.*\.css$/.test(n))
+const landingJs = assetNames.filter((n) => /^Landing-.*\.js$/.test(n))
+const entryScript = fs
+  .readFileSync(path.join(DIST, 'index.html'), 'utf8')
+  .match(/<script[^>]+src="\/assets\/([^"]+\.js)"/)?.[1]
+
+if (!landingCss.length || !landingJs.length) {
+  note('landing chunk or its CSS is missing', 'dist/assets/Landing-*', 'was src/landing/Landing.jsx renamed?')
+} else if (!entryScript) {
+  note('no entry <script> in dist/index.html', 'dist/index.html', '')
+} else {
+  const entryBody = fs.readFileSync(path.join(ASSETS, entryScript), 'utf8')
+  const depFiles = JSON.parse(entryBody.match(/m\.f=(\[[^\]]*\])/)?.[1] ?? '[]')
+  /**
+   * True if this chunk is the landing chunk or statically imports it. Only a
+   * static `from"./Landing-…"` counts: the app chunk also lazy-loads Landing
+   * (App.jsx), but through its own import() with its own preload list.
+   */
+  const leadsToLanding = (chunk) =>
+    landingJs.includes(chunk) ||
+    (assetNames.includes(chunk) &&
+      landingJs.some((l) => fs.readFileSync(path.join(ASSETS, chunk), 'utf8').includes(`from"./${l}"`)))
+
+  // Each __vite__mapDeps([...]) call is the preload list for the import()
+  // calls written between it and the previous one.
+  let found = false
+  let from = 0
+  for (const m of entryBody.matchAll(/__vite__mapDeps\(\[([\d,]*)\]\)/g)) {
+    const segment = entryBody.slice(from, m.index)
+    from = m.index + m[0].length
+    const imports = [...segment.matchAll(/import\("\.\/([^"]+\.js)"\)/g)].map((i) => i[1])
+    if (!imports.some(leadsToLanding)) continue
+    found = true
+    const preloads = m[1].split(',').filter(Boolean).map((i) => path.basename(depFiles[Number(i)] ?? ''))
+    if (!landingCss.some((css) => preloads.includes(css))) {
+      note(
+        'landing route does not preload its CSS — signed-out visitors get an unstyled page',
+        `dist/assets/${entryScript}`,
+        `preloads: ${preloads.join(', ') || 'none'}; keep the landing and app import() calls in separate functions (see src/main.jsx)`
+      )
+    }
+  }
+  if (!found) {
+    note('no dynamic import of the landing chunk found in the entry', `dist/assets/${entryScript}`, 'did src/main.jsx change?')
+  }
+}
+
 // --- report ------------------------------------------------------------------
 console.log(`verify-bundle: scanned ${text.length} files in ${DIST}/`)
 if (findings.length) {
@@ -174,4 +231,4 @@ if (findings.length) {
   }
   process.exit(1)
 }
-console.log('✓ no secrets, no dev bypass, gating intact, AI proxied')
+console.log('✓ no secrets, no dev bypass, gating intact, AI proxied, landing CSS preloaded')
