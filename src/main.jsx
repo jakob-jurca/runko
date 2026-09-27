@@ -45,5 +45,12 @@ function hasStoredSession() {
 
 const isGuestOnHome = window.location.pathname === '/' && !hasAuthParams() && !hasStoredSession()
 
-if (isGuestOnHome) import('./landing/entry.jsx')
-else import('./app-entry.jsx')
+// Two separate loader functions on purpose. Written as an if/else of bare
+// import() calls, the production minifier merges them into ONE call and Vite
+// keeps only the app's preload list, so a guest got no landing CSS and
+// downloaded the whole app. Distinct arrows keep each path's own preloads.
+const loaders = {
+  landing: () => import('./landing/entry.jsx'),
+  app: () => import('./app-entry.jsx'),
+}
+loaders[isGuestOnHome ? 'landing' : 'app']()
