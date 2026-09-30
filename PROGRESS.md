@@ -118,3 +118,11 @@ guest loads only landing chunks + landing CSS, /auth loads only app chunks, no h
 
 ## Mobile app (mobile/)
 Expo app built in six phases; the committed log is mobile/PROGRESS.md (kept separate because this file carries uncommitted landing-page notes). Shared-core changes: src/core/knowledge-files.js (new), env.js `AUTH_OPTIONS`, supabase.js spreads it, strings.js `reminders`.
+
+## Before launch
+- [ ] Buy the domain.
+- [ ] Set up Resend as custom SMTP in Supabase (Authentication → Emails → SMTP Settings). The built-in sender allows only a few emails an hour for the whole project.
+- [ ] Slovenian reset-password email template with the "Nadaljuj" flow: the link is `{{ .SiteURL }}/reset-password?token_hash={{ .TokenHash }}&type=recovery` (AUTH_CHECKLIST.md §0). Mobile must support token_hash links first (mobile/PROGRESS.md, "To catch up").
+- [ ] Raise the minimum password length to 8, in the app (`MIN_PASSWORD_LENGTH` in src/core/auth-flows.js, mobile screens) and in Supabase (Authentication → Sign In / Providers → Email → Minimum password length). Existing shorter passwords still log in; the new minimum applies to new and changed passwords.
+- [ ] Update Site URL and Redirect URLs to the new domain (Authentication → URL Configuration): `https://<domain>`, `https://<domain>/**`; keep `runko://reset-password`.
+- [ ] Privacy policy and terms of use, including plans built against advice ("Vseeno naredi plan": the runner confirms the risk once; the plan keeps every safety cap, but Runko does not consider the goal safe in the time available).
