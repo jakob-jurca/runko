@@ -1,3 +1,4 @@
+import { Check } from '@phosphor-icons/react'
 import { plan, mock } from '../content'
 import Reveal from '../ui/Reveal'
 import { Play } from '../ui/motion'
@@ -82,8 +83,8 @@ function WeekColumns() {
 
 /**
  * Bento: four tiles, four cells. lg is a 6-column grid: the phases chart
- * runs wide, the feasibility gauge stands tall on the right, effort and the
- * week sit under the chart. md: 2 columns (chart and gauge full width).
+ * runs wide, the feasibility gauge stands tall on the right, the run-without-a-race
+ * calendar and the week sit under the chart. md: 2 columns (chart and gauge full width).
  * Below md: one column.
  */
 export default function ChapterPlan() {
@@ -135,29 +136,33 @@ export default function ChapterPlan() {
           </Play>
         </Reveal>
 
-        {/* Effort by feel: RPE scale and the talk test. */}
+        {/* Running without a race: a four-week calendar with only the run days lit. */}
         <Reveal delay={60} className="l-shell lg:col-span-2">
           <Play amount={0.3} className="l-core p-6">
-            <h3 className="text-lg font-semibold tracking-tight text-zinc-50">{plan.effort.title}</h3>
-            <p className="mt-1.5 text-sm text-zinc-400">{plan.effort.text}</p>
-            <div className="mt-6 text-[11px] font-medium text-zinc-500">{plan.effort.scaleLabel}</div>
-            <div className="mt-2 grid grid-cols-10 gap-1">
-              {Array.from({ length: 10 }, (_, i) => (
-                <div
-                  key={i}
-                  className="l-tick h-2 rounded-full bg-primary"
-                  style={{ opacity: 0.15 + (i / 9) * 0.85, '--i': i }}
-                />
+            <h3 className="text-lg font-semibold tracking-tight text-zinc-50">{plan.free.title}</h3>
+            <p className="mt-1.5 text-sm text-zinc-400">{plan.free.text}</p>
+            <div className="mt-6 grid grid-cols-7 gap-x-1.5 gap-y-2" aria-hidden>
+              {plan.free.weekdays.map((d, i) => (
+                <span key={i} className="text-center text-[11px] font-medium text-zinc-500">
+                  {d}
+                </span>
               ))}
+              {Array.from({ length: plan.free.weeks * 7 }, (_, n) => {
+                const run = plan.free.runDays.includes(n % 7)
+                return (
+                  <span key={n} style={{ '--i': Math.floor(n / 2) }} className="l-tick flex h-7 items-center justify-center">
+                    {run ? (
+                      <span className="flex h-7 w-7 items-center justify-center rounded-full bg-teal-500/85 text-canvas">
+                        <Check size={13} weight="bold" />
+                      </span>
+                    ) : (
+                      <span className="h-1.5 w-1.5 rounded-full bg-zinc-700" />
+                    )}
+                  </span>
+                )
+              })}
             </div>
-            <ul className="mt-5 space-y-2.5">
-              {plan.effort.levels.map((l) => (
-                <li key={l.range} className="flex gap-3 text-sm">
-                  <span className="w-8 shrink-0 font-mono font-semibold text-zinc-100">{l.range}</span>
-                  <span className="text-zinc-400">{l.talk}</span>
-                </li>
-              ))}
-            </ul>
+            <div className="mt-5 font-mono text-[11px] text-teal-400">{plan.free.caption}</div>
           </Play>
         </Reveal>
 

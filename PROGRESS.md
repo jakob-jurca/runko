@@ -101,3 +101,20 @@ Fixed a phase-1 bug: the weekly bars in Napredek had zero height and never showe
 Phase 3 slots: content.js `slots` (hero phone + four step phones: set a path in /public and it replaces the drawn
 screen), Audience `image`.
 Size: landing JS 138 kB (37 kB gzip), CSS 45 kB (8.8 kB gzip); app bundle unchanged.
+
+## Landing page (copy update, verbatim Slovenian text)
+Hero, trust item 1, Kako deluje (4 steps), Plan chapter (new "Tek brez tekme" tile replaces the RPE tile), Coach,
+Napredek and Za koga texts replaced from the supplied copy; meta description now matches the hero subheadline. The
+"Najprej varnost, potem kilometri" section is removed (component, copy and its Landing entry; nothing linked to it).
+FAQ: the listed questions updated/added in the given order, and the one existing question that was not listed
+("Kako se trener spomni mojih podatkov?") kept, right after "Na katere tekme...". 9 questions in total.
+Claims checked against the app: step 4 and FAQ "izpustim trening" keep the automatic-adaptation wording (core/plan.js
+maybeAdaptPlan after a missed or hard logged run, adaptCurrentWeekIfNeeded at each new week); "Povzetek tvojega tedna"
+uses the no-summary wording because the app has no end-of-week summary or analysis.
+Production bug found and fixed: in the built site the minifier merged the two dynamic imports in src/main.jsx into one
+call and Vite kept only the APP's preload list, so a guest got no landing CSS and downloaded the whole app. The dev
+server hides this. The imports are now separate loader functions (see comment in main.jsx). Verified on `vite preview`:
+guest loads only landing chunks + landing CSS, /auth loads only app chunks, no horizontal overflow at 375/768/1440.
+
+## Mobile app (mobile/)
+Expo app built in six phases; the committed log is mobile/PROGRESS.md (kept separate because this file carries uncommitted landing-page notes). Shared-core changes: src/core/knowledge-files.js (new), env.js `AUTH_OPTIONS`, supabase.js spreads it, strings.js `reminders`.

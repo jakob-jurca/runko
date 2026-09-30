@@ -56,10 +56,10 @@ export const nav = {
 // 2. Hero
 // ---------------------------------------------------------------------------
 export const hero = {
-  titleStart: 'Tekaški načrt, ki se',
-  titleAccent: 'prilagaja tebi.',
+  titleStart: 'Tvoj osebni',
+  titleAccent: 'AI trener teka.',
   subtitle:
-    'Povej, za katero tekmo treniraš in koliko časa imaš. Runko sestavi načrt po preverjenih metodah in ga sproti prilagaja.',
+    'Runko sestavi personaliziran tekaški program glede na tvoj cilj, čas in zmogljivost, zraven pa ti daje še nasvete.',
   phoneLabel: 'Zaslon aplikacije Runko s tedenskim načrtom treningov',
   // The four "inputs" floating around the phone: what the runner tells Runko.
   inputs: [
@@ -76,7 +76,7 @@ export const hero = {
 export const trust = {
   label: 'Kaj stoji za Runkom',
   items: [
-    { key: 'science', value: 'Temelji na športni znanosti', text: 'Načrti sledijo preverjenim načelom treninga, ne modnim trendom.' },
+    { key: 'science', value: 'Temelji na športni znanosti', text: 'Načrti sledijo preverjenim načelom treninga, AI trener pa združuje znanje priznanih strokovnjakov.' },
     { key: 'range', value: 'Od prvega kilometra do maratona', text: 'Za začetnike, rekreativce in tekmovalce.' },
     { key: 'trial', value: '1 mesec brezplačno', text: 'Preizkusi celoten načrt in trenerja, preden se odločiš.' },
   ],
@@ -88,17 +88,17 @@ export const trust = {
 export const how = {
   id: 'kako-deluje',
   title: 'Od cilja do štartne črte',
-  intro: 'Nekaj minut vprašanj na začetku, potem Runko skrbi za vsak teden posebej.',
+  intro: 'Runko izve vse o tebi in na podlagi tega sestavi prilagojen trening.',
   steps: [
     {
       key: 'goal',
       title: 'Povej svoj cilj',
-      text: 'Izbereš razdaljo in datum tekme, opišeš trenutno formo in koliko dni na teden lahko tečeš.',
+      text: 'Izbereš želeni cilj, opišeš trenutno formo in koliko dni na teden lahko tečeš.',
     },
     {
       key: 'plan',
       title: 'Dobi svoj načrt',
-      text: 'Runko razdeli pripravo na faze in za vsak dan določi trening, razdaljo in tempo.',
+      text: 'Runko razdeli pripravo na faze in za vsak dan določi trening z natančnimi navodili, tudi za popolne začetnike.',
     },
     {
       key: 'log',
@@ -108,7 +108,7 @@ export const how = {
     {
       key: 'adapt',
       title: 'Trener prilagodi',
-      text: 'Če je bil teden pretežak ali si ga izpustil, trener popravi naslednje treninge.',
+      text: 'Če so treningi prenaporni ali prelahki ali se zgodi kaj nepričakovanega, trener prilagodi trening.',
     },
   ],
   phoneLabel: 'Zaslon aplikacije za korak',
@@ -120,10 +120,11 @@ export const how = {
 export const plan = {
   id: 'funkcije',
   eyebrow: 'Načrt',
-  title: 'Načrt, ki ve, kam gre',
-  intro: 'Vsak teden ima svoj namen. Vidiš celotno pot do tekme in točno veš, zakaj tečeš, kar tečeš.',
+  title: 'Prilagojen plan za tvoj cilj',
+  intro:
+    'Vsak teden ima svoj namen. Trener ti sestavi celoten plan do tekme, z razlago kako in zakaj. Prav tako pa pripravi program za vse, ki želijo samo teči, brez tekme v koledarju.',
   phases: {
-    title: 'Faze priprave',
+    title: 'Faze priprave na tekmo',
     text: 'Osnova, nadgradnja, ostrenje in razbremenitev pred tekmo.',
     axis: 'km na teden',
   },
@@ -134,19 +135,18 @@ export const plan = {
     verdict: 'Realno',
     detail: 'Polmaraton pod 2:00 v 16 tednih',
   },
-  effort: {
-    title: 'Tempo po občutku',
-    text: 'Poleg tempa na kilometer dobiš lestvico napora in test pogovora.',
-    scaleLabel: 'Napor (RPE)',
-    levels: [
-      { range: '2-4', talk: 'Govoriš v celih stavkih.' },
-      { range: '5-7', talk: 'Le kratki stavki.' },
-      { range: '8-9', talk: 'Le posamezne besede.' },
-    ],
+  // "Tek brez tekme" tile: a four-week calendar with only the run days lit.
+  free: {
+    title: 'Tek brez tekme',
+    text: 'Nimaš tekme? Runko pripravi plan za kondicijo, zdravje in veselje do teka.',
+    weekdays: ['P', 'T', 'S', 'Č', 'P', 'S', 'N'],
+    runDays: [1, 3, 5], // 0 = ponedeljek
+    weeks: 4,
+    caption: '3 teki na teden',
   },
   week: {
-    title: 'Tvoj teden na enem mestu',
-    text: 'Treningi, počitek in skupna razdalja.',
+    title: 'Povzetek tvojega tedna',
+    text: 'Program je razdeljen na tedne, tako vedno veš, kaj te čaka in kaj si že opravil.',
   },
 }
 
@@ -156,7 +156,8 @@ export const plan = {
 export const coach = {
   eyebrow: 'Trener',
   title: 'Trener, ki si zapomni',
-  intro: 'Vprašaš ga kadar koli. Pozna tvoj načrt, tvoje pretekle treninge in vse, kar mu poveš.',
+  intro:
+    'Trener pozna preverjene metode, znanje strokovnjakov in študije. Hkrati je tvoj osebni trener, ki si zapomni vse, kar mu poveš, in to tudi upošteva.',
   chatLabel: 'Primer pogovora s trenerjem Runko',
   coachName: 'Trener',
   memoryLabel: 'Zapomnil si je',
@@ -167,8 +168,9 @@ export const coach = {
 // ---------------------------------------------------------------------------
 export const progress = {
   eyebrow: 'Napredek',
-  title: 'Vidiš, da gre naprej',
-  intro: 'Vsak vpisan trening se pozna v tedenskem pregledu in na poti do cilja.',
+  title: 'Spremljaj svoj napredek',
+  intro:
+    'Sproti vpisuj svoje teke in spremljaj napredek. Tak trener te tudi motivira: napredek postane kot igra, trener pa te ves čas spodbuja.',
   quickLog: { title: 'Hiter vpis', text: 'Razdalja, čas, napor. Gotovo.' },
   weekly: { title: 'Tedenski pregled', text: 'Zadnjih šest tednov v kilometrih.' },
   goal: { title: 'Pot do cilja', text: 'Koliko priprave je za tabo in koliko še pred tabo.' },
@@ -179,7 +181,8 @@ export const progress = {
 // ---------------------------------------------------------------------------
 export const audience = {
   title: 'Za tekače vseh vrst',
-  intro: 'Runko načrt najprej prilagodi temu, kdo si. Šele nato cilju.',
+  intro:
+    'Načrt je najprej prilagojen tebi, tvojim zmožnostim in zdravju, šele nato cilju. Namenjen je tekačem vseh vrst, od popolnih začetnikov do tistih, ki se pripravljajo na resne tekme.',
   prev: 'Prejšnji',
   next: 'Naslednji',
   exampleLabel: 'Primer tedna',
@@ -188,65 +191,39 @@ export const audience = {
     {
       key: 'beginner',
       title: 'Začetniki',
-      text: 'Začneš z izmenjavo hoje in teka, brez pritiska. Prvi cilj je 30 minut teka brez ustavljanja.',
+      text: 'Začneš čisto od začetka in počasi napreduješ. Za rekreacijo ali za svoj prvi rezultat.',
       example: '3 treningi hoja-tek po 20 min, najdaljši 30 min',
       image: null,
     },
     {
       key: 'recreational',
       title: 'Rekreativci',
-      text: 'Tečeš redno in bi rad prvič pretekel 10 km z načrtom, ne le po občutku.',
+      text: 'Tečeš redno, rad bi izboljšal zmogljivost in prvič dosegel lep rezultat.',
       example: '4 teki, najdaljši 12 km, en tempo tek',
       image: null,
     },
     {
       key: 'firstlong',
       title: 'Prvi polmaraton ali maraton',
-      text: 'Postopna priprava na prvo dolgo razdaljo, s tedni počitka in razbremenitvijo pred tekmo.',
+      text: 'Postopna priprava na prvo dolgo razdaljo, z različnimi tipi treningov in razbremenitvijo pred tekmo.',
       example: '4 teki, dolgi tek 18 km, lahkoten tek s pospeški',
       image: null,
     },
     {
       key: 'competitive',
       title: 'Tekmovalci',
-      text: 'Loviš osebni rekord. Intervali, tempo teki in dolgi teki s ciljnim tempom.',
+      text: 'Loviš osebni rekord ali ciljni čas in rabiš strukturiran plan, da prideš na štart pripravljen.',
       example: '6 tekov, intervali 6 × 1000 m, dolgi tek 24 km',
       image: null,
     },
     {
       key: 'returning',
       title: 'Po premoru',
-      text: 'Vrnitev je odvisna od tega, kako dolgo nisi tekel. Runko začne pri pravi točki.',
+      text: 'Nekaj časa nisi tekel ali se vračaš po poškodbi in bi rad postopoma pridobil nazaj kondicijo.',
       example: '3 lahkotni teki po 25 min, brez hitrih delov',
       image: null,
     },
   ],
-}
-
-// ---------------------------------------------------------------------------
-// 9. Varnost
-// ---------------------------------------------------------------------------
-export const safety = {
-  title: 'Najprej varnost, potem kilometri',
-  intro: 'Tek naj ti dodaja energijo, ne poškodb. Zato Runko najprej vpraša in šele nato načrtuje.',
-  items: [
-    {
-      key: 'questions',
-      title: 'Varnostna vprašanja ob začetku',
-      text: 'Vprašamo o bolečinah, nedavnih poškodbah, premoru in počutju med tekom. Če kaj kaže na tveganje, načrt temu prilagodimo ali svetujemo posvet z zdravnikom.',
-    },
-    {
-      key: 'profile',
-      title: 'Neobvezen zdravstveni profil',
-      text: 'Dodatne podatke vpišeš le, če želiš. Brez njih Runko načrtuje bolj previdno.',
-    },
-    {
-      key: 'gdpr',
-      title: 'Tvoji podatki so tvoji',
-      text: 'Zbiramo le tisto, kar načrt res uporabi, in ravnamo v skladu z GDPR.',
-    },
-  ],
-  note: 'Runko ne nadomešča zdravnika. Če imaš zdravstvene težave ali dvome, se pred začetkom posvetuj z zdravnikom.',
 }
 
 // ---------------------------------------------------------------------------
@@ -310,11 +287,11 @@ export const faq = {
   items: [
     {
       q: 'Ali potrebujem športno uro?',
-      a: 'Ne. Dovolj je, da veš, koliko si pretekel in koliko časa si tekel. Napor oceniš po občutku.',
+      a: 'Ne. Za začetek je dovolj, da izmeriš razdaljo in čas, kar lahko narediš s telefonom. Pri zahtevnejših ciljih pa priporočamo tudi merjenje srčnega utripa.',
     },
     {
       q: 'Sem popoln začetnik. Je Runko zame?',
-      a: 'Da. Začetniki začnejo s hojo in tekom, cilj prvih tednov pa je, da postopno pretečeš 30 minut brez ustavljanja.',
+      a: 'Da. Začetniki začnejo čisto počasi, cilj prvih tednov pa je, da postopoma pretečeš 30 minut brez ustavljanja.',
     },
     {
       q: 'Kaj, če izpustim trening?',
@@ -324,17 +301,26 @@ export const faq = {
       q: 'Na katere tekme se lahko pripravim?',
       a: 'Na cestne tekme od 5 km do maratona. Gorskih tekov in ultramaratonov za zdaj ne načrtujemo.',
     },
+    // Existing question that is not in the copy update: kept as it was.
     {
       q: 'Kako se trener spomni mojih podatkov?',
       a: 'Trener si zapomni pomembne stvari iz vajinih pogovorov, na primer bolečine ali termine. V nastavitvah vidiš, kaj si je zapomnil.',
     },
     {
+      q: 'Kaj, če se ne pripravljam na tekmo?',
+      a: 'Runko je še vedno prava izbira, saj pripravi plan tudi za rekreacijo, zdravje in boljšo kondicijo.',
+    },
+    {
       q: 'Kaj se zgodi po brezplačnem mesecu?',
-      a: 'Izbereš mesečni ali letni paket. Če ne izbereš nobenega, se načrt zaklene, podatki pa ostanejo.',
+      a: 'Izbereš mesečni ali letni paket. Če ne izbereš nobenega, se načrt zaklene.',
+    },
+    {
+      q: 'So moji podatki varni?',
+      a: 'Da. Zbiramo le podatke, ki jih načrt res potrebuje, zdravstveni profil je neobvezen, z vsemi podatki pa ravnamo v skladu z GDPR.',
     },
     {
       q: 'Ali Runko nadomešča zdravnika?',
-      a: 'Ne. Runko je pripomoček za načrtovanje treninga. Če imaš zdravstvene težave, se pred začetkom posvetuj z zdravnikom.',
+      a: 'Ne. Runko je pripomoček za načrtovanje treninga. Če imaš resne zdravstvene težave, se pred začetkom posvetuj z zdravnikom.',
     },
   ],
 }

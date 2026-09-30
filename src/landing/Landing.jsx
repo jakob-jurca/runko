@@ -7,7 +7,6 @@ import ChapterPlan from './sections/ChapterPlan'
 import ChapterCoach from './sections/ChapterCoach'
 import ChapterProgress from './sections/ChapterProgress'
 import Audience from './sections/Audience'
-import Safety from './sections/Safety'
 import Comparison from './sections/Comparison'
 import Pricing from './sections/Pricing'
 import Faq from './sections/Faq'
@@ -32,7 +31,6 @@ export default function Landing() {
         <ChapterCoach />
         <ChapterProgress />
         <Audience />
-        <Safety />
         <Comparison />
         <Pricing />
         <Faq />
