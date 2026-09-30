@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { saveProfile, addWorkout, getWorkouts, addDaysISO, todayISO } from '../core/db'
 import { GOALS, BLOCK_WEEKS, goalsOffered } from '../core/planning/goals'
+import { OVERRIDE_GOAL } from '../core/planning/feasibility'
 import { recentVolume } from '../core/goal-progress'
 import { createInitialPlan, previewPlan, ClarificationNeededError, PlanBlockedError } from '../core/plan'
 import {
@@ -10,6 +11,7 @@ import {
 } from '../core/periodization'
 import { FullScreenSpinner } from '../components/Spinner'
 import { t } from '../core/strings'
+import { friendlyError } from '../core/errors'
 
 const LEVELS = t.onboarding.levels
 
@@ -332,7 +334,7 @@ export default function Onboarding() {
       await refreshProfile()
       navigate('/')
     } catch (err) {
-      setError(err.message)
+      setError(friendlyError(err))
       setSkipping(false)
     }
   }
@@ -352,6 +354,12 @@ export default function Onboarding() {
     setPreparing(true)
     setError('')
     try {
+      // What to build for an unsafe goal is chosen on the verdict screen, for
+      // the goal as it is now. A choice (or a risk confirmation) left over
+      // from an earlier goal or a saved draft must never carry over.
+      const { safe_goal: _staleChoice, override_confirmed: _staleConfirmation, ...fresh } = nextAnswers
+      nextAnswers = fresh
+      setAnswers(fresh)
       const intake = path === 'thorough' || goalPlan ? buildIntake() : null
       const result = await previewPlan({ ...prof, ...profileFields() }, intake, nextAnswers)
       setPreview(result)
@@ -359,14 +367,14 @@ export default function Onboarding() {
         setStep('blocked')
         return
       }
-      const unsafeUnchosen = result.status === 'ready' && result.verdict === 'unsafe' && !nextAnswers.safe_goal
+      const unsafeUnchosen = result.status === 'ready' && result.verdict === 'unsafe'
       if (result.status === 'needs_answers' || unsafeUnchosen) {
         setStep('clarify')
         return
       }
       await finish(nextAnswers)
     } catch (err) {
-      setError(err.message)
+      setError(friendlyError(err))
     } finally {
       setPreparing(false)
     }
@@ -418,7 +426,7 @@ export default function Onboarding() {
         setPreview({ status: 'needs_answers', questions: err.questions })
         setStep('clarify')
       } else {
-        setError(err.message)
+        setError(friendlyError(err))
       }
       setBuilding(false)
     }
@@ -1239,7 +1247,14 @@ export default function Onboarding() {
           answers={answers}
           onAnswer={answer}
           onChooseGoal={(id) => {
-            const next = { ...answers, safe_goal: id }
+            const next = { ...answers, safe_goal: id, override_confirmed: false }
+            setAnswers(next)
+            finish(next)
+          }}
+          // "Vseeno naredi plan": the original goal, after the one explicit
+          // confirmation (the engine ignores the choice without it).
+          onOverride={() => {
+            const next = { ...answers, safe_goal: OVERRIDE_GOAL, override_confirmed: true }
             setAnswers(next)
             finish(next)
           }}
@@ -1301,7 +1316,11 @@ function Choice({ question, options, value, onChange }) {
  * tap, or — for an unsafe goal — the coach's verdict and a choice of the
  * safer goals to build instead.
  */
-function ClarifyStep({ preview, answers, onAnswer, onChooseGoal, onChangeGoal }) {
+function ClarifyStep({ preview, answers, onAnswer, onChooseGoal, onOverride, onChangeGoal }) {
+  // The override is two steps: open it, then tick the confirmation.
+  const [overriding, setOverriding] = useState(false)
+  const [confirmed, setConfirmed] = useState(false)
+
   if (preview.status === 'needs_answers') {
     return (
       <div className="animate-fade-up">
@@ -1348,6 +1367,53 @@ function ClarifyStep({ preview, answers, onAnswer, onChooseGoal, onChangeGoal })
   const P = t.planning
   const label = (a) =>
     a.kind === 'no_event' ? P.alternative.no_event : P.goal(a.distance_km, a.event_date, a.walk_breaks)
+  const risks = preview.explain?.risk_texts || []
+  const canOverride = Boolean(preview.proposal?.override_allowed)
+
+  // "Vseeno naredi plan": what it means, and the one confirmation.
+  if (overriding && canOverride) {
+    return (
+      <div className="animate-fade-up">
+        <h1 className="text-[1.75rem] font-bold leading-tight tracking-tight">{t.onboarding.overrideButton}</h1>
+        <div className="card mt-6">
+          <p className="text-xs font-semibold text-rose-300">{P.verdicts.unsafe}</p>
+          <p className="mt-2 text-sm font-medium text-zinc-100">{preview.explain?.original_goal_text}</p>
+          <ul className="mt-2 space-y-1.5 text-sm leading-relaxed text-zinc-300">
+            {risks.map((r) => (
+              <li key={r}>{r}</li>
+            ))}
+          </ul>
+          <p className="mt-3 text-sm leading-relaxed text-zinc-300">{t.onboarding.overrideBody}</p>
+        </div>
+        <label className="mt-5 flex min-h-[44px] cursor-pointer items-start gap-3 rounded-2xl bg-surface p-4 ring-1 ring-inset ring-surface-line">
+          <input
+            type="checkbox"
+            checked={confirmed}
+            onChange={(e) => setConfirmed(e.target.checked)}
+            className="mt-0.5 h-5 w-5 shrink-0 accent-rose-400"
+          />
+          <span className="text-sm leading-relaxed text-zinc-100">{t.onboarding.overrideConfirm}</span>
+        </label>
+        <button
+          onClick={onOverride}
+          disabled={!confirmed}
+          className="btn-primary mt-5 w-full disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {t.onboarding.overrideButton}
+        </button>
+        <button
+          onClick={() => {
+            setOverriding(false)
+            setConfirmed(false)
+          }}
+          className="mt-4 w-full text-center text-xs text-zinc-500 underline underline-offset-4 hover:text-zinc-300"
+        >
+          {t.onboarding.overrideBack}
+        </button>
+      </div>
+    )
+  }
+
   return (
     <div className="animate-fade-up">
       <h1 className="text-[1.75rem] font-bold leading-tight tracking-tight">{t.onboarding.verdictTitle}</h1>
@@ -1356,6 +1422,17 @@ function ClarifyStep({ preview, answers, onAnswer, onChooseGoal, onChangeGoal })
           {P.verdicts.unsafe}
         </p>
         <p className="mt-2 text-sm leading-relaxed text-zinc-200">{preview.explain?.intro}</p>
+        {risks.length > 0 && (
+          <>
+            <p className="mt-4 text-xs font-semibold text-zinc-400">{t.onboarding.verdictWhy}</p>
+            <ul className="mt-1.5 space-y-1.5 text-sm leading-relaxed text-zinc-300">
+              {risks.map((r) => (
+                <li key={r}>{r}</li>
+              ))}
+              <li>{P.risk.body}</li>
+            </ul>
+          </>
+        )}
       </div>
       <p className="mt-6 text-sm font-semibold">{t.onboarding.chooseGoal}</p>
       <div className="mt-3 space-y-2">
@@ -1368,7 +1445,17 @@ function ClarifyStep({ preview, answers, onAnswer, onChooseGoal, onChangeGoal })
             {label(a)}
           </button>
         ))}
+        {/* The third option: the goal as asked, against advice. */}
+        {canOverride && (
+          <button
+            onClick={() => setOverriding(true)}
+            className="flex min-h-[52px] w-full items-center rounded-2xl px-4 py-3 text-left text-sm font-medium text-rose-200 ring-1 ring-inset ring-rose-500/30 transition hover:bg-rose-500/10 active:scale-[0.99]"
+          >
+            {t.onboarding.overrideButton}
+          </button>
+        )}
       </div>
+      {!canOverride && <p className="mt-4 text-xs leading-relaxed text-zinc-500">{t.onboarding.overrideNotAllowed}</p>}
       {moreDays && (
         <p className="mt-4 text-xs text-zinc-500">
           {P.alternative.more_days(P.goal(moreDays.distance_km, moreDays.event_date, false), moreDays.run_days)}

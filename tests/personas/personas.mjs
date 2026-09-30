@@ -37,6 +37,10 @@ const ALL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Satur
  * memories: coach_memory rows.
  * answers: replies to the clarify questions, when the persona needs any.
  * expect:  the properties a good plan must have (see properties.mjs).
+ * override: for an unsafe goal, what "Vseeno naredi plan" must do. 'builds':
+ *          a plan for the goal as asked, inside every hard cap. 'refused': the
+ *          distance is ruled out by a population rule (a teenager's longest
+ *          race, a marathon on two days a week), which no confirmation lifts.
  */
 export const PERSONAS = [
   // ---------------------------------------------------------------- beginners
@@ -81,6 +85,7 @@ export const PERSONAS = [
   })),
   {
     id: 'student-zero-half-5w',
+    override: 'builds',
     who: '20-year-old student, zero experience, half marathon in 5 weeks',
     profile: {
       age: 20, fitness_level: 'beginner', experience_months: 0, weekly_volume_km: 0,
@@ -135,6 +140,7 @@ export const PERSONAS = [
   },
   {
     id: 'zero-marathon-16w',
+    override: 'builds',
     who: 'Never ran, wants a marathon in 16 weeks',
     profile: {
       age: 38, fitness_level: 'beginner', experience_months: 0, weekly_volume_km: 0,
@@ -233,6 +239,7 @@ export const PERSONAS = [
   // ------------------------------------------------------------- long race
   {
     id: 'two-day-marathon',
+    override: 'refused',
     who: 'Runner with only 2 available days per week targeting a marathon',
     profile: {
       age: 36, fitness_level: 'intermediate', experience_months: 36, weekly_volume_km: 25,
@@ -401,6 +408,7 @@ export const PERSONAS = [
   },
   {
     id: 'contradictory-longest-run',
+    override: 'builds',
     who: 'Reports 10 km a week but a 25 km longest run in the last month',
     profile: {
       age: 29, fitness_level: 'intermediate', experience_months: 24, weekly_volume_km: 10,
@@ -672,6 +680,7 @@ export const PERSONAS = [
   // ------------------------------------------------------------- teens (15-17)
   {
     id: 'teen-16-marathon',
+    override: 'refused',
     who: '16-year-old, 40 km/week, wants a marathon in 24 weeks',
     profile: {
       age: 16, fitness_level: 'intermediate', experience_months: 36, weekly_volume_km: 40,
@@ -683,6 +692,7 @@ export const PERSONAS = [
   },
   {
     id: 'teen-15-half',
+    override: 'refused',
     who: '15-year-old, 25 km/week, wants a half marathon in 20 weeks',
     profile: {
       age: 15, fitness_level: 'intermediate', experience_months: 30, weekly_volume_km: 25,
@@ -706,6 +716,7 @@ export const PERSONAS = [
   // ------------------------------------------------------- BMI 30+ beginners
   {
     id: 'bmi-33-10k-in-20w',
+    override: 'builds',
     who: 'BMI 33, never ran, wants a 10 km race in 20 weeks',
     profile: {
       age: 38, fitness_level: 'beginner', experience_months: 0, weekly_volume_km: 0, weight: 100,
@@ -754,6 +765,7 @@ export const PERSONAS = [
   },
   {
     id: 'beginner-half-after-3-months',
+    override: 'builds',
     who: '3 months of running, 12 km/week, half marathon in 12 weeks',
     profile: {
       age: 30, fitness_level: 'beginner', experience_months: 3, weekly_volume_km: 12,
@@ -789,6 +801,7 @@ export const PERSONAS = [
   },
   {
     id: 'crunched-1-day-half',
+    override: 'refused',
     who: 'One run day a week, wants a half marathon',
     profile: {
       age: 33, fitness_level: 'intermediate', experience_months: 48, weekly_volume_km: 12,

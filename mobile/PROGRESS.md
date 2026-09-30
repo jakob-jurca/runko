@@ -37,5 +37,64 @@ Notes: web's hardcoded English "Continue" buttons use t.common.continue; decimal
 - Mobile bundles export for Android, iOS and web; expo-doctor 21/21.
 - NOT verified (needs a real device or Supabase project): everything at runtime. Screens compile and the logic is tested, but none was run on a phone or in a browser (browser automation was off limits).
 
+## To catch up (web changes of 2026-09-30, not yet in mobile/)
+The web app got three fixes that live partly in shared src/core (already active on mobile where
+mobile calls core) and partly in web screens (NOT yet on mobile). Nothing in mobile/ was edited;
+`npm test` here still passes (78 checks). Manual test list: ../AUTH_CHECKLIST.md.
+
+Already shared, no mobile work needed:
+- Coach scope: `askCoach` answers plainly off-topic messages with a fixed Slovenian redirect and no
+  AI call; `extractMemories` skips them; the persona has a SCOPE section; every AI call sends a
+  `kind` and the ai-proxy caps reply length per kind (prose 1024 tokens).
+- Plan engine: `safe_goal: 'override'` + `override_confirmed: true` builds an unsafe goal against
+  advice; `proposal.override_allowed`, `explain.risk_texts`, `planning.against_advice`. Without
+  those answers mobile behaves exactly as before.
+- Strings: new keys only (t.auth.errors, t.auth.sessionEnded, t.settings.account, t.onboarding.override*,
+  t.dashboard.againstAdvice, t.plan.againstAdvice, t.chat.offTopic…); `walkBase` intro wording fixed.
+
+Auth screens (app/auth.jsx, app/reset-password.jsx, context/AuthContext.jsx, (tabs)/settings.jsx):
+- Use `src/core/auth-flows.js` (signUp, logIn, requestPasswordReset, resendConfirmation,
+  setNewPassword, changePassword, signOutHere) instead of calling supabase.auth directly. Today
+  `app/auth.jsx` shows `err.message`, i.e. Supabase's English ("Invalid login credentials").
+- Sign-up: recognise a duplicate address when email confirmation is on (empty `identities`), and
+  lower-case + trim the address (`normalizeEmail`).
+- Login: offer "Pošlji potrditveno sporočilo znova" on `email_not_confirmed`; offer the reset link
+  on `invalid_credentials` / `user_exists` (by result code, not by matching English text).
+- Log out: `supabase.auth.signOut()` defaults to EVERY device. Use `signOutHere` (scope local) and,
+  when it reports `stuck` (offline), drop the stored session anyway.
+- Startup: `AuthContext` clears the session on ANY `getUser()` error, so opening the app offline
+  logs the runner out. Clear only when `isDeadSessionError(error)`.
+- Profile: reload on user id change, not on every session object (TOKEN_REFRESHED / app resume
+  replace the session and flash the spinner). Treat a failed profile read as an error screen with
+  "Poskusi znova" (`t.auth.profileLoadFailed`), never as "no profile" → onboarding.
+- Session ended without asking (SIGNED_OUT not triggered by the runner): show `t.auth.sessionEnded`
+  on the login screen.
+- Account switch: clear the onboarding draft when a different user id signs in (web: `runko_last_user`).
+- Reset screen: show the new-password form only while `recovery` is true; an ordinary session goes
+  to Settings. Show the account's email above the form.
+- Settings: add "Račun → Spremeni geslo" (current + new + repeat) using `changePassword`, strings in
+  `t.settings.account`. Email stays read-only (change email is not supported).
+- Dashboard: the cached daily coach message key (`runko_motd_${todayISO()}` in (tabs)/index.jsx)
+  must include the profile id, or the next account on the device sees the last one's message.
+- Other screens: replace `setError(err.message)` with `friendlyError(err)` from `src/core/errors.js`.
+- Optional: support `?token_hash=…&type=recovery` links (`parseAuthUrl`, `confirmEmailLink` behind
+  a "Nadaljuj" button) if the reset email template is switched to them (AUTH_CHECKLIST.md §0).
+
+Unsafe goals (app/onboarding.jsx):
+- Verdict screen: show `preview.explain.risk_texts` + `t.planning.risk.body` under "Zakaj je
+  tvegano" (`t.onboarding.verdictWhy`), the safer alternatives as today, then a third option
+  "Vseeno naredi plan" when `preview.proposal.override_allowed`; it opens a screen with
+  `t.onboarding.overrideBody`, one confirmation checkbox (`t.onboarding.overrideConfirm`) and the
+  button, which builds with `{ safe_goal: OVERRIDE_GOAL, override_confirmed: true }`
+  (`OVERRIDE_GOAL` from src/core/planning/feasibility.js). When not allowed, show
+  `t.onboarding.overrideNotAllowed`.
+- `prepare()` must drop `safe_goal` and `override_confirmed` from the answers before previewing
+  (web does): a choice saved in the draft for an earlier goal must never carry over, least of all
+  a risk confirmation.
+- Dashboard ((tabs)/index.jsx): a small persistent note `t.dashboard.againstAdvice` while
+  `plans[0].plan_json.planning.against_advice` is set and the plan has not ended.
+- Plan tab: for `explain.against_advice` show `t.plan.againstAdvice` and the first safer option
+  (`t.plan.saferOption`) instead of "Tvoj prvotni cilj / Načrt je zgrajen za".
+
 ## Blocked / questions
 - None blocking. Open item: in-app account deletion (see Phase 5) must be built before store submission.

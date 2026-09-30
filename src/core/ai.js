@@ -23,7 +23,11 @@ import {
   buildRunnerContext,
   detectLanguage,
   sanitizeChatReply,
+  againstAdviceContext,
+  classifyCoachMessage,
+  offTopicReply,
 } from './coach-prompt'
+import { OUTPUT_TOKENS } from './ai-limits'
 import { buildKnowledgeBlock, buildScenarioKnowledgeBlock, buildResearchPlanBlock, KNOWLEDGE_BUDGETS } from './knowledge'
 import { buildExtractionPrompt, parseExtractedMemories } from './memory'
 
@@ -112,7 +116,7 @@ async function authToken() {
  * @param {number} [opts.maxTokens] - output token cap (plans need more room)
  * @returns {Promise<string>} model text output
  */
-async function callAi({ system, messages, json = false, maxTokens = 1024, kind = null }) {
+async function callAi({ system, messages, json = false, maxTokens = OUTPUT_TOKENS.chat, kind = null }) {
   const token = await authToken()
   if (!token) {
     const err = new Error('No Supabase session — the AI proxy requires a signed-in user.')
@@ -275,7 +279,9 @@ export function buildCoachContext(profile, plan, workouts = [], { totalWeeks } =
       `- Plan type: ${planning.explain.scenario} (goal verdict: ${planning.explain.verdict}` +
         `${planning.explain.adopted_goal_text ? `, built for ${planning.explain.adopted_goal_text}` : ''})`
     )
-    if (planning.explain.verdict === 'unsafe' && planning.explain.original_goal_text) {
+    if (planning.against_advice) {
+      lines.push(againstAdviceContext(planning))
+    } else if (planning.explain.verdict === 'unsafe' && planning.explain.original_goal_text) {
       lines.push(`- Their original goal (${planning.explain.original_goal_text}) was judged unsafe in the time available.`)
     }
   }
@@ -331,7 +337,17 @@ export async function askCoach({
   // which knowledge documents get pulled in.
   const lastUser = [...history].reverse().find((m) => m.role === 'user')?.content || ''
 
+  // The coach is a running coach, not a general assistant. A message that is
+  // plainly about something else gets the one-line redirect here, with no
+  // model call: nothing to pay for, and nothing a clever prompt can bend.
+  // Everything less clear-cut goes to the model, whose prompt carries the
+  // same scope rules (coach-prompt.js).
+  if (classifyCoachMessage(lastUser) === 'out') {
+    return offTopicReply({ hasPlan: plans.length > 0 })
+  }
+
   const system = buildCoachSystemPrompt({
+    message: lastUser,
     context: buildRunnerContext({ profile, memories, plans, currentWeek, workouts }),
     knowledge: buildKnowledgeBlock({
       situations: ['chat'],
@@ -346,6 +362,8 @@ export async function askCoach({
     // The AI context stays at the last 20 messages even though the screen
     // shows more — see core/db.js getChatMessages.
     messages: history.slice(-20).map(({ role, content }) => ({ role, content })),
+    maxTokens: OUTPUT_TOKENS.chat,
+    kind: 'chat',
   })
   // The prompt bans markdown; this makes sure of it.
   return sanitizeChatReply(reply)
@@ -360,6 +378,9 @@ export async function askCoach({
  * @returns {Promise<Array<{content: string, category: string}>>}
  */
 export async function extractMemories({ userMessage, coachReply, existing = [] }) {
+  // An off-topic message was answered with the fixed redirect: there is
+  // nothing about the runner's training in it to remember, so no call.
+  if (classifyCoachMessage(userMessage) === 'out') return []
   try {
     const text = await callAi({
       system:
@@ -370,7 +391,8 @@ export async function extractMemories({ userMessage, coachReply, existing = [] }
         { role: 'user', content: buildExtractionPrompt({ userMessage, coachReply, existing }) },
       ],
       json: true,
-      maxTokens: 400,
+      maxTokens: OUTPUT_TOKENS.memory,
+      kind: 'memory',
     })
     const facts = parseExtractedMemories(text, { existing })
     if (IS_DEV) {
@@ -457,14 +479,15 @@ export async function adaptWeeklyPlan(profile, { weekNumber, basePlan, recentWor
 ${triggerText}
 ${
   basePlan
-    ? `The originally planned week ${weekNumber} was:\n${JSON.stringify(compactWeek(basePlan))}\nAdjust it as needed while keeping its overall intent.\n${weekRulesText(basePlan)}`
+    ? `The originally planned week ${weekNumber} was:\n${JSON.stringify(compactWeek(basePlan))}\nAdjust it as needed while keeping its overall intent.\n${weekRulesText(basePlan)}${basePlan.planning?.against_advice ? `\n${againstAdviceContext(basePlan.planning)}` : ''}`
     : `Write week ${weekNumber} of the plan.`
 }
 ${WEEK_SCHEMA_PROMPT}`,
       },
     ],
     json: true,
-    maxTokens: 2048,
+    maxTokens: OUTPUT_TOKENS.adapt,
+    kind: 'adapt',
   })
   return parseWeekJson(text)
 }
@@ -538,6 +561,8 @@ I just logged: ${workout.distance} km in ${workout.duration} min, perceived effo
 React in 1-2 short sentences as my coach — acknowledge the run and give one forward-looking tip.`,
       },
     ],
+    maxTokens: OUTPUT_TOKENS.reaction,
+    kind: 'reaction',
   })
 }
 
@@ -556,6 +581,8 @@ export async function motivationalMessage(profile, plan, workouts) {
 Write ONE short motivational message (max 25 words) for my dashboard today. Personal, warm, no hashtags, no quotes around it.`,
       },
     ],
+    maxTokens: OUTPUT_TOKENS.motd,
+    kind: 'motd',
   })
 }
 
@@ -695,6 +722,12 @@ export function mergeDescriptions(skeleton, ai = {}) {
         )
       }
 
+      // The race-day guidance of a plan built against advice is the app's
+      // own, never the model's: run-walk and a conservative pace.
+      if (day.type === 'race' && day.against_advice) {
+        return { ...day, purpose: defaultPurpose(day), how: defaultHow(day), why: defaultWhy(day, week) }
+      }
+
       return {
         ...day, // calculated values always win
         title: clean(shape?.title, 40) || day.title,
@@ -748,6 +781,10 @@ const TYPE_SL = {
 
 function defaultHow(day) {
   if (day.type === 'rest') return 'Počitek. Danes brez teka — telo dela svoje.'
+  if (day.type === 'race' && day.against_advice) {
+    return 'Od prvega kilometra izmenjuj tek in hojo, na primer 4 minute teka in 1 minuto hoje, in ostani v pogovornem tempu. ' +
+      'Na čas se ne oziraj. Če se pojavi bolečina, ki se stopnjuje, odstopi.'
+  }
   if (day.type === 'race' && day.walk_breaks) {
     return 'Začni počasneje, kot se ti zdi potrebno, in hodi, kadar zmanjka sape. Hoja je del načrta, ne poraz.'
   }
@@ -772,6 +809,9 @@ function defaultHow(day) {
 }
 
 function defaultWhy(day, week) {
+  if (day.type === 'race' && day.against_advice) {
+    return 'Priprava je bila krajša, kot bi bilo varno za tek v celoti. Izmenjava teka in hoje ter zadržan tempo sta način, da prideš do cilja brez poškodbe.'
+  }
   const base = {
     rest: 'Počitek je del treninga — takrat se telo dejansko prilagodi.',
     easy: 'Lahkotni kilometri gradijo aerobno osnovo brez utrujenosti.',
@@ -881,7 +921,16 @@ function planTypeBlock(skeleton) {
   }
   lines.push(`- Scenario: ${e.scenario} ("${e.scenario_label}")`)
   lines.push(`- Verdict on their goal: ${e.verdict} ("${e.verdict_label}")`)
-  if (e.verdict === 'unsafe' && e.original_goal_text) {
+  if (skeleton.against_advice) {
+    const a = skeleton.against_advice
+    lines.push(`- Their goal: ${e.original_goal_text} — NOT safe in the time available.`)
+    lines.push('- The runner was told so, was shown safer alternatives, and chose to train for it anyway (one explicit confirmation).')
+    lines.push('- The plan does NOT squeeze the progression: every safe limit holds, easy running only. It is the best safe preparation in the time there is, not full readiness.')
+    if (a.long_run_short) {
+      lines.push(`- The longest training run reaches about ${a.longest_run_km} km of the ${a.race_km} km race: not enough to count on running all of it.`)
+    }
+    if (a.has_race) lines.push('- Race day: run-walk from the first kilometre, conversational pace, no time goal.')
+  } else if (e.verdict === 'unsafe' && e.original_goal_text) {
     lines.push(`- Their original goal: ${e.original_goal_text} — NOT safe in the time available.`)
     lines.push(`- The plan is built for the closest safe goal instead: ${e.adopted_goal_text}.`)
     if (e.other_options?.length) lines.push(`- Another safe option they could choose: ${e.other_options[0]}.`)
@@ -896,6 +945,13 @@ function planTypeBlock(skeleton) {
 /** The verdict-specific instruction for the intro. */
 function introVerdictRule(skeleton) {
   const v = skeleton.explain?.verdict
+  if (skeleton.against_advice) {
+    return ' The runner chose this goal against your advice. Be honest and calm:' +
+      ' this plan is the best safe preparation in the time they have, and it' +
+      ' does not make them fully ready. Say what it focuses on. Do not repeat' +
+      ' the warning at length (the app adds its own sentences after yours), do' +
+      ' not cheer the decision, and do not shame it.'
+  }
   if (v === 'unsafe') {
     return ' The original goal is unsafe: say so plainly and kindly — the body' +
       ' (tendons, bones) needs more time than the date allows — name the goal' +
@@ -1031,7 +1087,8 @@ Include all ${skeleton.total_weeks} weeks and all ${shapes.length} session keys.
       system,
       messages: [{ role: 'user', content: prompt }],
       json: true,
-      maxTokens: 5000,
+      maxTokens: OUTPUT_TOKENS.plan,
+      kind: 'plan',
     })
   } catch (err) {
     if (DEBUG) console.warn('[plan] description call failed:', err.message)
@@ -1056,7 +1113,8 @@ Output a single JSON object with exactly the keys "intro", "weeks" and
           },
         ],
         json: true,
-        maxTokens: 6000,
+        maxTokens: OUTPUT_TOKENS.plan_retry,
+        kind: 'plan',
       })
       described = parseDescribed(retry)
     } catch (err) {

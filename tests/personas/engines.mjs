@@ -45,13 +45,13 @@ async function legacy(persona) {
 }
 
 /** The planning pipeline (src/core/planning). */
-async function pipeline(persona, { withAnswers = true } = {}) {
+async function pipeline(persona, { withAnswers = true, extraAnswers = {} } = {}) {
   const { runPlanningPipeline } = await import('../../src/core/planning/index.js')
   const result = runPlanningPipeline({
     profile: persona.profile,
     runs: persona.runs || [],
     memories: persona.memories || [],
-    answers: withAnswers ? persona.answers || {} : {},
+    answers: withAnswers ? { ...(persona.answers || {}), ...extraAnswers } : {},
     today: TODAY,
   })
   return {

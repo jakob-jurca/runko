@@ -43,8 +43,11 @@ this folder.
 | `heart-rate.js` | Training heart-rate zones from age (Tanaka). |
 | `supabase.js` | The Supabase client, plus a dev-time sanity check of the anon key. |
 | `db.js` | Every table read and write. Pages never query Supabase directly. |
+| `auth-flows.js`, `auth-url.js` | Every account flow (sign up, log in, reset and change password, sign out) as functions of a Supabase client, returning Slovenian messages; and the emailed-link parsing. No import of the real client, so tested under Node against a fake (`tests/auth.test.mjs`). |
+| `errors.js` | Any thrown error → one Slovenian sentence for the screen (never Supabase's English). |
 | `ai.js` | Every call to the AI provider (Groq), and the prompt builders around them. |
-| `coach-prompt.js` | Coach Runko's system prompt and the full-context builder. |
+| `ai-limits.js` | Reply-length budget per kind of AI call; the ai-proxy enforces its own ceilings (`supabase/functions/ai-proxy/limits.js`). |
+| `coach-prompt.js` | Coach Runko's system prompt (including what the coach talks about at all), the off-topic classifier, and the full-context builder. |
 | `memory.js` | Durable facts the coach remembers about a runner. |
 | `knowledge.js` | Loads `/knowledge/*.md` and injects the relevant parts into prompts. |
 | `situations.js`, `frontmatter.js`, `research-select.js` | The situation vocabulary and keyword matching, the knowledge-file format, and which of the 35 research summaries (`knowledge/research/`) reach the plan call (scenario summary + at most two age/schedule population notes) and chat. Pure, tested without the bundler. |

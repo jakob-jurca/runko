@@ -23,6 +23,26 @@ const trainingKm = (days) => sum(days, (d) => (d.type === 'race' || d.type === '
 const longestKm = (days) => Math.max(0, ...days.filter((d) => d.type !== 'race').map((d) => d.distance_km || 0))
 
 /**
+ * Trim the week's longest run to its share of the kilometres actually left in
+ * the week (one kilometre of whole-number tolerance). A week of one or two
+ * runs has the two-run share; nothing is touched when the share already holds.
+ */
+function capLongShare(days, shareFor, paces) {
+  const runs = days.filter((d) => d.type !== 'rest' && d.type !== 'race')
+  if (runs.length < 2) return days
+  const total = trainingKm(days)
+  const long = runs.reduce((a, b) => (b.distance_km > a.distance_km ? b : a))
+  const share = runs.length <= 2 ? Math.max(shareFor(total), 0.6) : shareFor(total)
+  if (long.distance_km <= total * share + 1) return days
+  // long <= (rest + long) x share + 1, solved for the long run.
+  const rest = total - long.distance_km
+  const km = Math.max(3, Math.floor((rest * share + 1) / (1 - share)))
+  if (km >= long.distance_km) return days
+  const pace = paces[long.pace_key] ?? paces.easy
+  return days.map((d) => (d === long ? { ...d, distance_km: km, duration_min: Math.round(km * pace) } : d))
+}
+
+/**
  * @param {object} c - config
  * @param {number}   c.totalWeeks
  * @param {string[]} c.phases           one per week
@@ -159,7 +179,12 @@ export function buildDistancePlan(c) {
     if (isRaceWeek && c.race.walkBreaks) {
       days = days.map((d) =>
         d.type === 'race'
-          ? { ...d, walk_breaks: true, pace_key: 'easy', pace: 'pogovorni tempo, s hojo po potrebi', intensity: 'easy' }
+          ? {
+              ...d, walk_breaks: true, pace_key: 'easy', pace: 'pogovorni tempo, s hojo po potrebi', intensity: 'easy',
+              // Run-walk is slower than the easy pace it is run at: the time
+              // shown is easy pace plus the walking, not a race pace.
+              duration_min: Math.round(d.distance_km * c.paces.easy * 1.1),
+            }
           : d
       )
     }
@@ -178,6 +203,9 @@ export function buildDistancePlan(c) {
       }
       return d
     })
+    // b04 r18: with the fragments gone, the long run can be left holding more
+    // of the week than its share allows (a small taper week on few days).
+    if (!isRaceWeek) days = capLongShare(days, shareFor, c.paces)
     if (c.decorate) days = c.decorate(days, i, phase, isRecovery)
     days = enrichDays(days, c.paces, c.age)
 

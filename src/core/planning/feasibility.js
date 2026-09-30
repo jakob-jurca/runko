@@ -13,6 +13,14 @@
  *             limits — NO squeezed plan. The closest safe goal is proposed
  *             (shorter distance on the date, or the distance on a later
  *             date) and the plan is built for that instead.
+ *
+ * An unsafe goal can still be trained for AGAINST ADVICE, when the runner asks
+ * for it and confirms once that they understand the risk (overrideChosen).
+ * The goal is then adopted as it is, walk breaks on race day and no target
+ * time; the builders keep every limit, so the plan is the best safe
+ * preparation in the time there is, not a squeezed progression. A distance
+ * that a population rule rules out (a teenager's longest race, a marathon on
+ * two days a week) cannot be overridden.
  */
 import { assessGoal, raceTimeForVdot, predictRaceTime, DAYS } from '../periodization.js'
 import { SCENARIO_RULES, GENTLE_START_AGE } from './rules.js'
@@ -33,6 +41,14 @@ function dateInWeek(startDate, week, weekday = 'Sunday') {
 }
 
 const round2 = (n) => Math.round(n * 100) / 100
+
+/** The answer value that asks for the original goal against advice. */
+export const OVERRIDE_GOAL = 'override'
+
+/** The override counts only together with the one explicit confirmation. */
+export function overrideChosen(answers = {}) {
+  return answers.safe_goal === OVERRIDE_GOAL && answers.override_confirmed === true
+}
 
 /**
  * @returns {object} the feasibility record, stored verbatim in plan_json
@@ -59,6 +75,9 @@ export function checkFeasibility(inputs, assessment, classification, limits) {
     return {
       verdict: 'feasible',
       reasons: ['No distance goal: the plan builds consistency within the safe limits.'],
+      risks: [],
+      override_allowed: false,
+      against_advice: false,
       run_days: runDays,
       weeks_available: null,
       weeks_needed_min: null,
@@ -83,6 +102,8 @@ export function checkFeasibility(inputs, assessment, classification, limits) {
   const available = hasEvent ? goal.weeksToEvent : null
 
   const reasons = []
+  // What makes the goal unsafe, as data: the UI explains each in Slovenian.
+  const risks = []
   let verdict = 'feasible'
   let distanceStretch = false
 
@@ -92,10 +113,12 @@ export function checkFeasibility(inputs, assessment, classification, limits) {
   if (overCeiling) {
     verdict = 'unsafe'
     reasons.push(`For your age or weekly schedule the longest goal offered is ${goalCeiling} km; a ${goal.distanceKm} km is not.`)
+    risks.push({ kind: 'ceiling', max_km: goalCeiling })
   }
   if (runDays < req.run_days_min) {
     verdict = 'unsafe'
     reasons.push(`${runDays} run day(s) a week is below the ${req.run_days_min} a ${goal.distanceKm} km needs.`)
+    risks.push({ kind: 'days', run_days: runDays, run_days_min: req.run_days_min })
   }
   if (available !== null) {
     if (available < need.min) {
@@ -104,6 +127,10 @@ export function checkFeasibility(inputs, assessment, classification, limits) {
         `${available} weeks available; safely reaching minimum readiness ` +
           `(long run ${req.long_run_min_km} km, ${req.weekly_min_km} km/week) takes at least ${need.min === Infinity ? 'far more' : need.min}.`
       )
+      risks.push({
+        kind: 'time', weeks_available: available, weeks_needed: Number.isFinite(need.min) ? need.min : null,
+        long_run_km: req.long_run_min_km, weekly_km: req.weekly_min_km,
+      })
     } else if (need.soft_floor_weeks && available < need.soft_floor_weeks) {
       // b03 r11: a strong runner may go short of the minimum, with a warning.
       distanceStretch = true
@@ -202,9 +229,17 @@ export function checkFeasibility(inputs, assessment, classification, limits) {
     alternatives.forEach((a, i) => { a.id = `alt${i + 1}` })
   }
 
+  // A distance ceiling is a population rule, and those hold whatever the
+  // runner confirms; everything else about an unsafe goal is theirs to accept.
+  const overrideAllowed = verdict === 'unsafe' && !overCeiling
+  const againstAdvice = overrideAllowed && overrideChosen(inputs.answers)
+
   // The goal the plan is actually built for.
   let adopted = { ...original, walk_breaks: walkBreaks && goal.distanceKm <= 10 }
-  if (verdict === 'unsafe') {
+  if (againstAdvice) {
+    // The goal as asked, run-walk on the day, and no target time to chase.
+    adopted = { ...original, target_time_min: null, walk_breaks: true, against_advice: true, alternative_id: OVERRIDE_GOAL }
+  } else if (verdict === 'unsafe') {
     // "more_days" needs the runner to change their week; it cannot be adopted
     // on their behalf. The first buildable alternative is the default.
     const buildable = alternatives.filter((a) => a.kind !== 'more_days')
@@ -221,6 +256,9 @@ export function checkFeasibility(inputs, assessment, classification, limits) {
   return {
     verdict,
     reasons,
+    risks,
+    override_allowed: overrideAllowed,
+    against_advice: againstAdvice,
     run_days: runDays,
     weeks_available: available,
     weeks_needed_min: Number.isFinite(need.min) ? need.min : null,

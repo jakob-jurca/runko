@@ -19,14 +19,35 @@ import { FullScreenSpinner } from './components/Spinner'
 // without the app at all.
 const Landing = lazy(() => import('./landing/Landing'))
 
+/**
+ * The profile could not be read (offline, server error). NOT the same as "no
+ * profile": treating it as one sent runners with a finished setup back into
+ * onboarding. Say what happened and let them try again.
+ */
+function ProfileLoadError() {
+  const { retryProfile, signOut } = useAuth()
+  return (
+    <div className="flex min-h-[100dvh] flex-col items-center justify-center px-6 text-center">
+      <p className="max-w-sm text-sm leading-relaxed text-zinc-300">{t.auth.profileLoadFailed}</p>
+      <button onClick={retryProfile} className="btn-primary mt-6">
+        {t.auth.retry}
+      </button>
+      <button onClick={signOut} className="mt-4 text-xs text-zinc-500 underline underline-offset-4 hover:text-zinc-300">
+        {t.settings.signOut}
+      </button>
+    </div>
+  )
+}
+
 /** Requires a session AND a completed onboarding profile. */
 function Protected({ children }) {
-  const { session, profile, loading, recovery } = useAuth()
+  const { session, profile, loading, recovery, profileError } = useAuth()
   if (loading) return <FullScreenSpinner />
   // A recovery session is a real session, so this guard would otherwise wave
   // the user straight through without them ever setting a new password.
   if (recovery) return <Navigate to="/reset-password" replace />
   if (!session) return <Navigate to="/auth" replace />
+  if (profileError) return <ProfileLoadError />
   if (!profile) return <Navigate to="/onboarding" replace />
   return (
     <div className="min-h-[100dvh] pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:pb-0 md:pl-60">
@@ -41,8 +62,11 @@ function Protected({ children }) {
  * everyone else. Recovery still wins: Protected diverts it to /reset-password.
  */
 function Home() {
-  const { session, loading, recovery } = useAuth()
+  const { session, loading, recovery, sessionEnded } = useAuth()
   if (loading) return <FullScreenSpinner />
+  // Signed out without asking (the session expired or was revoked): the login
+  // screen explains, rather than the marketing page appearing mid-use.
+  if (!session && sessionEnded) return <Navigate to="/auth" replace />
   if (!session && !recovery) {
     return (
       <Suspense fallback={<FullScreenSpinner />}>
@@ -65,11 +89,13 @@ function Home() {
  * home, so a stray /onboarding URL can't wipe their setup.
  */
 function OnboardingGate({ children }) {
-  const { session, profile, loading, recovery } = useAuth()
+  const { session, profile, loading, recovery, profileError } = useAuth()
   const [params] = useSearchParams()
   if (loading) return <FullScreenSpinner />
   if (recovery) return <Navigate to="/reset-password" replace />
   if (!session) return <Navigate to="/auth" replace />
+  // Not knowing whether a profile exists is no reason to start one over.
+  if (profileError) return <ProfileLoadError />
   if (profile && params.get('rebuild') !== '1') return <Navigate to="/" replace />
   return children
 }
@@ -80,9 +106,12 @@ function OnboardingGate({ children }) {
  * showing a login form at that point is exactly the bug this fixes.
  */
 function AuthGate() {
-  const { recovery, loading } = useAuth()
+  const { session, recovery, loading } = useAuth()
   if (loading) return <FullScreenSpinner />
   if (recovery) return <Navigate to="/reset-password" replace />
+  // Already signed in (a bookmark, the back button, a second tab that logged
+  // in): a login form here would only invite signing in twice.
+  if (session) return <Navigate to="/" replace />
   return <Auth />
 }
 

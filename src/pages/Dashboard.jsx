@@ -24,6 +24,7 @@ import {
   ArrowsClockwise, CaretLeft, CaretRight, CheckCircle, Info, LockSimple, MapTrifold, Plus, WarningCircle,
 } from '@phosphor-icons/react'
 import { t } from '../core/strings'
+import { friendlyError } from '../core/errors'
 
 const FALLBACK_QUOTES = [
   'Vsak tek je opeka v zidu. Danes položi svojo.',
@@ -143,7 +144,7 @@ export default function Dashboard() {
       const saved = await addWorkout(row)
       setWorkouts((prev) => [saved, ...prev])
     } catch (err) {
-      setLogError(err.message)
+      setLogError(friendlyError(err))
     } finally {
       setQuickLoggingDay(null)
     }
@@ -155,7 +156,9 @@ export default function Dashboard() {
   // who skipped onboarding and have no plan to talk about yet.
   useEffect(() => {
     if (loading) return
-    const cacheKey = `runko_motd_${todayISO()}`
+    // Keyed by runner: the tab's storage outlives a sign-out, and the next
+    // account on this browser must not be greeted with the last one's message.
+    const cacheKey = `runko_motd_${profile.id}_${todayISO()}`
     const cached = sessionStorage.getItem(cacheKey)
     if (cached) {
       setMessage(cached)
@@ -190,6 +193,10 @@ export default function Dashboard() {
   // historical week, so a run logged today can never line up with a card.
   // Say so instead of letting it look like the save failed.
   const planEnded = plans.length > 0 && weekStartISO(plans, lastWeek) < startOfWeekISO()
+
+  // The runner chose an unsafe goal after one explicit confirmation
+  // (core/planning): recorded on every week of the plan.
+  const againstAdvice = Boolean(plans[0]?.plan_json?.planning?.against_advice)
 
   // Any run logged today that the visible grid does not cover. Without this
   // the runner logs something, sees no checkmark anywhere, and concludes the
@@ -269,6 +276,19 @@ export default function Dashboard() {
         <Notice tone="warn" icon={Info}>
           {t.dashboard.planEnded}
         </Notice>
+      )}
+
+      {/* Stays for as long as this plan does: it was built against the coach's advice. */}
+      {againstAdvice && !planEnded && (
+        <p className="mt-3 flex items-start gap-2 text-xs leading-relaxed text-amber-200/80 animate-fade-in">
+          <WarningCircle size={15} className="mt-0.5 shrink-0" />
+          <span>
+            {t.dashboard.againstAdvice}{' '}
+            <Link to="/plan" className="underline underline-offset-4">
+              {t.dashboard.fullPlan}
+            </Link>
+          </span>
+        </p>
       )}
 
       {todaysRunUnshown && (

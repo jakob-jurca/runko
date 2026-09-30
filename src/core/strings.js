@@ -14,6 +14,11 @@
  * the app hardcodes copy.
  */
 
+/** "5 tednov", "3 tedne", "2 tedna", "1 teden": the counted form after a verb taking the accusative. */
+const weeksSl = (n) =>
+  `${n} ${n % 100 === 1 ? 'teden' : n % 100 === 2 ? 'tedna' : n % 100 === 3 || n % 100 === 4 ? 'tedne' : 'tednov'}`
+const kmSl = (km) => String(km).replace('.', ',')
+
 export const t = {
   // -------------------------------------------------------------------------
   // Shared
@@ -72,6 +77,25 @@ export const t = {
     forgotButton: 'Pošlji povezavo',
     forgotSent: 'Če za ta e-naslov obstaja račun, je povezava na poti. Preveri nabiralnik.',
     backToLogin: '← Nazaj na prijavo',
+    confirmResend: 'Pošlji potrditveno sporočilo znova',
+    confirmResent: 'Potrditveno sporočilo je na poti. Preveri nabiralnik, tudi vsiljeno pošto.',
+    sessionEnded: 'Tvoja seja se je končala. Prijavi se znova.',
+    profileLoadFailed: 'Tvojega profila ni bilo mogoče naložiti. Preveri povezavo in poskusi znova.',
+    retry: 'Poskusi znova',
+    // Every Supabase auth error is shown as one of these (core/auth-flows.js).
+    errors: {
+      invalidCredentials: 'E-naslov ali geslo ni pravilno. Preveri oba in poskusi znova.',
+      emailNotConfirmed:
+        'E-naslov še ni potrjen. Odpri sporočilo, ki smo ti ga poslali ob registraciji, in klikni povezavo v njem.',
+      userExists: 'Račun s tem e-naslovom že obstaja. Prijavi se ali ponastavi geslo.',
+      invalidEmail: 'E-naslov ni veljaven. Preveri, ali je pravilno zapisan.',
+      emailRateLimited: 'Sporočila trenutno ne moremo poslati. Počakaj nekaj minut in poskusi znova.',
+      signupDisabled: 'Registracija trenutno ni mogoča. Poskusi pozneje.',
+      sessionMissing: 'Seja je potekla. Prijavi se znova.',
+      banned: 'Ta račun je onemogočen.',
+      currentRequired: 'Vpiši trenutno geslo.',
+      wrongCurrentPassword: 'Trenutno geslo ni pravilno.',
+    },
   },
 
   reset: {
@@ -82,6 +106,10 @@ export const t = {
     expiredBody:
       'Ta povezava je potekla ali je bila že uporabljena. Vpiši e-naslov in poslali ti bomo novo.',
     linkInvalid: 'Povezava je neveljavna. Zahtevaj novo spodaj.',
+    // A link that is only spent when the runner presses the button.
+    confirmTitle: 'Ponastavitev gesla',
+    confirmBody: 'Za nadaljevanje potrdi, da želiš nastaviti novo geslo.',
+    confirmButton: 'Nadaljuj',
     requestNew: 'Pošlji novo povezavo',
     newSent: 'Če za ta e-naslov obstaja račun, je nova povezava na poti. Odpri najnovejše sporočilo.',
     backToLogin: 'Nazaj na prijavo',
@@ -134,6 +162,8 @@ export const t = {
     logSomethingElse: 'Vpiši drug tek',
     planEnded: 'Ta načrt se je iztekel. Sestavi novega, da bodo treningi spet sledili tvojim tekom.',
     loggedOutsidePlan: (d) => `Tek ${d} je shranjen, ni pa del tega tedna v načrtu.`,
+    againstAdvice:
+      'Ta načrt je zgrajen proti nasvetu trenerja: cilj v tem času ni varen. Načrt drži vse varne omejitve, na tekmi pa izmenjuj tek in hojo.',
     goalChanged: 'Se je cilj spremenil?',
     goalChangedBody:
       'Sestavi nov načrt okoli druge razdalje, datuma ali ciljnega časa. Trener začne znova od tvojih zadnjih tekov.',
@@ -209,6 +239,8 @@ export const t = {
     originalGoal: 'Tvoj prvotni cilj',
     builtFor: 'Načrt je zgrajen za',
     otherOption: 'Druga možnost',
+    againstAdvice: 'Zgrajeno proti nasvetu trenerja',
+    saferOption: 'Varnejša možnost',
     fallbackLabel: 'Rezervni cilj',
   },
 
@@ -230,6 +262,11 @@ export const t = {
       'Noge so težke — naj vseeno tečem?',
       'Kaj naj pojem pred jutranjim tekom?',
     ],
+    // The coach's answer to anything that is not about running (coach-prompt.js).
+    offTopic:
+      'Pomagam samo pri teku in treningu. Lahko pa pogledava tvoj naslednji trening ali kako ti gre ta teden.',
+    offTopicNoPlan:
+      'Pomagam samo pri teku in treningu. Lahko pa ti pomagam začeti teči ali odgovorim na vprašanje o treningu.',
     clearTitle: 'Počistim pogovor?',
     clearBody: 'To izbriše vsa sporočila med tabo in trenerjem. Dejanja ni mogoče razveljaviti.',
     clearKeepsMemoryStrong: 'Kar si trener zapomni o tebi, ostane.',
@@ -415,6 +452,15 @@ export const t = {
     changeGoal: 'Spremeni cilj',
     verdictTitle: 'Trenerjeva ocena tvojega cilja',
     chooseGoal: 'Izberi, za kaj naj sestavim načrt:',
+    verdictWhy: 'Zakaj je tvegano',
+    overrideButton: 'Vseeno naredi plan',
+    overrideBody:
+      'Runko sestavi načrt za tvoj prvotni cilj, a brez bližnjic: tedenski obseg in dolgi tek rasteta le toliko, kolikor je varno. ' +
+      'Zato na tekmo morda ne boš v celoti pripravljen/a. Za dan tekme bo načrt priporočil izmenjavo teka in hoje ter zadržan tempo.',
+    overrideConfirm: 'Razumem, da ta cilj v tem času ni varen, in tveganje sprejemam.',
+    overrideBack: 'Nazaj na varnejše možnosti',
+    overrideNotAllowed:
+      'Možnosti »Vseeno naredi plan« tu ni: omejitev razdalje velja zaradi tvoje starosti ali števila tekov na teden in je ni mogoče preklicati.',
 
     building: 'Runko sestavlja tvoj načrt…',
     saving: 'Shranjujem, kar si povedal…',
@@ -561,14 +607,38 @@ export const t = {
         `Tvoj prvotni cilj (${original}) v tem času ni varen — srce in pljuča bi zmogla, kite in kosti pa potrebujejo več časa. ` +
         `Zato je načrt zgrajen za ${adopted}.`,
       otherOption: (option) => `Druga varna možnost: ${option}.`,
+      // A plan built against advice (the runner confirmed the risk).
+      againstAdvice: (goal) =>
+        `Tvoj cilj (${goal}) v tem času ni varen: srce in pljuča bi zmogla, kite in kosti pa potrebujejo več časa. ` +
+        'Na tvojo željo je načrt vseeno zgrajen zanj, a ne prehiteva: obseg in dolgi tek rasteta le toliko, kolikor je varno. ' +
+        'To je najboljša varna priprava v času, ki ga imaš, ne pa popolna pripravljenost.',
+      longRunShort: (longKm, raceKm, pct) =>
+        `Povedano naravnost: najdaljši trening v načrtu je približno ${kmSl(longKm)} km, to je okoli ${pct} % razdalje tekme ` +
+        `(${kmSl(raceKm)} km). To je premalo, da bi lahko računal/a na tek od začetka do konca.`,
+      raceDayRunWalk:
+        'Na dan tekme od prvega kilometra izmenjuj tek in hojo, drži pogovorni tempo in se ne oziraj na čas. ' +
+        'Če se pojavi bolečina, odstopi: tekem bo še veliko.',
       priorities: (list) => `Načrt daje prednost temu: ${list.join(', ')}.`,
       noGoal: 'Brez tekme in brez ciljne razdalje — gradiva rednost in veselje do teka.',
       walkOnly: 'To je načrt hitre hoje brez teka: hodiš 3–5-krat na teden, dolžina sprehodov pa se počasi povečuje do 45–60 minut.',
-      walkBase: (weeks) => `Pred prvimi tekaškimi koraki je ${weeks} tednov hitre hoje (pogovorni tempo), da se kite in sklepi navadijo obremenitve.`,
+      walkBase: (weeks) => `Pred prvimi tekaškimi koraki ${weeksSl(weeks)} hitro hodiš (pogovorni tempo), da se kite in sklepi navadijo obremenitve.`,
       timeThenDistance: (week) =>
         `Začneš s hojo-tekom po minutah. Ko zmoreš približno 30 minut teka brez premora (predvidoma v ${week - 1}. tednu), načrt preide na kilometre in te postopno pripelje do tekme.`,
       foundation: (weeks, block) =>
         `Do tekme je še daleč, zato prvih ${weeks} tednov ohranjaš stabilen, varen obseg (predpriprava), zadnjih ${block} tednov pa so ciljne priprave, ki se končajo na dan tekme.`,
+    },
+    // Why a goal is unsafe (feasibility.risks), shown with the verdict.
+    risk: {
+      body: 'Tveganje je preobremenitvena poškodba: srce in pljuča napredujejo v tednih, kite in kosti v mesecih.',
+      time: (available, needed, longKm, weeklyKm) =>
+        needed
+          ? `Do tekme imaš ${weeksSl(available)}, varna priprava iz tvojega sedanjega stanja pa traja vsaj ${weeksSl(needed)} ` +
+            `(dolgi tek vsaj ${kmSl(longKm)} km in približno ${kmSl(weeklyKm)} km na teden).`
+          : `Do tekme imaš ${weeksSl(available)}, kar je za varno pripravo na to razdaljo občutno premalo.`,
+      days: (have, need) =>
+        `Tečeš ${have}-krat na teden, ta razdalja pa zahteva vsaj ${need === 2 ? '2 teka' : `${need} teke`} na teden.`,
+      ceiling: (maxKm) =>
+        `Za tvojo starost ali tvoj tedenski urnik je najdaljša razdalja, za katero Runko sestavi načrt, ${kmSl(maxKm)} km.`,
     },
     fallback: {
       time: (time) => `čas ${time}`,
@@ -877,6 +947,17 @@ export const t = {
       saved: 'Shranjeno. Upoštevano bo pri naslednjem načrtu.',
       deleteAll: 'Izbriši vse zdravstvene podatke (tudi varnostne odgovore)',
       deleted: 'Zdravstveni podatki so izbrisani.',
+    },
+
+    account: {
+      title: 'Račun',
+      changePassword: 'Spremeni geslo',
+      currentPassword: 'Trenutno geslo',
+      newPassword: 'Novo geslo',
+      confirmPassword: 'Ponovi novo geslo',
+      save: 'Shrani novo geslo',
+      passwordChanged: 'Geslo je spremenjeno. Na drugih napravah se bo treba prijaviti znova.',
+      forgot: 'Trenutnega gesla se ne spomniš? Odjavi se in na prijavi izberi »Pozabljeno geslo?«.',
     },
 
     planTitle: 'Načrt treninga',

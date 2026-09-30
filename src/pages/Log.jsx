@@ -8,6 +8,7 @@ import { hasPremium } from '../core/subscription'
 import Spinner from '../components/Spinner'
 import { Check, WarningCircle } from '@phosphor-icons/react'
 import { t } from '../core/strings'
+import { friendlyError } from '../core/errors'
 import { validateLogDate, DEFAULT_EFFORT } from '../core/logging'
 
 const EFFORTS = t.log.efforts
@@ -88,7 +89,7 @@ export default function Log() {
       // name as though he had replied.
       setDone({ reaction, adapted: Boolean(adapted), premium })
     } catch (err) {
-      setError(err.message)
+      setError(friendlyError(err))
     } finally {
       setBusy(false)
     }

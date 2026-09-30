@@ -12,9 +12,9 @@
  *      UI — free callers get 402.
  *   3. Counts the caller's AI calls in the last hour and refuses past the
  *      limit, with a message the UI can show verbatim.
- *   4. Validates the request (allow-listed model, capped output, capped
- *      payload) so an authenticated user cannot turn the proxy into a free
- *      general-purpose LLM endpoint.
+ *   4. Validates the request (allow-listed model, capped payload, and a reply
+ *      length capped per kind of call — see limits.js) so an authenticated
+ *      user cannot turn the proxy into a free general-purpose LLM endpoint.
  *   5. Forwards to Groq with the secret key and returns the response.
  *
  * Deploy and configure: see README.md next to this file.
@@ -22,6 +22,8 @@
 
 // @ts-ignore — resolved by Deno at deploy time, not by the app's toolchain.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+// @ts-ignore — plain JS, shared with the app's test suite.
+import { cappedMaxTokens } from './limits.js'
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
 
@@ -39,8 +41,10 @@ const ALLOWED_MODELS = new Set([
   'openai/gpt-oss-20b',
 ])
 
-/** Hard ceilings, independent of whatever the client asks for. */
-const MAX_OUTPUT_TOKENS = 8000
+/**
+ * Hard ceilings, independent of whatever the client asks for. The reply
+ * length ceiling lives in limits.js: it depends on the kind of call.
+ */
 const MAX_MESSAGES = 40
 const MAX_PAYLOAD_CHARS = 60_000
 
@@ -176,7 +180,11 @@ Deno.serve(async (req: Request) => {
     return fail(413, 'Zahteva je prevelika.', 'payload_too_large')
   }
 
-  const maxTokens = Math.min(Number(body.max_tokens) || 1024, MAX_OUTPUT_TOKENS)
+  // Only the one response_format we use; nothing else is passed through.
+  const jsonMode = (body.response_format as Record<string, unknown>)?.type === 'json_object'
+  // Prose is capped at a chat reply's length whatever the request asks for,
+  // so a coach prompt that was talked off topic cannot produce pages of it.
+  const maxTokens = cappedMaxTokens(body.max_tokens, { kind: String(body.kind ?? ''), json: jsonMode })
   const temperature = Math.min(Math.max(Number(body.temperature) || 0, 0), 2)
 
   const upstreamBody: Record<string, unknown> = {
@@ -185,10 +193,7 @@ Deno.serve(async (req: Request) => {
     temperature,
     max_tokens: maxTokens,
   }
-  // Only the one response_format we use; nothing else is passed through.
-  if ((body.response_format as Record<string, unknown>)?.type === 'json_object') {
-    upstreamBody.response_format = { type: 'json_object' }
-  }
+  if (jsonMode) upstreamBody.response_format = { type: 'json_object' }
 
   // --- 5. record the call, then forward -----------------------------------
   // Recorded BEFORE the call so a failure upstream still counts against the

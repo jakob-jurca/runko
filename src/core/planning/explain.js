@@ -24,6 +24,52 @@ function fallbackText(f) {
   return P.fallback.finish(f.distance_km)
 }
 
+/** Why the goal is unsafe, in the runner's language: one sentence per risk. */
+function riskTexts(feasibility) {
+  return (feasibility.risks || []).map((r) => {
+    if (r.kind === 'time') return P.risk.time(r.weeks_available, r.weeks_needed, r.long_run_km, r.weekly_km)
+    if (r.kind === 'days') return P.risk.days(r.run_days, r.run_days_min)
+    return P.risk.ceiling(r.max_km)
+  })
+}
+
+/**
+ * What a plan built against advice does and does not reach, read from the
+ * weeks that were actually built: the longest training run against the race
+ * distance. "Short" is the engine's own bar for finishing safely, the minimum
+ * readiness long run (feasibility.requirements).
+ *
+ * @returns {object} stored as plan_json.planning.against_advice
+ */
+export function againstAdviceRecord(feasibility, plan) {
+  const raceKm = feasibility.original_goal.distance_km
+  const runs = plan.weeks.flatMap((w) => w.days.filter((d) => d.type !== 'rest' && d.type !== 'race'))
+  const longestKm = Math.max(0, ...runs.map((d) => Number(d.distance_km) || 0))
+  const needKm = feasibility.requirements?.long_run_min_km ?? null
+  return {
+    confirmed: true,
+    race_km: raceKm,
+    event_date: feasibility.original_goal.event_date,
+    has_race: plan.weeks.some((w) => w.days.some((d) => d.type === 'race')),
+    longest_run_km: longestKm,
+    long_run_needed_km: needKm,
+    long_run_share: raceKm ? Math.round((longestKm / raceKm) * 100) / 100 : null,
+    long_run_short: needKm !== null && longestKm < needKm - 0.5,
+    risks: feasibility.risks || [],
+  }
+}
+
+/** The against-advice sentences as one notice: it closes every intro, the AI's too (withNotices). */
+function againstAdviceNotices(record, original) {
+  if (!record) return []
+  const parts = [P.intro.againstAdvice(goalText({ ...original, walk_breaks: false }))]
+  if (record.long_run_short) {
+    parts.push(P.intro.longRunShort(record.longest_run_km, record.race_km, Math.round(record.long_run_share * 100)))
+  }
+  if (record.has_race) parts.push(P.intro.raceDayRunWalk)
+  return [{ id: 'against_advice', text: parts.join(' '), rule: 'runner override' }]
+}
+
 function alternativeText(a) {
   if (a.kind === 'no_event') return P.alternative.no_event
   if (a.kind === 'more_days') return P.alternative.more_days(goalText(a), a.run_days)
@@ -64,20 +110,22 @@ function explainGoalPlan({ goalPlan, classification, feasibility, plan, notices 
   }
 }
 
-export function explainPlan({ classification, feasibility, plan, notices = [], goalPlan = null }) {
+export function explainPlan({ classification, feasibility, plan, notices = [], goalPlan = null, againstAdvice = null }) {
   if (goalPlan) return explainGoalPlan({ goalPlan, classification, feasibility, plan, notices })
   const scenario = classification.scenario
   const verdict = feasibility.verdict
-  const priorities = P.priorities[scenario] || []
+  // Against advice every plan has the same priorities: finish safely, no speed work.
+  const priorities = P.priorities[againstAdvice ? 'beginner_with_deadline' : scenario] || []
   const adopted = feasibility.adopted_goal
   const original = feasibility.original_goal
   const others = feasibility.alternatives.filter((a) => a.id !== adopted.alternative_id)
+  notices = [...notices, ...againstAdviceNotices(againstAdvice, original)]
 
   const parts = [P.intro.opening(P.scenarios[scenario], plan.weeks.length)]
   if (!original.distance_km) parts.push(P.intro.noGoal)
   else if (verdict === 'feasible') parts.push(P.intro.feasible)
   else if (verdict === 'stretch') parts.push(P.intro.stretch(fallbackText(feasibility.fallback_target)))
-  else {
+  else if (!againstAdvice) {
     parts.push(P.intro.unsafe(goalText({ ...original, walk_breaks: false }), goalText(adopted)))
     if (others.length) parts.push(P.intro.otherOption(alternativeText(others[0])))
   }
@@ -103,6 +151,10 @@ export function explainPlan({ classification, feasibility, plan, notices = [], g
     adopted_goal_text: goalText(adopted),
     fallback_text: fallbackText(feasibility.fallback_target),
     other_options: others.map(alternativeText),
+    // Why an unsafe goal is unsafe, and whether the runner may build it anyway.
+    risk_texts: verdict === 'unsafe' ? riskTexts(feasibility) : [],
+    override_allowed: Boolean(feasibility.override_allowed),
+    against_advice: Boolean(againstAdvice),
     notices: notices.map((n) => ({ id: n.id, text: n.text })),
     reasons: [...classification.reasons, ...feasibility.reasons],
     intro: parts.join(' '),

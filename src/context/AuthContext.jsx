@@ -1,10 +1,13 @@
-import { createContext, useContext, useEffect, useState, useCallback } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react'
 import { supabase } from '../core/supabase'
 import { getProfile } from '../core/db'
+import { parseAuthUrl, failedLinkTarget, recoveryClaimHolds } from '../core/auth-url'
+import { isDeadSessionError, signOutHere } from '../core/auth-flows'
 
 /**
  * AuthContext — holds the Supabase session and the Runko profile row.
- * profile === null while logged in means onboarding hasn't been completed.
+ * profile === null while logged in means onboarding hasn't been completed
+ * (and `profileError` means we could not find out: see below).
  *
  * Password recovery needs special handling. Clicking the emailed link gives
  * the user a REAL session, so without intercepting it they would sail past
@@ -25,23 +28,11 @@ const AuthContext = createContext(null)
  */
 const RECOVERY_KEY = 'runko_password_recovery'
 
-/**
- * True if the URL we were opened with is a recovery link.
- *
- * Belt and braces for a real race: the Supabase client parses the URL while
- * it initialises, which can fire PASSWORD_RECOVERY *before* the listener
- * below is attached. Reading the link directly means a missed event cannot
- * strand the user on the login screen — the bug being fixed here.
- */
-function urlIsRecoveryLink() {
-  try {
-    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''))
-    const query = new URLSearchParams(window.location.search)
-    return hash.get('type') === 'recovery' || query.get('type') === 'recovery'
-  } catch {
-    return false
-  }
-}
+/** Same key as pages/Onboarding.jsx: an in-progress onboarding draft. */
+const ONBOARDING_DRAFT_KEY = 'runko_onboarding_v1'
+
+/** Whose data this browser last held, to notice an account switch. */
+const LAST_USER_KEY = 'runko_last_user'
 
 /**
  * A rejected email link (expired, already used) comes back as
@@ -50,33 +41,38 @@ function urlIsRecoveryLink() {
  * lands on "/" — where the guards bounce to /auth and drop the hash, leaving
  * the runner on a login screen with no idea why. Move it to /reset-password,
  * which explains and offers a fresh link. Must run before the router reads
- * the URL (see main.jsx). Signup confirmation is off, so every emailed link
- * this app sends is a recovery link.
+ * the URL (see main.jsx).
  */
 export function routeFailedAuthLink() {
   try {
-    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''))
-    const query = new URLSearchParams(window.location.search)
-    const failed = hash.get('error_code') || query.get('error_code')
-    if (failed && window.location.pathname !== '/reset-password') {
-      window.history.replaceState(
-        null,
-        '',
-        `/reset-password${window.location.search}${window.location.hash}`
-      )
-    }
+    const target = failedLinkTarget(window.location)
+    if (target) window.history.replaceState(null, '', target)
   } catch {
     /* no history API — the runner still lands on the login screen */
   }
 }
 
-function readRecoveryFlag() {
-  if (urlIsRecoveryLink()) {
-    writeRecoveryFlag(true)
-    return true
-  }
+function readStoredRecoveryFlag() {
   try {
     return localStorage.getItem(RECOVERY_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+/**
+ * True if the URL we were opened with is a working recovery link.
+ *
+ * Belt and braces for a real race: the Supabase client parses the URL while
+ * it initialises, which can fire PASSWORD_RECOVERY *before* the listener
+ * below is attached. Reading the link directly means a missed event cannot
+ * strand the user on the login screen. The claim is checked against the
+ * session once there is one (recoveryClaimHolds), because this screen sets a
+ * password without asking for the current one.
+ */
+function urlClaimsRecovery() {
+  try {
+    return parseAuthUrl(window.location).recoveryLink
   } catch {
     return false
   }
@@ -109,37 +105,114 @@ function writeRecoveryFlag(on) {
   }
 }
 
+/** Was anyone signed in here when the page loaded? (supabase-js key: sb-<ref>-auth-token) */
+function hasStoredSession() {
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      if (/^sb-.+-auth-token$/.test(localStorage.key(i) ?? '')) return true
+    }
+  } catch {
+    /* storage blocked: nothing is stored either */
+  }
+  return false
+}
+
+/** Last resort for a sign-out the server could not be told about. */
+function dropStoredSession() {
+  try {
+    const keys = []
+    for (let i = 0; i < localStorage.length; i++) keys.push(localStorage.key(i))
+    for (const key of keys) if (/^sb-.+-auth-token/.test(key ?? '')) localStorage.removeItem(key)
+  } catch {
+    /* nothing stored, nothing to drop */
+  }
+}
+
+function dropOnboardingDraft() {
+  try {
+    localStorage.removeItem(ONBOARDING_DRAFT_KEY)
+  } catch {
+    /* private mode */
+  }
+}
+
+/**
+ * A different account than last time in this browser (a recovery link opened
+ * while someone else was signed in, or a second person on a shared laptop):
+ * the previous runner's onboarding draft must not become the new one's.
+ */
+function noteUser(userId) {
+  if (!userId) return
+  try {
+    const previous = localStorage.getItem(LAST_USER_KEY)
+    if (previous && previous !== userId) dropOnboardingDraft()
+    localStorage.setItem(LAST_USER_KEY, userId)
+  } catch {
+    /* private mode */
+  }
+}
+
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(null)
-  const [profile, setProfile] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [recovery, setRecovery] = useState(readRecoveryFlag)
+  // The profile row together with whose it is: a row is only ever shown for
+  // the user it was loaded for, so an account switch cannot show the last
+  // runner's profile for even one render.
+  const [loaded, setLoaded] = useState({ userId: null, profile: null })
+  // Until the stored session (or its absence) is known.
+  const [booting, setBooting] = useState(true)
+  const [recovery, setRecovery] = useState(() => readStoredRecoveryFlag() || urlClaimsRecovery())
+  // The profile could not be read (offline, server error). Without this a
+  // failed read looked like "no profile" and sent a runner with a finished
+  // setup back into onboarding.
+  const [profileError, setProfileError] = useState(false)
+  const [profileAttempt, setProfileAttempt] = useState(0)
+  // The session ended without the runner asking: expired, revoked, or signed
+  // out in another tab. The login screen says so instead of just appearing.
+  const [sessionEnded, setSessionEnded] = useState(false)
+
+  const askedToSignOut = useRef(false)
+  const hadSession = useRef(hasStoredSession())
+  const recoveryEventSeen = useRef(false)
 
   useEffect(() => {
+    // Only a link nobody has vouched for yet needs checking against the session.
+    const unverifiedClaim = urlClaimsRecovery() && !readStoredRecoveryFlag()
+
     supabase.auth.getSession().then(async ({ data }) => {
-      if (data.session) {
-        // getSession() only reads localStorage; validate the token with the
-        // auth server. A deleted user or revoked refresh token leaves a dead
-        // session behind (403 on /auth/v1/user, 400 on token refresh) — clear
-        // it so the app lands on the login screen instead of half-working.
-        const { error } = await supabase.auth.getUser()
-        if (error) {
-          console.warn('[auth] Stored session is no longer valid — clearing it:', error.message)
-          await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
-          writeRecoveryFlag(false)
-          setRecovery(false)
-          setSession(null)
-          setLoading(false)
-          return
-        }
-      }
-      setSession(data.session)
       if (!data.session) {
         // A leftover flag with no session behind it (recovery session expired,
         // or signed out elsewhere) has nothing left to protect.
         writeRecoveryFlag(false)
         setRecovery(false)
-        setLoading(false)
+        setSession(null)
+        setBooting(false)
+        return
+      }
+      noteUser(data.session.user.id)
+      if (unverifiedClaim && !recoveryEventSeen.current) {
+        if (recoveryClaimHolds(data.session)) writeRecoveryFlag(true)
+        else setRecovery(false)
+      }
+      setSession(data.session)
+      setBooting(false)
+
+      // getSession() only reads localStorage; validate the token with the
+      // auth server. A deleted user or revoked refresh token leaves a dead
+      // session behind (403 on /auth/v1/user, 400 on token refresh) — clear
+      // it so the app lands on the login screen instead of half-working.
+      // A request that got NO answer (offline, flaky network) proves nothing:
+      // the session stays, and the SDK refreshes it when it can.
+      const { error } = await supabase.auth.getUser()
+      if (error && isDeadSessionError(error)) {
+        console.warn('[auth] Stored session is no longer valid — clearing it:', error.message)
+        askedToSignOut.current = true // our doing; the reason is given below
+        await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
+        askedToSignOut.current = false
+        dropStoredSession()
+        writeRecoveryFlag(false)
+        setRecovery(false)
+        setSession(null)
+        setSessionEnded(true)
       }
     })
     const { data: sub } = supabase.auth.onAuthStateChange((event, newSession) => {
@@ -147,12 +220,19 @@ export function AuthProvider({ children }) {
         // Not a normal login: this session exists only so the user can set a
         // new password. App.jsx diverts every route to /reset-password while
         // this is true.
+        recoveryEventSeen.current = true
         writeRecoveryFlag(true)
         setRecovery(true)
       } else if (event === 'SIGNED_OUT') {
         writeRecoveryFlag(false)
         setRecovery(false)
+        if (!askedToSignOut.current && hadSession.current) setSessionEnded(true)
+        askedToSignOut.current = false
+      } else if (event === 'SIGNED_IN') {
+        setSessionEnded(false)
       }
+      hadSession.current = Boolean(newSession)
+      noteUser(newSession?.user?.id)
       setSession(newSession)
     })
     // Keep other open tabs in step: a recovery started (or finished) in one
@@ -168,29 +248,42 @@ export function AuthProvider({ children }) {
     }
   }, [])
 
-  // Load the profile row whenever the session changes.
+  // Load the profile row when the signed-in USER changes. Keyed on the id,
+  // not the session object: the SDK hands out a new session on every token
+  // refresh and every time the tab regains focus, and reloading on each of
+  // those put a full-screen spinner over the app and threw away whatever the
+  // runner was typing.
+  const userId = session?.user?.id ?? null
   useEffect(() => {
     let cancelled = false
-    if (!session) {
-      setProfile(null)
-      return
-    }
-    setLoading(true)
-    getProfile(session.user.id)
-      .then((p) => !cancelled && setProfile(p))
-      .catch((err) => console.error('Failed to load profile:', err.message))
-      .finally(() => !cancelled && setLoading(false))
+    setProfileError(false)
+    if (!userId) return
+    setLoaded({ userId: null, profile: null })
+    getProfile(userId)
+      .then((p) => !cancelled && setLoaded({ userId, profile: p }))
+      .catch((err) => {
+        console.error('Failed to load profile:', err.message)
+        if (!cancelled) setProfileError(true)
+      })
     return () => {
       cancelled = true
     }
-  }, [session])
+  }, [userId, profileAttempt])
+
+  const profileKnown = userId !== null && loaded.userId === userId
+  const profile = profileKnown ? loaded.profile : null
+  // Waiting on the session, or on the profile of whoever is signed in.
+  const loading = booting || (userId !== null && !profileKnown && !profileError)
 
   const refreshProfile = useCallback(async () => {
-    if (!session) return null
-    const p = await getProfile(session.user.id)
-    setProfile(p)
+    if (!userId) return null
+    const p = await getProfile(userId)
+    setLoaded({ userId, profile: p })
     return p
-  }, [session])
+  }, [userId])
+
+  /** Try the profile read again (the button on the "could not load" screen). */
+  const retryProfile = useCallback(() => setProfileAttempt((n) => n + 1), [])
 
   /** Called once the new password is saved, so the app stops diverting. */
   const clearRecovery = useCallback(() => {
@@ -205,20 +298,35 @@ export function AuthProvider({ children }) {
    * backing out is not a reason to log them out everywhere).
    */
   const cancelRecovery = useCallback(async () => {
+    askedToSignOut.current = true
     writeRecoveryFlag(false)
     cleanRecoveryUrl()
-    await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
+    const result = await signOutHere(supabase)
+    if (!result.ok) dropStoredSession()
     setRecovery(false)
+    if (!result.ok) window.location.replace('/auth')
   }, [])
 
-  const signOut = useCallback(() => {
-    // Drop any in-progress onboarding draft (same key as pages/Onboarding.jsx)
-    // so the next account on this browser doesn't inherit it.
-    localStorage.removeItem('runko_onboarding_v1')
+  /**
+   * Sign out of this browser. Other tabs follow (the SDK tells them); other
+   * devices stay signed in.
+   */
+  const signOut = useCallback(async () => {
+    askedToSignOut.current = true
+    // Drop any in-progress onboarding draft so the next account on this
+    // browser doesn't inherit it.
+    dropOnboardingDraft()
     writeRecoveryFlag(false)
     cleanRecoveryUrl()
     setRecovery(false)
-    return supabase.auth.signOut()
+    const result = await signOutHere(supabase)
+    if (!result.ok) {
+      // The server could not be reached, and the SDK keeps the session when
+      // that happens. Signing out must work offline too: forget the session
+      // here and start clean.
+      dropStoredSession()
+      window.location.replace('/auth')
+    }
   }, [])
 
   return (
@@ -228,6 +336,9 @@ export function AuthProvider({ children }) {
         profile,
         loading,
         recovery,
+        profileError,
+        sessionEnded,
+        retryProfile,
         clearRecovery,
         cancelRecovery,
         refreshProfile,

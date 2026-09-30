@@ -7,8 +7,11 @@
  * beginner's plan is minutes of walk-run, a short-race plan is speed work
  * with short long runs, a maintenance plan does not build at all.
  *
- * Builders only ever see the ADOPTED goal from feasibility — an unsafe goal
- * never reaches this file.
+ * Builders only ever see the ADOPTED goal from feasibility. An unsafe goal
+ * reaches this file only when the runner chose it against advice
+ * (adopted.against_advice), and then nothing here bends for it: the same
+ * sequencers and the same limits build as far as the weeks allow, and the race
+ * day is run-walk.
  */
 import {
   pacesFromVdot, assignPhases, peakVolumeCap, PHASE_INTENT, DAYS, makeDay, enrichDays,
@@ -66,7 +69,7 @@ function context(scenario, inputs, assessment, feasibility, limits) {
   // A target time on the goal being built for sets the goal pace.
   const tg = feasibility.time_goal
   const sameGoal = adopted.distance_km === feasibility.original_goal.distance_km
-  if (sameGoal && tg?.goal_pace_min_per_km) paces.goal = tg.goal_pace_min_per_km
+  if (sameGoal && tg?.goal_pace_min_per_km && !adopted.against_advice) paces.goal = tg.goal_pace_min_per_km
 
   // A race further out than one useful block is never cut short: the
   // scenario's block is built to end on race day, and a steady foundation
@@ -144,7 +147,8 @@ function raceFor(ctx, totalWeeks, walkBreaks = false) {
     weekIndex: totalWeeks - 1,
     day: ctx.goal.eventWeekday,
     distanceKm: ctx.goal.distanceKm,
-    walkBreaks,
+    // A goal trained for against advice is run-walk on the day, whoever runs it.
+    walkBreaks: walkBreaks || Boolean(ctx.adopted.against_advice),
   }
 }
 
@@ -570,7 +574,9 @@ function returning(ctx, assessment, feasibility, inputs) {
       ladder: postpartumLadder(inputs),
       runDayCount: Math.min(ctx.runDays.length, 4), available: ctx.runDays,
       runPace, age: ctx.hrAge, targetLongMin: d ? clamp(round(d * runPace * 0.8), 30, 90) : 45, targetEasyMin: 35,
-      race: ctx.hasEvent && d ? { distanceKm: d, walkBreaks: false, day: ctx.goal.eventWeekday } : null,
+      race: ctx.hasEvent && d
+        ? { distanceKm: d, walkBreaks: Boolean(ctx.adopted.against_advice), day: ctx.goal.eventWeekday }
+        : null,
       ladderPhase: 'return',
     })
     return { unit: 'time', weeks: plan.weeks }
@@ -693,7 +699,10 @@ export function buildPlan(scenario, inputs, assessment, feasibility, restriction
     injuryFree: inputs.safety?.injuryLast12m === false,
     strides: ctx.goalMods?.strides !== false,
   }).map((w, i) => ({ ...w, allow_hard: Boolean(shaped[i].allow_hard) && w.allow_hard }))
-  const noIntensityWeeks = restrictions.noHardSessions || ctx.goalMods?.easyOnly ? Infinity : ctx.limits.noIntensityWeeks ?? 0
+  // Against advice the risk is overload, and speed work adds load without
+  // making the distance any more finishable: easy running only.
+  const noIntensityWeeks = restrictions.noHardSessions || ctx.goalMods?.easyOnly || ctx.adopted.against_advice
+    ? Infinity : ctx.limits.noIntensityWeeks ?? 0
   let weeks = noIntensityWeeks ? withoutHardSessions(intense, ctx.paces, ctx.hrAge, noIntensityWeeks) : intense
   if (ctx.goalMods?.strides === 'optional') weeks = markStridesOptional(weeks)
 

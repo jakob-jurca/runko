@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { getHealthProfile, saveHealthProfile, deleteHealthProfile, updateProfile } from '../core/db'
 import { ShieldCheck, Trash } from '@phosphor-icons/react'
 import { t } from '../core/strings'
+import { friendlyError } from '../core/errors'
 
 const H = t.settings.health
 
@@ -61,7 +62,7 @@ export default function HealthProfile({ profile, onChanged }) {
           })
         }
       })
-      .catch((err) => !cancelled && setError(err.message))
+      .catch((err) => !cancelled && setError(friendlyError(err)))
     return () => {
       cancelled = true
     }
@@ -93,7 +94,7 @@ export default function HealthProfile({ profile, onChanged }) {
       setTimeout(() => setStatus(''), 4000)
       onChanged?.()
     } catch (err) {
-      setError(err.message)
+      setError(friendlyError(err))
     } finally {
       setBusy(false)
     }
@@ -112,7 +113,7 @@ export default function HealthProfile({ profile, onChanged }) {
       setTimeout(() => setStatus(''), 4000)
       onChanged?.()
     } catch (err) {
-      setError(err.message)
+      setError(friendlyError(err))
     } finally {
       setBusy(false)
     }

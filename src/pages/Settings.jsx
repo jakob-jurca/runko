@@ -7,7 +7,10 @@ import { goalLabel } from '../core/periodization'
 import { maxHeartRate } from '../core/heart-rate'
 import { X } from '@phosphor-icons/react'
 import { t } from '../core/strings'
+import { friendlyError } from '../core/errors'
 import HealthProfile from '../components/HealthProfile'
+import { supabase } from '../core/supabase'
+import { changePassword, MIN_PASSWORD_LENGTH } from '../core/auth-flows'
 
 export default function Settings() {
   const { session, profile, signOut, refreshProfile } = useAuth()
@@ -22,7 +25,7 @@ export default function Settings() {
     let cancelled = false
     getMemories(profile.id)
       .then((rows) => !cancelled && setMemories(rows))
-      .catch((err) => !cancelled && setMemoryError(err.message))
+      .catch((err) => !cancelled && setMemoryError(friendlyError(err)))
     return () => {
       cancelled = true
     }
@@ -35,7 +38,7 @@ export default function Settings() {
       await deleteMemory(id)
     } catch (err) {
       setMemories(previous) // put it back
-      setMemoryError(err.message)
+      setMemoryError(friendlyError(err))
     }
   }
 
@@ -159,6 +162,11 @@ export default function Settings() {
         )}
       </section>
 
+      {/* Account: the password is changed here, with the current one. The
+          email address is shown in the profile above and cannot be changed
+          in the app (not supported yet, so there is no control for it). */}
+      <ChangePassword email={session.user.email} />
+
       <button
         onClick={signOut}
         className="btn-ghost mt-6 w-full !text-rose-300 hover:!bg-rose-500/10 animate-fade-up"
@@ -169,6 +177,104 @@ export default function Settings() {
 
       <p className="mt-8 text-center font-mono text-xs text-zinc-600">{t.settings.version}</p>
     </main>
+  )
+}
+
+/**
+ * Change the password while signed in. Closed by default; the flow and its
+ * messages are core/auth-flows.js changePassword (the current password is
+ * checked with the auth server before anything is saved).
+ */
+function ChangePassword({ email }) {
+  const A = t.settings.account
+  const [open, setOpen] = useState(false)
+  const [current, setCurrent] = useState('')
+  const [next, setNext] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [error, setError] = useState('')
+  const [done, setDone] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const submit = async (e) => {
+    e.preventDefault()
+    setError('')
+    setDone('')
+    setBusy(true)
+    const result = await changePassword(supabase, { email, current, next, confirm })
+    setBusy(false)
+    if (!result.ok) return setError(result.message)
+    setCurrent('')
+    setNext('')
+    setConfirm('')
+    setOpen(false)
+    setDone(result.message)
+  }
+
+  return (
+    <section className="card mt-4 animate-fade-up" style={{ animationDelay: '150ms' }}>
+      <h2 className="text-base font-semibold text-zinc-100">{A.title}</h2>
+      {done && <p className="mt-3 text-sm text-emerald-400" role="status">{done}</p>}
+      {!open ? (
+        <button onClick={() => { setOpen(true); setDone('') }} className="btn-ghost mt-4 w-full text-sm">
+          {A.changePassword}
+        </button>
+      ) : (
+        <form onSubmit={submit} className="mt-4 space-y-4">
+          {/* Lets a password manager file the new password under the right account. */}
+          <input type="email" name="username" autoComplete="username" value={email} readOnly hidden />
+          <div>
+            <label className="label" htmlFor="pw-current">{A.currentPassword}</label>
+            <input
+              id="pw-current"
+              type="password"
+              required
+              autoComplete="current-password"
+              className="input"
+              value={current}
+              onChange={(e) => setCurrent(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="label" htmlFor="pw-new">{A.newPassword}</label>
+            <input
+              id="pw-new"
+              type="password"
+              required
+              minLength={MIN_PASSWORD_LENGTH}
+              autoComplete="new-password"
+              className="input"
+              value={next}
+              onChange={(e) => setNext(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="label" htmlFor="pw-confirm">{A.confirmPassword}</label>
+            <input
+              id="pw-confirm"
+              type="password"
+              required
+              minLength={MIN_PASSWORD_LENGTH}
+              autoComplete="new-password"
+              className="input"
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+            />
+          </div>
+          {error && <p className="text-sm text-rose-300" role="alert">{error}</p>}
+          <button type="submit" disabled={busy} className="btn-primary w-full text-sm">
+            {busy ? t.log.saving : A.save}
+          </button>
+          <button
+            type="button"
+            onClick={() => { setOpen(false); setError('') }}
+            className="w-full text-center text-xs text-zinc-500 underline underline-offset-4 hover:text-zinc-300"
+          >
+            {t.common.cancel}
+          </button>
+          <p className="text-xs leading-relaxed text-zinc-500">{A.forgot}</p>
+        </form>
+      )}
+    </section>
   )
 }
 

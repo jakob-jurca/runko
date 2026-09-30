@@ -128,7 +128,8 @@ export default function Plan() {
           {timeBased ? t.plan.summaryTime(weeks.length, Math.round(totalKm / 60)) : t.plan.summary(weeks.length, totalKm)}
           {vdot && !hasWalkRun ? ` · VDOT ${vdot}` : ''}
         </p>
-        {/* An unsafe goal is never built: show the goal this plan is for. */}
+        {/* The goal this plan is for: the safer one adopted for an unsafe
+            goal, or the original when it was built against advice. */}
         <p className="mt-1 text-sm font-medium text-primary">
           {explain?.goal_plan
             ? explain.adopted_goal_text
@@ -370,7 +371,17 @@ function VerdictCard({ explain }) {
           <span className={`font-semibold ${VERDICT_STYLES[explain.verdict] || ''}`}>{explain.verdict_label}</span>
         </p>
       )}
-      {explain.verdict === 'unsafe' && explain.original_goal_text && (
+      {explain.against_advice && (
+        <>
+          <p className="font-semibold text-rose-300">{t.plan.againstAdvice}</p>
+          {explain.other_options?.[0] && (
+            <p>
+              <span className="font-semibold text-zinc-300">{t.plan.saferOption}:</span> {explain.other_options[0]}
+            </p>
+          )}
+        </>
+      )}
+      {explain.verdict === 'unsafe' && !explain.against_advice && explain.original_goal_text && (
         <>
           <p>
             <span className="font-semibold text-zinc-300">{t.plan.originalGoal}:</span> {explain.original_goal_text}

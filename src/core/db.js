@@ -55,7 +55,7 @@ export async function saveProfile(profile, { retries = 3 } = {}) {
     if (error.code !== FK_VIOLATION) throw error
 
     if (attempt >= retries) {
-      throw new Error(t.errors.profileLink)
+      throw new Error(t.errors.linkFailed)
     }
     await sleep(1000 * (attempt + 1)) // 1s, 2s, 3s
     // Re-confirm (and possibly refresh) the auth user before the next try.

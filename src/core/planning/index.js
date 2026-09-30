@@ -20,10 +20,10 @@ import { collectInputs, inputsSummary, withGoal } from './collect.js'
 import { assessFitness } from './assess.js'
 import { classifyRunner, effectiveRunDays } from './classify.js'
 import { adjustGoalPlan, goalMetric, readyForKm } from './goals.js'
-import { checkFeasibility } from './feasibility.js'
+import { checkFeasibility, OVERRIDE_GOAL, overrideChosen } from './feasibility.js'
 import { clarifyQuestions } from './clarify.js'
 import { buildPlan } from './build.js'
-import { explainPlan } from './explain.js'
+import { explainPlan, againstAdviceRecord } from './explain.js'
 import { SCENARIO_RULES } from './rules.js'
 import { computeLimits } from './limits.js'
 import { safetyGate } from './gate.js'
@@ -156,11 +156,12 @@ export function runPlanningPipeline({ profile = {}, runs = [], memories = [], an
   // 4
   const feasibility = checkFeasibility(inputs, assessment, classification, limits.values)
 
-  // An unsafe goal is never built. If the adopted (safer) goal changes what
-  // kind of plan this is — a 10 km instead of a marathon — the scenario is
-  // re-derived for it, and both are recorded.
+  // An unsafe goal is built only against advice (feasibility.against_advice),
+  // and then as the scenario it already is. Otherwise, if the adopted (safer)
+  // goal changes what kind of plan this is — a 10 km instead of a marathon —
+  // the scenario is re-derived for it, and both are recorded.
   let buildClassification = classification
-  if (feasibility.verdict === 'unsafe') {
+  if (feasibility.verdict === 'unsafe' && !feasibility.against_advice) {
     const adopted = feasibility.adopted_goal
     const adoptedInputs = withGoal(inputs, {
       distanceKm: adopted.distance_km, eventDate: adopted.event_date, targetTimeMin: null,
@@ -198,10 +199,23 @@ export function runPlanningPipeline({ profile = {}, runs = [], memories = [], an
   }
   const goal = goalRecord(inputs, assessment, scenario, plan)
 
+  // Built against advice: marked on the race day, and what the plan does and
+  // does not reach is worked out from the weeks that were actually built.
+  const againstAdvice = feasibility.against_advice ? againstAdviceRecord(feasibility, plan) : null
+  if (againstAdvice) {
+    plan.weeks = plan.weeks.map((w) => ({
+      ...w,
+      days: w.days.map((d) => (d.type === 'race' ? { ...d, walk_breaks: true, against_advice: true } : d)),
+    }))
+  }
+
   // 7
   const explain = explainPlan({
     classification: buildClassification, feasibility, plan, notices: gate.notices, goalPlan: inputs.goalPlan,
+    againstAdvice,
   })
+  // The against-advice sentences travel as a notice, so they close the AI's intro too.
+  const notices = againstAdvice ? explain.notices : gate.notices
 
   const planning = {
     version: PIPELINE_VERSION,
@@ -214,6 +228,7 @@ export function runPlanningPipeline({ profile = {}, runs = [], memories = [], an
     gate: { restrictions: gate.restrictions, notices: gate.notices, rules: gate.rules },
     limits: { values: buildLimits.values, rules: Object.fromEntries(Object.entries(buildLimits.sources).map(([k, v]) => [k, v.rule])) },
     explain,
+    ...(againstAdvice ? { against_advice: againstAdvice } : {}),
     ...(goal ? { goal_plan: goal } : {}),
   }
 
@@ -222,6 +237,7 @@ export function runPlanningPipeline({ profile = {}, runs = [], memories = [], an
     ...w,
     scenario,
     feasibility_verdict: feasibility.verdict,
+    ...(againstAdvice ? { against_advice: true } : {}),
     ...(goal ? { goal_plan: goal } : {}),
     planning,
   }))
@@ -235,9 +251,12 @@ export function runPlanningPipeline({ profile = {}, runs = [], memories = [], an
     startDate: inputs.startDate,
     goal: adopted,
     originalGoal: feasibility.original_goal,
-    proposal: feasibility.verdict === 'unsafe' ? { alternatives: feasibility.alternatives, adopted } : null,
+    proposal: feasibility.verdict === 'unsafe'
+      ? { alternatives: feasibility.alternatives, adopted, override_allowed: feasibility.override_allowed }
+      : null,
+    againstAdvice,
     fallbackTarget: feasibility.fallback_target,
-    notices: gate.notices,
+    notices,
     explain,
     planning,
     weeks,
@@ -245,6 +264,7 @@ export function runPlanningPipeline({ profile = {}, runs = [], memories = [], an
     skeleton: {
       scenario,
       verdict: feasibility.verdict,
+      against_advice: againstAdvice,
       unit: plan.unit,
       explain,
       vdot: assessment.vdot,
@@ -274,3 +294,4 @@ export function runPlanningPipeline({ profile = {}, runs = [], memories = [], an
 }
 
 export { collectInputs, assessFitness, classifyRunner, checkFeasibility, clarifyQuestions, buildPlan, explainPlan }
+export { OVERRIDE_GOAL, overrideChosen }

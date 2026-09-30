@@ -20,7 +20,8 @@ the only part of the path the user does not control:
 | Live trial or active subscription | a free user spending against the account |
 | 30 calls per user per rolling hour | one signed-up user running up the bill |
 | Model allow-list | using the proxy as a free general-purpose LLM endpoint |
-| Caps on messages, payload size, output tokens | expensive single requests |
+| Caps on messages and payload size | expensive single requests |
+| Reply length capped per kind of call (`limits.js`): prose at a chat reply's 1024 tokens, JSON by kind (memory 400, week rewrite 2048, plan 6000) | a manipulated prompt producing long off-topic output |
 | Errors carry a message + code, never internals | leaking stack traces or upstream detail |
 
 The entitlement check is what makes the paywall real. `hasPremium()` in the

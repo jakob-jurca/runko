@@ -15,6 +15,7 @@ import Paywall from '../components/Paywall'
 import { FullScreenSpinner } from '../components/Spinner'
 import { PaperPlaneRight, Trash } from '@phosphor-icons/react'
 import { t } from '../core/strings'
+import { friendlyError } from '../core/errors'
 
 const SUGGESTIONS = t.chat.suggestions
 
@@ -79,7 +80,7 @@ export default function Chat() {
         setHasMore(msgs.length >= PAGE_SIZE)
         setCtx({ plans, currentWeek: currentWeekNumber(plans), workouts, memories })
       })
-      .catch((err) => setError(err.message))
+      .catch((err) => setError(friendlyError(err)))
       .finally(() => !cancelled && setLoading(false))
     return () => {
       cancelled = true
@@ -128,7 +129,7 @@ export default function Chat() {
         if (el) el.scrollTop += el.scrollHeight - heightBefore
       })
     } catch (err) {
-      setError(err.message)
+      setError(friendlyError(err))
     } finally {
       setLoadingEarlier(false)
     }
@@ -142,7 +143,7 @@ export default function Chat() {
       setHasMore(false)
       setConfirmClear(false)
     } catch (err) {
-      setError(err.message)
+      setError(friendlyError(err))
     } finally {
       setClearing(false)
     }
