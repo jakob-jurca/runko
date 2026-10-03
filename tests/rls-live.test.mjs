@@ -127,7 +127,7 @@ async function audit() {
   /** Remove both users' rows. Also run first, for rows a crashed run left behind. */
   async function cleanup() {
     for (const u of [A, B]) {
-      for (const table of ['coach_memory', 'chat_messages', 'workouts', 'training_plans', 'health_profiles']) {
+      for (const table of ['coach_memory', 'chat_messages', 'workouts', 'training_plans', 'health_profiles', 'training_breaks']) {
         await u.sb.from(table).delete().eq('user_id', u.id)
       }
       await u.sb.from('users').delete().eq('id', u.id)
@@ -140,6 +140,9 @@ async function audit() {
   // visible before the verdict, never a silent pass.
   const probe = await A.sb.from('health_profiles').select('user_id').limit(1)
   const v7Missing = probe.error?.code === 'PGRST205' || probe.error?.code === '42P01'
+  // migration_v9 (paid plans) likewise.
+  const probe9 = await A.sb.from('subscriptions').select('user_id').limit(1)
+  const v9Missing = probe9.error?.code === 'PGRST205' || probe9.error?.code === '42P01'
 
   // --- A writes one row in every table --------------------------------------
   const created = {}
@@ -334,6 +337,35 @@ async function audit() {
     check("health_profiles: A still sees its own row, unmodified by B", mine.data?.sex === 'female')
   }
 
+  // --- paid plans (migration_v9): nobody grants themselves access ----------
+  if (!v9Missing) {
+    const forge = await A.sb.from('subscriptions').insert({ user_id: A.id, comped: true, status: 'active', tier: 'pro' }).select()
+    check('subscriptions: A cannot give itself Pro (insert)', refused(forge))
+    const bump = await A.sb.from('subscriptions').update({ comped: true }).eq('user_id', A.id).select()
+    check('subscriptions: A cannot give itself Pro (update)', refused(bump))
+    const anySub = await B.sb.from('subscriptions').select('*').neq('user_id', B.id)
+    check("subscriptions: B reads no one else's subscription", (anySub.data ?? []).length === 0)
+    for (const table of ['plan_builds', 'stripe_events']) {
+      const read = await A.sb.from(table).select('*')
+      check(`${table}: a signed-in user reads nothing`, (read.data ?? []).length === 0)
+    }
+    check('plan_builds: a signed-in user cannot reserve a build directly',
+      refused(await A.sb.from('plan_builds').insert({ user_id: A.id, tier: 'pro' }).select()))
+    check('weekly_reviews: a signed-in user cannot write a review',
+      refused(await A.sb.from('weekly_reviews').insert({ user_id: A.id, week_start: '2026-09-21', status: 'ready', content: {} }).select()))
+
+    const tb = await A.sb.from('training_breaks').insert({
+      user_id: A.id, kind: 'illness', days: 3, start_date: '2026-10-05', rest_until: '2026-10-07', return_until: '2026-10-10',
+    }).select().single()
+    check(detail('training_breaks: A can record its own break', tb.error), tb.data?.user_id === A.id)
+    const bSees = await B.sb.from('training_breaks').select('*').eq('user_id', A.id)
+    check("training_breaks: B cannot read A's break", (bSees.data ?? []).length === 0)
+    check("training_breaks: B cannot change A's break",
+      refused(await B.sb.from('training_breaks').update({ days: 60 }).eq('user_id', A.id).select()))
+    check('training_breaks: B cannot insert a break owned by A',
+      refused(await B.sb.from('training_breaks').insert({ user_id: A.id, kind: 'injury', days: 1, start_date: '2026-10-05', rest_until: '2026-10-05', return_until: '2026-10-10' }).select()))
+  }
+
   // --- RLS must not over-block: A still sees its own data -------------------
   for (const { table, ownerCol } of TABLES) {
     const res = await A.sb.from(table).select('*')
@@ -348,7 +380,10 @@ async function audit() {
   await cleanup()
 
   const result = summary('rls-live')
-  if (v7Missing) result.skipped = 'health_profiles and the safety columns — run supabase/migration_v7.sql'
+  const skipped = []
+  if (v7Missing) skipped.push('health_profiles and the safety columns — run supabase/migration_v7.sql')
+  if (v9Missing) skipped.push('subscriptions, plan_builds, weekly_reviews, training_breaks — run supabase/migration_v9.sql')
+  if (skipped.length) result.skipped = skipped.join('; ')
   return result
 }
 

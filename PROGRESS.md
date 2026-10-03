@@ -164,6 +164,17 @@ and for plan builds); the app only shows what `fetchAccess()` returns.
 - Stage 8 (trial reminder, DISABLED): functions/trial-reminder + _shared/trial-reminder.js. Daily run, emails
   trials ending in 24-48 h once per trial end (subscriptions.trial_reminder_sent_for), Slovenian, via Resend.
   Does nothing until TRIAL_REMINDER_ENABLED=true; see Before launch.
+- Stage 9 (tests): entitlements, stripe (fixtures in tests/fixtures/stripe/), pricing (incl. landing),
+  usage-limits, health-break, weekly-review, trial-reminder; rls-schema knows the server-only tables;
+  rls-live checks the v9 tables once migration_v9 is run (listed as SKIPPED until then). 2557 checks pass.
+
+### Paid plans: waiting on the owner (nothing is deployed)
+1. Run supabase/migration_v9.sql in the SQL Editor.
+2. Stripe test key, then STRIPE_CHECKLIST.md steps 3-4 (setup script, secrets, deploy ai-proxy, entitlement,
+   billing, stripe-webhook --no-verify-jwt). ai-proxy MUST be redeployed together with entitlement: the app now
+   sends kind `review` and plan `build_id`, and reads its access from `entitlement`.
+3. Comp the founder and the 2 testers (SQL above).
+4. Manual tests: STRIPE_CHECKLIST.md step 5.
 
 ### Comped accounts (Pro without paying)
 In the Supabase SQL Editor, once per person (after migration_v9):
