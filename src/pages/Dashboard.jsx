@@ -15,7 +15,7 @@ import { motivationalMessage } from '../core/ai'
 import { adaptCurrentWeekIfNeeded, getHydratedPlans } from '../core/plan'
 import { PHASE_INTENT } from '../core/periodization'
 import { phaseStyle } from './Plan'
-import { trialDaysLeft, isTrial } from '../core/subscription'
+import { trialDaysLeft, isTrial, planBuildNote } from '../core/subscription'
 import ProgressRing from '../components/ProgressRing'
 import WorkoutCard from '../components/WorkoutCard'
 import { GoalProgressCard, BlockEndCard } from '../components/GoalProgress'
@@ -454,6 +454,7 @@ export default function Dashboard() {
               <ArrowsClockwise size={16} />
               {t.dashboard.createNewPlan}
             </button>
+            {planBuildNote(access) && <p className="mt-1 max-w-sm text-xs leading-relaxed text-zinc-500">{planBuildNote(access)}</p>}
           </div>
         </section>
       )}

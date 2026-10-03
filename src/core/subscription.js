@@ -97,6 +97,27 @@ export function formatDateSl(iso) {
   return new Date(iso).toLocaleDateString('sl-SI', { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
+/**
+ * Why a new plan cannot be built now, and from when; null when it can.
+ * Start runners also hear that Pro has no such wait.
+ */
+export function planBuildNote(access) {
+  const pb = access?.planBuild
+  if (!pb || pb.allowed) return null
+  const L = t.billing.limits
+  if (pb.reason === 'trial_used') return L.planTrial
+  if (pb.reason === 'fair_use') return L.planFairUse
+  if (pb.reason === 'monthly') return `${L.planNext(formatDateSl(pb.nextAt))} ${L.planMoreOnPro}`
+  return null
+}
+
+/** Coach messages left today, or null when the count is unknown. */
+export function chatLeft(access) {
+  const c = access?.chat
+  if (!c || !Number.isFinite(c.limit)) return null
+  return Math.max(0, c.limit - (c.used ?? 0))
+}
+
 // ---------------------------------------------------------------------------
 // Stripe: Checkout, the Customer Portal, and the return from Checkout
 // ---------------------------------------------------------------------------

@@ -19,6 +19,18 @@ const weeksSl = (n) =>
   `${n} ${n % 100 === 1 ? 'teden' : n % 100 === 2 ? 'tedna' : n % 100 === 3 || n % 100 === 4 ? 'tedne' : 'tednov'}`
 const kmSl = (km) => String(km).replace('.', ',')
 
+/**
+ * Slovenian plural by count: [1, 2, 3-4, 5+], with 101, 102, 103 as 1, 2, 3.
+ * slPlural(3, ['sporočilo', 'sporočili', 'sporočila', 'sporočil']) -> 'sporočila'
+ */
+export function slPlural(n, [one, two, few, many]) {
+  const m = Math.abs(n) % 100
+  if (m === 1) return one
+  if (m === 2) return two
+  if (m === 3 || m === 4) return few
+  return many
+}
+
 export const t = {
   // -------------------------------------------------------------------------
   // Shared
@@ -1035,6 +1047,17 @@ export const t = {
     choosePlan: 'Izberi paket',
     opening: 'Odpiram …',
     confirming: 'Potrjujem naročnino …',
+    limits: {
+      chatLeft: (n) => `Danes še ${n} ${slPlural(n, ['sporočilo', 'sporočili', 'sporočila', 'sporočil'])} trenerju.`,
+      chatDone: 'Današnja sporočila trenerju so porabljena. Nova so na voljo od polnoči.',
+      chatMoreOnPro: 'S paketom Pro imaš 50 sporočil na dan. Paket zamenjaš v Nastavitvah pod Naročnina.',
+      planNext: (date) => `Nov načrt lahko sestaviš ${date}.`,
+      planTrial: 'Med preizkusom lahko sestaviš en načrt. Ko se naročnina začne, lahko sestaviš novega.',
+      planFairUse: 'Danes si sestavil(a) že veliko načrtov. Nov načrt lahko sestaviš jutri.',
+      planMoreOnPro: 'S paketom Pro lahko nov načrt sestaviš kadarkoli.',
+      planLimitTitle: 'Nov načrt še ni na voljo',
+      planLimitBack: 'Nazaj',
+    },
     paywall: {
       titleNew: 'Izberi svoj paket',
       titleEnded: 'Tvoj dostop se je iztekel',

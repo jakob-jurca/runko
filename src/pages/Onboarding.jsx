@@ -5,7 +5,8 @@ import { saveProfile, addWorkout, getWorkouts, addDaysISO, todayISO } from '../c
 import { GOALS, BLOCK_WEEKS, goalsOffered } from '../core/planning/goals'
 import { OVERRIDE_GOAL } from '../core/planning/feasibility'
 import { recentVolume } from '../core/goal-progress'
-import { createInitialPlan, previewPlan, ClarificationNeededError, PlanBlockedError } from '../core/plan'
+import { createInitialPlan, previewPlan, ClarificationNeededError, PlanBlockedError, PlanLimitError } from '../core/plan'
+import { planBuildNote } from '../core/subscription'
 import {
   parseDuration, targetTimeFromParts, targetTimeToParts, targetTimeHasSeconds, targetPaceCheck,
 } from '../core/periodization'
@@ -118,10 +119,11 @@ function prefill(draftValue, profileValue, fallback = '') {
  * only cleared once a plan has actually been built.
  *
  * The same component serves the later rebuild (/onboarding?rebuild=1),
- * which is limited to once a month — see core/plan.js.
+ * which the runner's plan limits (Start once a month, trial one plan): the
+ * server decides, core/plan.js asks it.
  */
 export default function Onboarding() {
-  const { profile, refreshProfile } = useAuth()
+  const { profile, access, refreshProfile, refreshAccess } = useAuth()
   const navigate = useNavigate()
 
   // Restore any in-progress onboarding once, then feed the initial states.
@@ -415,11 +417,17 @@ export default function Onboarding() {
       await createInitialPlan(savedProfile, intake, finalAnswers)
       clearOnboardingProgress()
       await refreshProfile()
+      // The build was counted: the next one's date changed.
+      refreshAccess().catch(() => {})
       navigate('/')
     } catch (err) {
       if (err instanceof PlanBlockedError) {
         setPreview({ status: 'blocked', block: err.block })
         setStep('blocked')
+      } else if (err instanceof PlanLimitError) {
+        // The limit changed since the flow opened (another tab built one).
+        refreshAccess().catch(() => {})
+        setError(friendlyError(err))
       } else if (err instanceof ClarificationNeededError) {
         // The saved profile turned up something the preview did not (coach
         // memory, logged runs): ask rather than guess.
@@ -430,6 +438,21 @@ export default function Onboarding() {
       }
       setBuilding(false)
     }
+  }
+
+  // A rebuild the runner's plan does not allow yet: say when, before any
+  // questions are asked. (A first plan is always allowed.)
+  const limitNote = rebuilding ? planBuildNote(access) : null
+  if (limitNote && !building) {
+    return (
+      <main className="mx-auto flex min-h-[100dvh] max-w-md flex-col justify-center px-4 py-10 animate-fade-up sm:px-6">
+        <h1 className="text-2xl font-bold tracking-tight">{t.billing.limits.planLimitTitle}</h1>
+        <p className="mt-3 leading-relaxed text-zinc-400">{limitNote}</p>
+        <button onClick={() => navigate(-1)} className="btn-primary mt-8 w-full">
+          {t.billing.limits.planLimitBack}
+        </button>
+      </main>
+    )
   }
 
   if (building) return <FullScreenSpinner message={t.onboarding.building} />

@@ -137,9 +137,39 @@ export function dailyLimit(kind, tier) {
   return OTHER_PER_DAY[kind] ?? 0
 }
 
+/** The coach's day is over. Start runners hear that Pro has more room. */
+export function chatLimitMessage(tier, limit = chatLimit(tier)) {
+  const base = `Danes sva se pogovorila že ${limit}-krat, kolikor jih omogoča tvoj paket. Jutri spet, od polnoči naprej.`
+  return tier === 'start' ? `${base} S paketom Pro imaš ${CHAT_PER_DAY.pro} sporočil na dan.` : base
+}
+
+/**
+ * The ai-proxy's daily check: null when the call may go ahead, otherwise the
+ * refusal to send. `usedToday` counts billable calls of this kind since
+ * midnight in Ljubljana.
+ */
+export function dailyLimitRefusal({ kind, tier, usedToday }) {
+  const limit = dailyLimit(kind, tier)
+  if (!Number.isFinite(limit) || usedToday < limit) return null
+  if (kind === 'chat' || kind === 'memory') {
+    return { status: 429, code: 'chat_limit', message: chatLimitMessage(tier, limit), limit }
+  }
+  return { status: 429, code: 'daily_limit', message: 'Za danes je trener naredil dovolj. Jutri spet.', limit }
+}
+
 // ---------------------------------------------------------------------------
 // Plan builds
 // ---------------------------------------------------------------------------
+
+/**
+ * May a plan AI call run under this reserved build? It must exist (for this
+ * runner: the caller filters by user), be recent, and have calls left.
+ */
+export function planBuildUsable(build, now = new Date()) {
+  if (!build) return false
+  if (now.getTime() - new Date(build.created_at).getTime() > PLAN_BUILDS.ttlMs) return false
+  return (build.ai_calls ?? 0) < PLAN_BUILDS.aiCallsPerBuild
+}
 
 /**
  * May the runner build a new plan now, and if not, from when?

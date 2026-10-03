@@ -1,5 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { chatLeft } from '../core/subscription'
 import {
   getChatMessages,
   addChatMessage,
@@ -37,7 +39,7 @@ const PAGE_SIZE = 50
  * error — memory is an enhancement, not a feature the chat depends on.
  */
 export default function Chat() {
-  const { profile } = useAuth()
+  const { profile, access, refreshAccess } = useAuth()
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [thinking, setThinking] = useState(false)
@@ -191,8 +193,16 @@ export default function Chat() {
       ])
     } finally {
       setThinking(false)
+      // The server counted it (or not, for an off-topic message): re-read
+      // the day's count for the line above the input.
+      refreshAccess().catch(() => {})
     }
   }
+
+  // Messages left today, shown when only a few remain. At zero the input is
+  // closed until midnight: the server would refuse the message anyway.
+  const left = chatLeft(access)
+  const limitReached = left === 0
 
   return (
     <div className="mx-auto flex h-[calc(100dvh-5.5rem-env(safe-area-inset-bottom))] max-w-2xl flex-col md:h-[100dvh]">
@@ -277,6 +287,20 @@ export default function Chat() {
         <div ref={bottomRef} />
       </div>
 
+      {left !== null && left <= 3 && (
+        <p className="border-t border-surface-line px-4 pt-3 text-xs leading-relaxed text-zinc-400 sm:px-6" role="status">
+          {limitReached ? t.billing.limits.chatDone : t.billing.limits.chatLeft(left)}
+          {limitReached && access?.tier === 'start' && (
+            <>
+              {' '}
+              <Link to="/settings" className="text-primary-light underline underline-offset-4">
+                {t.billing.limits.chatMoreOnPro}
+              </Link>
+            </>
+          )}
+        </p>
+      )}
+
       <form
         onSubmit={(e) => {
           e.preventDefault()
@@ -294,10 +318,11 @@ export default function Chat() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           enterKeyHint="send"
+          disabled={limitReached}
         />
         <button
           type="submit"
-          disabled={!input.trim() || thinking}
+          disabled={!input.trim() || thinking || limitReached}
           className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary text-white transition hover:bg-primary-dark active:scale-95 disabled:bg-surface-raised disabled:text-zinc-600"
           aria-label={t.chat.send}
         >

@@ -136,6 +136,14 @@ and for plan builds); the app only shows what `fetchAccess()` returns.
   the feature matrix live in src/core/pricing.js (shared with the landing page; tests/pricing.test.mjs checks
   them against Stripe's prices and the server's limits). Removed: the free tier's static quote, the "Premium"
   hints in Dashboard / Log / Plan, the Chat paywall. Nothing is deleted when access ends.
+- Stage 4 (limits): chat 10/50 a day in the ai-proxy (`chat_limit`, Slovenian message; Start hears about Pro;
+  off-topic replies never reach the proxy so never count; a model fallback is not billed twice). Chat shows
+  "Danes še N sporočil" from 3 left and closes the input at 0. Plan builds: core/plan.js asks the
+  `entitlement` function to reserve one (plan_builds) after the pipeline and before the AI call; the proxy
+  describes a plan only under a fresh reserved build (max 4 calls, 1 hour). Start once a month, Pro 5 a day
+  (hidden), trial 1 plan. Onboarding (rebuild), Dashboard and Settings say when the next build is possible.
+  The old client-side PLAN_LIMIT_ENABLED switch is gone. Known gap: training_plans rows are still written by
+  the client, so someone bypassing the app could save a plan without the AI text; the AI cost is protected.
 
 ### Comped accounts (Pro without paying)
 In the Supabase SQL Editor, once per person (after migration_v9):

@@ -118,6 +118,11 @@ wrong screens.
   `none` before onboarding and on every tab. Remove the free tier: the static "Misel dneva" quote,
   `t.paywall.dashboardLocked` / `logLocked` / `planLocked` hints, the chat paywall. Old `t.paywall`
   strings can go once mobile no longer uses them.
+- Limits: chat shows `t.billing.limits.chatLeft(chatLeft(access))` from 3 left and closes the input at
+  0 (web src/pages/Chat.jsx); call `refreshAccess()` after each message. Plan builds go through the
+  server now (core/plan.js already does it for mobile too); onboarding rebuild should show
+  `planBuildNote(access)` instead of the questions when a build is not allowed, and catch
+  `PlanLimitError`.
 - Settings: "Naročnina" section as on the web (src/pages/Settings.jsx `Subscription`, strings
   `t.billing`).
 

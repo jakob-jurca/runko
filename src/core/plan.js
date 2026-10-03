@@ -19,9 +19,8 @@
  *  - Free: the same calculated skeleton with built-in descriptions. Still
  *    fully personalized — only the wording is generic.
  *
- * Plan rebuilds are currently UNLIMITED. The once-a-month limit is still
- * implemented and users.last_plan_created_at is still written on every build;
- * see PLAN_LIMIT_ENABLED below to switch it back on without a migration.
+ * How often a plan may be built depends on the runner's plan (Start, Pro,
+ * trial) and is decided by the server: see reservePlanBuild below.
  */
 import { describePlanSkeleton, adaptWeeklyPlan } from './ai'
 import { runPlanningPipeline } from './planning/index.js'
@@ -47,70 +46,40 @@ import {
   HEALTH_FIELDS,
 } from './db'
 import { getMemories } from './memory'
+import { callFunction } from './subscription'
 import { IS_DEV } from './env'
 
 const DEBUG = IS_DEV
 
 // ---------------------------------------------------------------------------
-// Rebuild limit — CURRENTLY DISABLED
+// Plan-build limits — decided by the server
 // ---------------------------------------------------------------------------
 
 /**
- * Master switch for the once-a-month rebuild limit.
- *
- * Turned OFF: runners can build a new plan whenever they like. The machinery
- * below is intact and `users.last_plan_created_at` is still written on every
- * build, so flipping this back to `true` re-enables the limit immediately —
- * no migration, no data backfill, and the dates stay correct for everyone who
- * built a plan while it was off.
+ * Start: one new plan a month. Pro: unlimited (a hidden fair-use cap of 5 a
+ * day). Trial: one plan for the whole trial. The rule is
+ * supabase/functions/_shared/entitlements.js planBuildStatus; the
+ * `entitlement` function reserves a build (plan_builds) and the ai-proxy
+ * describes a plan only under a reserved build. The app shows
+ * access.planBuild ({ allowed, reason, nextAt }) to say when the next one is.
  */
-export const PLAN_LIMIT_ENABLED = false
-
-/** How long the limit blocks a rebuild for, when enabled. */
-const PLAN_LIMIT_MONTHS = 1
-
-/**
- * When the runner may next rebuild their plan, or null if they may right now
- * (the limit is off, or they have never built one).
- */
-export function nextPlanAllowedAt(profile) {
-  if (!PLAN_LIMIT_ENABLED) return null
-  if (!profile?.last_plan_created_at) return null
-  const next = new Date(profile.last_plan_created_at)
-  next.setMonth(next.getMonth() + PLAN_LIMIT_MONTHS)
-  return next
-}
-
-/** Is the runner allowed to generate a new plan today? Always true for now. */
-export function canCreatePlan(profile) {
-  const next = nextPlanAllowedAt(profile)
-  return !next || next <= new Date()
-}
-
-/** "12 October 2026" — the date the next rebuild unlocks, for the UI. */
-export function nextPlanAllowedLabel(profile) {
-  const next = nextPlanAllowedAt(profile)
-  if (!next) return null
-  return next.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
-}
-
-/** Whole days until the next rebuild unlocks (0 when it already has). */
-export function daysUntilNextPlan(profile) {
-  const next = nextPlanAllowedAt(profile)
-  if (!next) return 0
-  return Math.max(0, Math.ceil((next - new Date()) / 86_400_000))
-}
-
-/** Thrown by createInitialPlan when the once-a-month limit blocks a rebuild. */
 export class PlanLimitError extends Error {
-  constructor(profile) {
-    const label = nextPlanAllowedLabel(profile)
-    super(
-      `You can rebuild your training plan once a month. Your next rebuild unlocks on ${label} ` +
-        `(${daysUntilNextPlan(profile)} days) — until then your coach keeps adapting the plan you have.`
-    )
+  constructor(message, { reason = null, nextAt = null } = {}) {
+    super(message)
     this.name = 'PlanLimitError'
-    this.nextAllowedAt = nextPlanAllowedAt(profile)
+    this.reason = reason
+    this.nextAllowedAt = nextAt ? new Date(nextAt) : null
+  }
+}
+
+/** Ask the server for one plan build. Throws PlanLimitError when the plan's limit says no. */
+async function reservePlanBuild() {
+  try {
+    const { buildId } = await callFunction('entitlement', { action: 'start_plan_build' })
+    return buildId
+  } catch (err) {
+    if (err.code === 'plan_limit') throw new PlanLimitError(err.message, { reason: err.reason, nextAt: err.nextAt })
+    throw err
   }
 }
 
@@ -343,19 +312,16 @@ export async function previewPlan(profile, intake = null, answers = {}) {
  * every later rebuild ("Create my plan" / "Create new plan").
  *
  * Persists one row per week, stamps users.last_plan_created_at and returns
- * the saved weeks.
+ * the saved weeks. The server must first agree to the build (Start once a
+ * month, Pro 5 a day, trial one plan).
  *
  * @param {object} profile
  * @param {object|null} intake - onboarding intake (runs typed in, etc.)
  * @param {object} answers - replies to the pipeline's follow-up questions
  * @throws {ClarificationNeededError} when critical information is missing
- * @throws {PlanLimitError} only if PLAN_LIMIT_ENABLED is turned back on.
+ * @throws {PlanLimitError} when the runner's plan allows no new build yet
  */
 export async function createInitialPlan(profile, intake = null, answers = {}) {
-  // No-op while PLAN_LIMIT_ENABLED is false; kept so re-enabling the limit
-  // is a one-line change.
-  if (!canCreatePlan(profile)) throw new PlanLimitError(profile)
-
   const [runs, memories, health] = await Promise.all([
     gatherRuns(profile, intake), gatherMemories(profile), gatherHealth(profile),
   ])
@@ -379,14 +345,12 @@ export async function createInitialPlan(profile, intake = null, answers = {}) {
     )
   }
 
-  // --- 2. The AI writes the words — one call ----------------------------------
-  // Recorded on the saved plan so the page can say the words are the
-  // built-in ones. A free user's plan is still fully calculated for them —
-  // only the prose is generic — and silently serving stock text as the
-  // coach's own made the free tier look like a failed premium one.
-  // Access is the server's call: the proxy refuses a runner without one, and
-  // the plan then keeps the built-in wording rather than failing.
-  const described = await describePlanSkeleton(skeleton, { profile, memories, language: 'sl' })
+  // --- 2. The server agrees to the build, the AI writes the words — one call --
+  // Reserved only now, after the pipeline: a question or a refused goal must
+  // not use up a Start runner's build for the month.
+  const buildId = await reservePlanBuild()
+  // If the AI fails, the plan keeps the built-in wording rather than failing.
+  const described = await describePlanSkeleton(skeleton, { profile, memories, language: 'sl', buildId })
   const aiDescribed = described.described !== false
 
   // --- 3. Persist -----------------------------------------------------------
@@ -417,7 +381,7 @@ export async function createInitialPlan(profile, intake = null, answers = {}) {
     )
   }
 
-  // Starts the once-a-month clock for the next rebuild.
+  // When the current plan was built (the plan_builds row is what the server counts).
   await markPlanCreated(profile.id)
   return saved
 }

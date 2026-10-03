@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { openPortal, formatDateSl } from '../core/subscription'
+import { openPortal, formatDateSl, planBuildNote } from '../core/subscription'
 import { getMemories, deleteMemory } from '../core/memory'
 import { goalLabel } from '../core/periodization'
 import { maxHeartRate } from '../core/heart-rate'
@@ -115,6 +115,7 @@ export default function Settings() {
         >
           {t.settings.createNewPlan}
         </button>
+        {planBuildNote(access) && <p className="mt-2 text-xs leading-relaxed text-zinc-500">{planBuildNote(access)}</p>}
       </section>
 
       {/* Naročnina: what the server says, and the Stripe portal for the rest */}

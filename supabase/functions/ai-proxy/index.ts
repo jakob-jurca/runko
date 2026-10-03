@@ -26,7 +26,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 // @ts-ignore — plain JS, shared with the app's test suite.
 import { cappedMaxTokens } from './limits.js'
 // @ts-ignore — plain JS, shared with the app and its tests.
-import { AI_KINDS, dailyLimit, startOfLocalDay } from '../_shared/entitlements.js'
+import { AI_KINDS, dailyLimit, dailyLimitRefusal, planBuildUsable, startOfLocalDay } from '../_shared/entitlements.js'
 import { loadAccess } from '../_shared/access.ts'
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
@@ -67,12 +67,6 @@ const json = (body: unknown, status = 200) =>
 /** Errors the client may show a user. Never leaks internals. */
 const fail = (status: number, message: string, code: string, extra: Record<string, unknown> = {}) =>
   json({ error: { message, code, ...extra } }, status)
-
-/** The coach's day is over. Start runners hear that Pro has more room. */
-function chatLimitMessage(tier: string, limit: number) {
-  const base = `Danes sva se pogovorila že ${limit}-krat, kolikor jih paket omogoča. Jutri spet, od polnoči naprej.`
-  return tier === 'start' ? `${base} S paketom Pro imaš 50 sporočil na dan.` : base
-}
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
@@ -178,11 +172,8 @@ Deno.serve(async (req: Request) => {
       console.error('ai-proxy: daily-limit lookup failed', todayErr.message)
       return fail(503, 'Storitev je trenutno preobremenjena. Poskusi čez nekaj minut.', 'rate_check_failed')
     }
-    if ((today ?? 0) >= perDay) {
-      return kind === 'chat' || kind === 'memory'
-        ? fail(429, chatLimitMessage(ent.tier, perDay), 'chat_limit', { limit: perDay })
-        : fail(429, 'Za danes je trener naredil dovolj. Jutri spet.', 'daily_limit')
-    }
+    const refusal = dailyLimitRefusal({ kind, tier: ent.tier, usedToday: today ?? 0 })
+    if (refusal) return fail(refusal.status, refusal.message, refusal.code, { limit: refusal.limit })
   }
 
   // --- 4. validate the request --------------------------------------------
@@ -225,6 +216,37 @@ Deno.serve(async (req: Request) => {
     max_tokens: maxTokens,
   }
   if (jsonMode) upstreamBody.response_format = { type: 'json_object' }
+
+  // --- 4b. a plan is described only under a build the server reserved ----
+  // The plan-build limits (Start once a month, Pro 5 a day, trial one plan)
+  // are decided when the `entitlement` function reserves the build; here a
+  // plan call must name that build, recent and with calls left (the app's
+  // model fallbacks and one stricter retry).
+  if (kind === 'plan') {
+    const buildId = String(body.build_id ?? '')
+    const refused = () =>
+      fail(403, 'Za nov načrt ga je treba sestaviti znova. Poskusi še enkrat.', 'plan_build_required')
+    if (!/^[0-9a-f-]{36}$/i.test(buildId)) return refused()
+    const { data: build, error: buildErr } = await admin
+      .from('plan_builds')
+      .select('id, created_at, ai_calls')
+      .eq('id', buildId)
+      .eq('user_id', user.id)
+      .maybeSingle()
+    if (buildErr) {
+      console.error('ai-proxy: plan build lookup failed', buildErr.message)
+      return fail(503, 'Storitev je trenutno preobremenjena. Poskusi čez nekaj minut.', 'rate_check_failed')
+    }
+    if (!planBuildUsable(build)) return refused()
+    // Counted only if nobody else counted it in between (two tabs).
+    const { data: bumped } = await admin
+      .from('plan_builds')
+      .update({ ai_calls: build.ai_calls + 1 })
+      .eq('id', build.id)
+      .eq('ai_calls', build.ai_calls)
+      .select('id')
+    if (!bumped?.length) return refused()
+  }
 
   // --- 5. record the call, then forward -----------------------------------
   // Recorded BEFORE the call so a failure upstream still counts against the

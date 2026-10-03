@@ -65,6 +65,9 @@ const estimateTokens = (text) => Math.ceil((text || '').length / 4)
 const FRIENDLY_QUOTA = t.errors.aiQuota
 const FRIENDLY_GENERIC = t.errors.aiGeneric
 
+/** Proxy refusals no retry can change; their message is shown as-is. */
+const FINAL_CODES = new Set(['rate_limited', 'not_premium', 'chat_limit', 'daily_limit', 'plan_build_required', 'bad_kind'])
+
 /** Human-readable message for any error thrown from this module. */
 export function friendlyAiMessage(err) {
   return err?.friendly || FRIENDLY_GENERIC
@@ -116,7 +119,7 @@ async function authToken() {
  * @param {number} [opts.maxTokens] - output token cap (plans need more room)
  * @returns {Promise<string>} model text output
  */
-async function callAi({ system, messages, json = false, maxTokens = OUTPUT_TOKENS.chat, kind = null }) {
+async function callAi({ system, messages, json = false, maxTokens = OUTPUT_TOKENS.chat, kind = null, extra = null }) {
   const token = await authToken()
   if (!token) {
     const err = new Error('No Supabase session — the AI proxy requires a signed-in user.')
@@ -170,7 +173,7 @@ async function callAi({ system, messages, json = false, maxTokens = OUTPUT_TOKEN
             Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ ...body, kind }),
+          body: JSON.stringify({ ...body, kind, ...(extra || {}) }),
         })
         raw = await res.text()
       } catch (networkErr) {
@@ -217,9 +220,13 @@ async function callAi({ system, messages, json = false, maxTokens = OUTPUT_TOKEN
       // 402 not_premium is equally final: the trial has ended, and no model
       // or budget changes that. Its message is the paywall's, written for a
       // runner, so it is shown as-is.
+      // The daily limits (chat_limit, daily_limit) and a plan described
+      // without a reserved build are just as final, and their messages are
+      // written for the runner too.
       const unauthenticated = status === 401 || code === 'unauthenticated'
-      if (unauthenticated || code === 'rate_limited' || code === 'not_premium') {
+      if (unauthenticated || FINAL_CODES.has(code)) {
         const stop = new Error(`ai-proxy ${code || status}: ${detail}`)
+        stop.code = code || null
         stop.friendly = unauthenticated
           ? // only our own message is fit to show; the gateway's is not
             (code === 'unauthenticated' && detail) || t.errors.aiSignedOut
@@ -997,7 +1004,7 @@ function paceLabel(minPerKm) {
  *
  * @returns {Promise<{weeks: Array, warnings: string[], intro: string, described: boolean}>}
  */
-export async function describePlanSkeleton(skeleton, { profile = {}, memories = [], language = 'sl' } = {}) {
+export async function describePlanSkeleton(skeleton, { profile = {}, memories = [], language = 'sl', buildId = null } = {}) {
   const constraints = skeleton.constraints || {}
   const languageName = language === 'sl' ? 'Slovenian' : 'English'
   const shapes = planShapes(skeleton)
@@ -1089,6 +1096,7 @@ Include all ${skeleton.total_weeks} weeks and all ${shapes.length} session keys.
       json: true,
       maxTokens: OUTPUT_TOKENS.plan,
       kind: 'plan',
+      extra: { build_id: buildId },
     })
   } catch (err) {
     if (DEBUG) console.warn('[plan] description call failed:', err.message)
@@ -1115,6 +1123,7 @@ Output a single JSON object with exactly the keys "intro", "weeks" and
         json: true,
         maxTokens: OUTPUT_TOKENS.plan_retry,
         kind: 'plan',
+        extra: { build_id: buildId },
       })
       described = parseDescribed(retry)
     } catch (err) {

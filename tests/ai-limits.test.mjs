@@ -37,7 +37,7 @@ check('index.ts caps max_tokens through limits.js', /cappedMaxTokens\(body\.max_
 check('no other ceiling is left in index.ts', !/MAX_OUTPUT_TOKENS/.test(proxy))
 const ai = fs.readFileSync('src/core/ai.js', 'utf8')
 const calls = ai.match(/(?<!function )callAi\(\{/g) || []
-const kinds = ai.match(/\n\s+kind: '\w+',\n\s+\}\)/g) || []
+const kinds = ai.match(/\n\s+kind: '\w+',\n(\s+extra: [^\n]+\n)?\s+\}\)/g) || []
 check(`every AI call names its kind (${kinds.length} of ${calls.length})`, calls.length >= 7 && kinds.length === calls.length)
 check('chat short-circuits off-topic messages before callAi', /classifyCoachMessage\(lastUser\) === 'out'[\s\S]{0,120}return offTopicReply/.test(ai))
 check('memory extraction skips off-topic messages', /classifyCoachMessage\(userMessage\) === 'out'\) return \[\]/.test(ai))
