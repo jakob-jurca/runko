@@ -6,7 +6,8 @@
  *   - Slovenian only.
  *   - No em dashes or en dashes. Use a period, a comma or a plain hyphen.
  *   - One label per intent: the signup button always says `cta.signup`.
- *   - Prices are placeholders ("€ X") until pricing is final.
+ *   - Prices and the plan features come from src/core/pricing.js, shared with
+ *     the app's paywall, so the page sells exactly what the app does.
  *
  * `mock` at the bottom holds the realistic data shown inside the phone and
  * the bento tiles (workouts, paces, chat). It is example data, not a claim.
@@ -78,7 +79,7 @@ export const trust = {
   items: [
     { key: 'science', value: 'Temelji na športni znanosti', text: 'Načrti sledijo preverjenim načelom treninga, AI trener pa združuje znanje priznanih strokovnjakov.' },
     { key: 'range', value: 'Od prvega kilometra do maratona', text: 'Za začetnike, rekreativce in tekmovalce.' },
-    { key: 'trial', value: '1 mesec brezplačno', text: 'Preizkusi celoten načrt in trenerja, preden se odločiš.' },
+    { key: 'trial', value: '14 dni brezplačno', text: 'Preizkusi celoten načrt in trenerja, preden se odločiš.' },
   ],
 }
 
@@ -238,7 +239,7 @@ export const comparison = {
     { label: 'Prilagojeno tebi', values: [true, false, true], notes: ['Tvoj cilj, forma in čas', 'Enak za vse', null] },
     { label: 'Se prilagaja sproti', values: [true, false, true], notes: ['Po vsakem vpisu', null, 'Ob posvetih'] },
     { label: 'Na voljo 24/7', values: [true, true, false], notes: [null, 'A ne odgovarja', 'V dogovorjenem času'] },
-    { label: 'Cena', values: ['€ X / mesec', 'Brezplačno', '€ X / mesec'], notes: [null, null, null] },
+    { label: 'Cena', values: ['Od 5,00 € / mesec', 'Brezplačno', 'Po dogovoru'], notes: ['Paket Start, letno', null, null] },
   ],
   yes: 'Da',
   no: 'Ne',
@@ -250,32 +251,19 @@ export const comparison = {
 export const pricing = {
   id: 'cene',
   title: 'Preprosto. Brez presenečenj.',
-  intro: 'Prvi mesec je brezplačen. Potem izbereš paket, ki ti ustreza.',
+  intro: 'Prvih 14 dni je brezplačnih. Potem izbereš paket, ki ti ustreza.',
   trial: {
-    title: '1 mesec brezplačno',
-    text: 'Celoten načrt, trener in vpisovanje treningov. Brez obveznosti.',
+    title: '14 dni brezplačno',
+    text: 'Vse funkcije paketa Pro. Ob koncu preizkusa se samodejno zaračuna izbrani paket, prekličeš pa lahko kadarkoli prej.',
   },
-  tiers: [
-    {
-      key: 'monthly',
-      name: 'Mesečno',
-      price: '€ X',
-      period: 'na mesec',
-      note: 'Prekineš kadar koli.',
-      featured: false,
-      features: ['Osebni načrt do tekme', 'Trener v klepetu', 'Vpis in pregled treningov'],
-    },
-    {
-      key: 'yearly',
-      name: 'Letno',
-      price: '€ X',
-      period: 'na leto',
-      note: 'Za celo sezono tekem.',
-      badge: 'Najbolj ugodno',
-      featured: true,
-      features: ['Vse iz mesečnega paketa', 'Več zaporednih ciljev in tekem', 'Prihranek v primerjavi z mesečnim'],
-    },
-  ],
+  toggleLabel: 'Način plačila',
+  yearly: 'Letno',
+  monthly: 'Mesečno',
+  perMonth: '/ mesec',
+  billedYearly: (amount) => `Plačilo ${amount}`,
+  billedMonthly: 'Plačilo vsak mesec',
+  featuredBadge: 'Največ trenerja',
+  // Prices, savings, the plans and their features: src/core/pricing.js.
 }
 
 // ---------------------------------------------------------------------------
@@ -311,8 +299,12 @@ export const faq = {
       a: 'Runko je še vedno prava izbira, saj pripravi plan tudi za rekreacijo, zdravje in boljšo kondicijo.',
     },
     {
-      q: 'Kaj se zgodi po brezplačnem mesecu?',
-      a: 'Izbereš mesečni ali letni paket. Če ne izbereš nobenega, se načrt zaklene.',
+      q: 'Kaj se zgodi po 14 dneh?',
+      a: 'Ob koncu preizkusa se samodejno zaračuna izbrani paket. Če ga prej prekličeš, ne plačaš ničesar.',
+    },
+    {
+      q: 'Kako prekličem naročnino?',
+      a: 'Kadarkoli v Nastavitvah pod Naročnina, z enim klikom. Dostop ostane do konca plačanega obdobja.',
     },
     {
       q: 'So moji podatki varni?',
@@ -331,7 +323,7 @@ export const faq = {
 export const finalCta = {
   marquee: ['Tvoj cilj', 'Tvoj tempo', 'Tvoja tekma'],
   title: 'Naslednji tek je lahko prvi v pravem načrtu.',
-  text: 'Nastavitev traja nekaj minut. Prvi mesec je brezplačen.',
+  text: 'Nastavitev traja nekaj minut. Prvih 14 dni je brezplačnih.',
 }
 
 // ---------------------------------------------------------------------------

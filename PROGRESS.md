@@ -156,6 +156,11 @@ and for plan builds); the app only shows what `fetchAccess()` returns.
   (kind `review`, JSON, 700 tokens) writes a short summary, 1-2 highlights and one focus. The ai-proxy claims
   weekly_reviews (runner, week) BEFORE calling, stores the result itself, refuses a second one (409), and
   releases the claim only if nothing was generated. Start sees a locked teaser. components/WeeklyReview.jsx.
+- Stage 7 (landing): Pricing section rebuilt from src/core/pricing.js (yearly / monthly switch, yearly selected,
+  Start and Pro with the feature matrix, founding note). "1 mesec brezplačno" -> "14 dni brezplačno" in the
+  trust strip, pricing band, final call and og:description; FAQ "Kaj se zgodi po 14 dneh?" and "Kako prekličem
+  naročnino?". The comparison table's "€ X" placeholders became "Od 5,00 € / mesec" (Runko) and "Po dogovoru"
+  (personal coach). Not checked in a browser (extension not connected): look at #cene at 375 px and 1440 px.
 
 ### Comped accounts (Pro without paying)
 In the Supabase SQL Editor, once per person (after migration_v9):

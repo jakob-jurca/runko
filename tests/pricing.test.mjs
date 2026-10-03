@@ -46,4 +46,22 @@ for (const file of ['src/pages/Dashboard.jsx', 'src/pages/Log.jsx', 'src/pages/C
   check(`${file}: no premium branch`, !/hasPremium|premium \?|!premium|t\.paywall\./.test(body))
 }
 
+console.log('\nThe landing page:')
+const { trust, pricing: landingPricing, faq, finalCta } = await import('../src/landing/content.js')
+const landingText = fs.readFileSync('src/landing/content.js', 'utf8') + fs.readFileSync('index.html', 'utf8')
+check('no "1 mesec brezplačno" / "prvi mesec" left', !/1 mesec brezplačno|prvi mesec|brezplačnem mesecu/i.test(landingText))
+check('trust strip: 14 dni brezplačno', trust.items.some((i) => i.value === '14 dni brezplačno'))
+check('share description: 14 dni brezplačno', /og:description"\s*content="[^"]*14 dni brezplačno/.test(fs.readFileSync('index.html', 'utf8')))
+check('pricing band: 14 dni brezplačno', landingPricing.trial.title === '14 dni brezplačno')
+check('final call: 14 days', /14 dni/.test(finalCta.text))
+check('no price placeholders left', !/€ X/.test(landingText))
+const q = (text) => faq.items.find((i) => i.q === text)
+check('FAQ: what happens after 14 days', q('Kaj se zgodi po 14 dneh?')?.a === 'Ob koncu preizkusa se samodejno zaračuna izbrani paket. Če ga prej prekličeš, ne plačaš ničesar.')
+check('FAQ: how to cancel', q('Kako prekličem naročnino?')?.a === 'Kadarkoli v Nastavitvah pod Naročnina, z enim klikom. Dostop ostane do konca plačanega obdobja.')
+const section = fs.readFileSync('src/landing/sections/Pricing.jsx', 'utf8')
+check('landing pricing: yearly preselected, monthly second', /useState\('year'\)/.test(section) && section.indexOf("id: 'year'") < section.indexOf("id: 'month'"))
+check('landing pricing: Start and Pro from src/core/pricing.js', /from '\.\.\/\.\.\/core\/pricing'/.test(section) && /FEATURES\.map/.test(section))
+check('landing pricing: founding member note', /FOUNDING_NOTE/.test(section) && /Ustanovni člani: -25 % prvo leto, omejeno na prvih 50/.test(fs.readFileSync('src/core/pricing.js', 'utf8')))
+check('pricing.js imports nothing (safe for the landing bundle)', !/^import /m.test(fs.readFileSync('src/core/pricing.js', 'utf8')))
+
 export default summary('pricing')
