@@ -2,22 +2,21 @@
 -- Runko — migration v9 (paid plans: entitlements, Stripe, limits)
 -- Paste into the Supabase SQL Editor and run once, after migration_v8.
 -- Run it BEFORE deploying the new Edge Functions: they read these tables.
+-- Safe to run while the old app is live (see section 1). Then, when the new
+-- app and functions go live: migration_v10_cutover.sql.
 --
 -- NEW STATEMENTS ONLY. Idempotent.
 -- =============================================================
 
 -- ---------------------------------------------------------------
--- 1. No more free trial without a card
+-- 1. Safe to run while the OLD app is still live
 -- ---------------------------------------------------------------
 --
--- Every signup used to get users.trial_end = now() + 1 month from a column
--- default. New accounts now start a 14-day trial through Stripe Checkout
--- (card required), so the default goes. Rows that already have a trial_end
--- keep it: those runners keep access until that date, then see the paywall
--- (supabase/functions/_shared/entitlements.js, source 'legacy_trial').
-alter table public.users alter column trial_end drop default;
-alter table public.users alter column trial_end drop not null;
-alter table public.users alter column subscription_status set default 'none';
+-- Everything in this file only ADDS: new tables, new columns with defaults,
+-- new indexes. Nothing the live app reads or writes changes, and every user
+-- keeps exactly the access they have today. The one change that would affect
+-- the old app, ending the automatic 1-month trial for NEW signups, is in
+-- migration_v10_cutover.sql, to run at the moment the new app goes live.
 
 -- ---------------------------------------------------------------
 -- 2. subscriptions — one row per runner, written only by the server
@@ -29,9 +28,12 @@ alter table public.users alter column subscription_status set default 'none';
 -- role (the Stripe webhook, the billing function) write it.
 create table if not exists public.subscriptions (
   user_id uuid primary key references auth.users (id) on delete cascade,
-  -- Pro access without paying (the founder and testers). Set by hand, see
+  -- Pro access without paying (testers), with Pro's limits. Set by hand, see
   -- PROGRESS.md "Comped accounts".
   comped boolean not null default false,
+  -- The app's creator: everything, no limits, never a paywall. Set only by
+  -- SQL (set_creator.sql); clients cannot write this table.
+  creator boolean not null default false,
   stripe_customer_id text unique,
   stripe_subscription_id text,
   -- Stripe's own subscription status: trialing, active, past_due, canceled...
@@ -52,6 +54,8 @@ create table if not exists public.subscriptions (
   last_event_at timestamptz,
   updated_at timestamptz not null default now()
 );
+
+alter table public.subscriptions add column if not exists creator boolean not null default false;
 
 alter table public.subscriptions enable row level security;
 

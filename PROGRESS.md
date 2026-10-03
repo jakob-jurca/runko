@@ -176,6 +176,33 @@ and for plan builds); the app only shows what `fetchAccess()` returns.
 3. Comp the founder and the 2 testers (SQL above).
 4. Manual tests: STRIPE_CHECKLIST.md step 5.
 
+- Creator role (after Stage 9): subscriptions.creator, set only by SQL (set_creator.sql). Tier `creator`:
+  no chat limit, no daily or hourly AI limits, no plan-build limit or fair-use cap, weekly review, never the
+  paywall. Different from comped (Pro with Pro's limits). The weekly review is still written once per week
+  (it is a summary of that week), and a single plan build still allows 4 AI calls.
+- Old no-card trials: unchanged until their trial_end, not comped. They keep rebuilding plans as before (Pro's
+  rule: no monthly limit, hidden 5 a day); chat is 50 a day like every trial.
+- Landing pricing redesigned with the two design skills (double-bezel cards, sliding yearly/monthly switch,
+  Pro wide and recommended, founding note, "Začni 14 dni brezplačno", three trial facts). Side by side from
+  1024 px, stacked with Pro first below. Checked in headless Chrome at 375 (no horizontal overflow), 768, 1440.
+
+### Migration order (production, old app still live)
+1. `supabase/migration_v9.sql` any time: it only adds tables, columns and indexes; the live app and every
+   current user are unaffected (tests/entitlements.test.mjs checks it never touches public.users).
+2. `set_creator.sql`.
+3. Stripe setup and secrets (STRIPE_CHECKLIST.md), then deploy ALL functions and push the app together.
+   The new ai-proxy alone would break plan text for the old app (it requires a plan build id).
+4. Right after: `supabase/migration_v10_cutover.sql` (new signups no longer get the automatic no-card trial).
+
+### Extend one user's trial by N days
+```sql
+update public.users
+   set trial_end = greatest(trial_end, now()) + make_interval(days => 14)  -- N days
+ where id = (select id from auth.users where email = 'name@example.com')
+returning trial_end;
+```
+From the later of the current end and today, so an expired trial restarts from today.
+
 ### Comped accounts (Pro without paying)
 In the Supabase SQL Editor, once per person (after migration_v9):
 ```sql

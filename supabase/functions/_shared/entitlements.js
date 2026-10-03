@@ -16,13 +16,15 @@
  *          trial for accounts created before it was retired; Pro features
  *          except that only ONE plan can be built
  *   start  Start subscription
- *   pro    Pro subscription, or `comped` (testers: Pro without paying)
+ *   pro    Pro subscription, or `comped` (testers: Pro without paying, Pro limits)
+ *   creator  the app's creator (subscriptions.creator, set only by SQL):
+ *          everything, no daily limits, no plan-build limits, never a paywall
  *
  * Daily limits reset at midnight Europe/Ljubljana, whatever the server's or
  * the phone's own clock zone.
  */
 
-export const TIERS = ['none', 'trial', 'start', 'pro']
+export const TIERS = ['none', 'trial', 'start', 'pro', 'creator']
 export const PAID_TIERS = ['start', 'pro']
 
 /** Coach chat messages per day (Europe/Ljubljana). */
@@ -97,6 +99,7 @@ export function entitlementOf({ trialEnd = null, sub = null } = {}, now = new Da
     hasCustomer: Boolean(sub?.stripe_customer_id),
   }
 
+  if (sub?.creator) return { ...base, tier: 'creator', source: 'creator' }
   if (sub?.comped) return { ...base, tier: 'pro', comped: true, source: 'comped' }
 
   if (status === 'active' && base.chosenTier) {
@@ -120,11 +123,14 @@ export function entitlementOf({ trialEnd = null, sub = null } = {}, now = new Da
 
 export const hasAccess = (tier) => tier !== 'none' && TIERS.includes(tier)
 
-/** Weekly progress review: Pro and trial. */
-export const reviewAllowed = (tier) => tier === 'pro' || tier === 'trial'
+/** Weekly progress review: Pro, trial and the creator. */
+export const reviewAllowed = (tier) => tier === 'pro' || tier === 'trial' || tier === 'creator'
 
-/** Coach chat messages a day for this tier. */
-export const chatLimit = (tier) => CHAT_PER_DAY[tier] ?? 0
+/** Coach chat messages a day for this tier (the creator: no limit). */
+export const chatLimit = (tier) => (tier === 'creator' ? Infinity : CHAT_PER_DAY[tier] ?? 0)
+
+/** The creator is exempt from every usage limit, the hourly one included. */
+export const unlimited = (tier) => tier === 'creator'
 
 /**
  * The daily ceiling for one kind of AI call, or Infinity when the kind is
@@ -132,6 +138,7 @@ export const chatLimit = (tier) => CHAT_PER_DAY[tier] ?? 0
  */
 export function dailyLimit(kind, tier) {
   if (!hasAccess(tier)) return 0
+  if (unlimited(tier)) return AI_KINDS.includes(kind) ? Infinity : 0
   if (kind === 'chat' || kind === 'memory') return chatLimit(tier)
   if (kind === 'plan' || kind === 'review') return Infinity
   return OTHER_PER_DAY[kind] ?? 0
@@ -180,16 +187,19 @@ export function planBuildUsable(build, now = new Date()) {
  * @param {string|null} [input.trialStartedAt] - only builds from here count
  *   toward the trial's one plan (null: all of them, the old trial)
  * @param {string|null} [input.trialEndsAt] - when a trial runner may build again
+ * @param {string|null} [input.source] - entitlementOf().source; the old no-card
+ *   trial ('legacy_trial') keeps building plans as it always could (Pro's rule)
  * @param {Date} [input.now]
  * @returns {{allowed: boolean, reason: string|null, nextAt: string|null}}
  */
-export function planBuildStatus({ tier, builds = [], trialStartedAt = null, trialEndsAt = null, now = new Date() }) {
+export function planBuildStatus({ tier, builds = [], trialStartedAt = null, trialEndsAt = null, source = null, now = new Date() }) {
   const times = builds.map((b) => new Date(b.created_at).getTime()).sort((a, b) => b - a)
   const yes = { allowed: true, reason: null, nextAt: null }
 
   if (!hasAccess(tier)) return { allowed: false, reason: 'no_access', nextAt: null }
+  if (unlimited(tier)) return yes
 
-  if (tier === 'pro') {
+  if (tier === 'pro' || (tier === 'trial' && source === 'legacy_trial')) {
     const dayStart = startOfLocalDay(now).getTime()
     const today = times.filter((t) => t >= dayStart).length
     if (today >= PLAN_BUILDS.proPerDay) {

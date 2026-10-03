@@ -251,18 +251,23 @@ export const comparison = {
 export const pricing = {
   id: 'cene',
   title: 'Preprosto. Brez presenečenj.',
-  intro: 'Prvih 14 dni je brezplačnih. Potem izbereš paket, ki ti ustreza.',
-  trial: {
-    title: '14 dni brezplačno',
-    text: 'Vse funkcije paketa Pro. Ob koncu preizkusa se samodejno zaračuna izbrani paket, prekličeš pa lahko kadarkoli prej.',
-  },
+  intro: 'Prvih 14 dni je brezplačnih, z vsem, kar zna Pro. Potem izbereš paket, ki ti ustreza.',
   toggleLabel: 'Način plačila',
   yearly: 'Letno',
   monthly: 'Mesečno',
-  perMonth: '/ mesec',
-  billedYearly: (amount) => `Plačilo ${amount}`,
+  yearlyHint: 'do -42 %',
+  perMonth: '/ mes',
+  billedYearly: (amount, saving) => `${amount} letno, prihraniš ${saving.replace('-', '')}`,
   billedMonthly: 'Plačilo vsak mesec',
-  featuredBadge: 'Največ trenerja',
+  featuredBadge: 'Priporočeno',
+  notIncluded: 'Ni vključeno',
+  // The pricing CTA names the trial; it is the same signup destination as cta.signup.
+  trialCta: 'Začni 14 dni brezplačno',
+  facts: [
+    { key: 'trial', title: '14 dni brezplačno', text: 'Vse funkcije paketa Pro, tudi tedenski pregled.' },
+    { key: 'card', title: 'Kartica ob začetku', text: 'Ob koncu preizkusa se samodejno zaračuna izbrani paket.' },
+    { key: 'cancel', title: 'Prekličeš kadarkoli', text: 'Pred koncem preizkusa ne plačaš ničesar.' },
+  ],
   // Prices, savings, the plans and their features: src/core/pricing.js.
 }
 

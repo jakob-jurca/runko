@@ -273,6 +273,14 @@
     animation-play-state: paused;
   }
 
+  /* Pricing: the interval thumb slides, the price settles in again. */
+  .l-thumb {
+    transition: transform 0.6s var(--ease);
+  }
+  .l-swap {
+    animation: l-swap 0.6s var(--ease) both;
+  }
+
   /* Mobile menu links slide up one after another. */
   [data-menu='open'] [data-menu-item] {
     animation: l-rise 0.7s cubic-bezier(0.32, 0.72, 0, 1) both;
@@ -344,5 +352,12 @@
   from {
     opacity: 0;
     transform: translateY(0.75rem) scale(0.96);
+  }
+}
+
+@keyframes l-swap {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
   }
 }

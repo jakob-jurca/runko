@@ -163,8 +163,11 @@ function Subscription({ access }) {
     setError(result.message)
   }
 
-  const plan = a.comped ? B.tiers.pro : a.chosenTier ? B.tiers[a.chosenTier] : B.tiers[a.tier]
-  const line = a.comped
+  const creator = a.tier === 'creator'
+  const plan = creator ? B.tiers.creator : a.comped ? B.tiers.pro : a.chosenTier ? B.tiers[a.chosenTier] : B.tiers[a.tier]
+  const line = creator
+    ? B.creator
+    : a.comped
     ? B.comped
     : a.paymentFailed
       ? B.paymentFailed
@@ -182,7 +185,7 @@ function Subscription({ access }) {
         <h2 className="text-base font-semibold text-zinc-100">{B.sectionTitle}</h2>
         {plan && (
           <span className="rounded-md bg-primary-faint px-2 py-1 text-[11px] font-semibold text-primary-light">
-            {plan}{a.interval && !a.comped ? ` · ${B.intervals[a.interval]}` : ''}
+            {plan}{a.interval && !a.comped && !creator ? ` · ${B.intervals[a.interval]}` : ''}
           </span>
         )}
       </div>
@@ -195,7 +198,7 @@ function Subscription({ access }) {
           <p className="mt-2 text-xs text-zinc-500">{B.manageHint}</p>
         </>
       ) : (
-        !a.comped && (
+        !a.comped && !creator && (
           <button onClick={() => navigate('/paket')} className="btn-primary mt-4 w-full text-sm">
             {B.choosePlan}
           </button>

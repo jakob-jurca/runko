@@ -27,7 +27,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { cappedMaxTokens } from './limits.js'
 // @ts-ignore — plain JS, shared with the app and its tests.
 import {
-  AI_KINDS, dailyLimit, dailyLimitRefusal, planBuildUsable, reviewAllowed, startOfLocalDay, previousLocalWeekKey,
+  AI_KINDS, dailyLimit, dailyLimitRefusal, planBuildUsable, reviewAllowed, startOfLocalDay, previousLocalWeekKey, unlimited,
 } from '../_shared/entitlements.js'
 import { loadAccess } from '../_shared/access.ts'
 
@@ -150,7 +150,8 @@ Deno.serve(async (req: Request) => {
     return fail(503, 'Storitev je trenutno preobremenjena. Poskusi čez nekaj minut.', 'rate_check_failed')
   }
 
-  if ((count ?? 0) >= RATE_LIMIT) {
+  // The creator has no limits at all, this one included.
+  if ((count ?? 0) >= RATE_LIMIT && !unlimited(ent.tier)) {
     return fail(
       429,
       `Dosegel si omejitev ${RATE_LIMIT} zahtev na uro. Poskusi znova čez kakšno uro.`,

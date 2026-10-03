@@ -66,6 +66,7 @@ Deno.serve(async (req: Request) => {
     builds: builds.data ?? [],
     trialStartedAt: ent.source === 'stripe' ? sub?.trial_start ?? null : null,
     trialEndsAt: ent.trialEndsAt,
+    source: ent.source,
     now,
   })
 
@@ -100,7 +101,8 @@ Deno.serve(async (req: Request) => {
 
   return json({
     ...ent,
-    chat: { used: chat.count ?? 0, limit: chatLimit(ent.tier), resetsAt: startOfNextLocalDay(now).toISOString() },
+    // The creator's limit is Infinity, sent as null: "no limit".
+    chat: { used: chat.count ?? 0, limit: Number.isFinite(chatLimit(ent.tier)) ? chatLimit(ent.tier) : null, resetsAt: startOfNextLocalDay(now).toISOString() },
     planBuild,
     review: reviewAllowed(ent.tier),
   })
