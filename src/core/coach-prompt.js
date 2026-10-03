@@ -349,6 +349,7 @@ export function buildRunnerContext({
   workouts = [],
   workoutLimit = 10,
   today = new Date(),
+  healthBreak = null,
 } = {}) {
   const p = profile || {}
   const todayISO = toISO(today)
@@ -441,6 +442,10 @@ export function buildRunnerContext({
     lines.push('- No training plan yet.')
   }
 
+  // --- injury / illness reported with the "Poškodba / bolezen" button --------
+  const hb = healthBreakContext(healthBreak, todayISO)
+  if (hb) lines.push('', hb)
+
   // --- logged runs ----------------------------------------------------------
   const recent = workouts.slice(0, workoutLimit)
   lines.push('', `THEIR LAST ${recent.length || 0} LOGGED RUNS (newest first):`)
@@ -466,6 +471,31 @@ export function buildRunnerContext({
   }
 
   return lines.join('\n')
+}
+
+const BREAK_KIND = { injury: 'an injury', illness: 'an illness', other: 'a break (other reason)' }
+
+/**
+ * What the coach must know about a reported injury or illness (a
+ * training_breaks row): the plan already rests and returns gradually by
+ * code, and the coach keeps to it.
+ */
+export function healthBreakContext(row, todayISO) {
+  if (!row || row.undone_at || !row.return_until || row.return_until < todayISO) return null
+  const resting = todayISO <= row.rest_until
+  return [
+    'INJURY / ILLNESS:',
+    `- On ${row.start_date} they reported ${BREAK_KIND[row.kind] || BREAK_KIND.other} and ${row.days} day(s) without training` +
+      `${row.strong_pain ? ', with STRONG pain' : ''}.`,
+    `- The plan was changed by the app: rest until ${row.rest_until}, then easy running only, growing back` +
+      ` to the full plan by ${row.return_until}. ${resting ? 'They are resting now.' : 'They are in the gradual return now.'}`,
+    '- Keep to it: no hard sessions, no making up missed kilometres, no racing before the return ends.' +
+      ' Ask how they feel; ease off further if symptoms come back.',
+    row.strong_pain || row.days > 14
+      ? '- Calmly recommend seeing a doctor (or a physiotherapist for an injury) before running again.'
+      : '- If it does not improve, or lasts beyond two weeks, calmly recommend seeing a doctor.',
+    '- With an illness: no running with fever or symptoms below the neck.',
+  ].join('\n')
 }
 
 function toISO(d) {

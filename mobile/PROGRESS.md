@@ -123,6 +123,10 @@ wrong screens.
   server now (core/plan.js already does it for mobile too); onboarding rebuild should show
   `planBuildNote(access)` instead of the questions when a build is not allowed, and catch
   `PlanLimitError`.
+- "Poškodba / bolezen": a button + sheet on the home and plan tabs (web components/HealthBreak.jsx:
+  kind, days, strong pain, doctor note) calling `reportHealthBreak` / `undoHealthBreak` from
+  src/core/plan.js, and the active-break card from `getActiveBreak`. Pass `healthBreak` to `askCoach`
+  in the chat tab, as web Chat.jsx does. Strings `t.healthBreak`.
 - Settings: "Naročnina" section as on the web (src/pages/Settings.jsx `Subscription`, strings
   `t.billing`).
 

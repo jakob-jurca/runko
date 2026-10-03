@@ -25,6 +25,7 @@ const SUITES = [
   './stripe.test.mjs',
   './pricing.test.mjs',
   './usage-limits.test.mjs',
+  './health-break.test.mjs',
   './auth.test.mjs',
   './chat-format.test.mjs',
   './dates.test.mjs',

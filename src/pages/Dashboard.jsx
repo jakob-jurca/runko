@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import {
   getWorkouts,
+  getActiveBreak,
   addWorkout,
   startOfWeekISO,
   addDaysISO,
@@ -17,6 +18,7 @@ import { PHASE_INTENT } from '../core/periodization'
 import { phaseStyle } from './Plan'
 import { trialDaysLeft, isTrial, planBuildNote } from '../core/subscription'
 import ProgressRing from '../components/ProgressRing'
+import { HealthBreakButton, HealthBreakNotice } from '../components/HealthBreak'
 import WorkoutCard from '../components/WorkoutCard'
 import { GoalProgressCard, BlockEndCard } from '../components/GoalProgress'
 import { goalProgress, repeatParams } from '../core/goal-progress'
@@ -61,6 +63,8 @@ export default function Dashboard() {
   const [adaptedNote, setAdaptedNote] = useState(false)
   const [quickLoggingDay, setQuickLoggingDay] = useState(null)
   const [logError, setLogError] = useState('')
+  // A reported injury or illness still in effect (rest or gradual return).
+  const [healthBreak, setHealthBreak] = useState(null)
 
   const currentWeek = useMemo(() => currentWeekNumber(plans), [plans])
   const lastWeek = plans.length ? plans[plans.length - 1].week_number : 1
@@ -83,11 +87,13 @@ export default function Dashboard() {
     Promise.all([
       getHydratedPlans(profile),
       getWorkouts(profile.id, { limit: 100 }),
+      getActiveBreak(profile.id).catch(() => null),
     ])
-      .then(async ([p, w]) => {
+      .then(async ([p, w, b]) => {
         if (cancelled) return
         setPlans(p)
         setWorkouts(w)
+        setHealthBreak(b)
         // A new week started: quietly re-fit its plan to last week's logs.
         const adapted = await adaptCurrentWeekIfNeeded(profile, p, w).catch(() => null)
         if (adapted && !cancelled) {
@@ -281,6 +287,30 @@ export default function Dashboard() {
       )}
 
       {adaptedNote && <p className="mt-3 text-xs text-primary-light animate-fade-up">{t.dashboard.adaptedNote}</p>}
+
+      {/* Injury or illness: the active break, or the button to report one. */}
+      {healthBreak ? (
+        <HealthBreakNotice
+          breakRow={healthBreak}
+          plans={plans}
+          onUndone={(restored) => {
+            setPlans(restored)
+            setHealthBreak(null)
+          }}
+        />
+      ) : (
+        plans.length > 0 && (
+          <div className="mt-3 animate-fade-up">
+            <HealthBreakButton
+              plans={plans}
+              onChanged={(changed, row) => {
+                setPlans(changed)
+                setHealthBreak(row)
+              }}
+            />
+          </div>
+        )
+      )}
 
       {showBlockEnd && <BlockEndCard progress={progress} onNext={nextBlock} />}
 

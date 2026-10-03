@@ -339,6 +339,7 @@ export async function askCoach({
   currentWeek = null,
   workouts = [],
   history = [],
+  healthBreak = null,
 }) {
   // The newest thing the runner said drives both the language choice and
   // which knowledge documents get pulled in.
@@ -355,7 +356,7 @@ export async function askCoach({
 
   const system = buildCoachSystemPrompt({
     message: lastUser,
-    context: buildRunnerContext({ profile, memories, plans, currentWeek, workouts }),
+    context: buildRunnerContext({ profile, memories, plans, currentWeek, workouts, healthBreak }),
     knowledge: buildKnowledgeBlock({
       situations: ['chat'],
       text: lastUser,

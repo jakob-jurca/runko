@@ -37,6 +37,9 @@ import {
   todayISO,
   getPlans,
   savePlan,
+  weekStartISO,
+  saveTrainingBreak,
+  markBreakUndone,
   deletePlans,
   startOfWeekISO,
   currentWeekNumber,
@@ -46,6 +49,7 @@ import {
   HEALTH_FIELDS,
 } from './db'
 import { getMemories } from './memory'
+import { applyHealthBreak, validateBreak } from './health-break.js'
 import { callFunction } from './subscription'
 import { IS_DEV } from './env'
 
@@ -513,4 +517,55 @@ export async function adaptCurrentWeekIfNeeded(profile, plans, recentWorkouts) {
     console.warn('Weekly plan adaptation failed (keeping planned week):', err.message)
     return null
   }
+}
+
+// ---------------------------------------------------------------------------
+// "Poškodba / bolezen" — rest now, gradual return (core/health-break.js)
+// ---------------------------------------------------------------------------
+
+/**
+ * Change the plan for an injury or illness, at once and without AI, and
+ * record it for the coach and for "Razveljavi".
+ *
+ * @param {object} profile
+ * @param {Array} plans - the runner's plan rows (getPlans / getHydratedPlans)
+ * @param {{kind: string, days: number, strongPain?: boolean}} report
+ * @returns {Promise<{plans: Array, breakRow: object, raceAtRisk: boolean}>}
+ */
+export async function reportHealthBreak(profile, plans, { kind, days, strongPain = false }) {
+  if (!validateBreak({ kind, days })) throw new Error('Neveljaven vnos.')
+  const startDate = todayISO()
+  const weeks = plans.map((p) => ({ week_number: p.week_number, plan_json: p.plan_json, start: weekStartISO(plans, p.week_number) }))
+  const { changed, window, raceAtRisk } = applyHealthBreak({ weeks, kind, days, startDate, age: profile.age })
+
+  // The weeks as they were, saved first, so the change can always be undone.
+  const breakRow = await saveTrainingBreak({
+    user_id: profile.id,
+    kind,
+    days,
+    strong_pain: Boolean(strongPain),
+    start_date: window.startDate,
+    rest_until: window.restEnd,
+    return_until: window.returnUntil,
+    original_weeks: changed.map((c) => ({
+      week_number: c.week_number,
+      plan_json: plans.find((p) => p.week_number === c.week_number)?.plan_json ?? null,
+    })),
+  })
+
+  const saved = []
+  for (const c of changed) saved.push(await savePlan(profile.id, c.week_number, c.plan_json))
+  const byWeek = new Map(saved.map((r) => [r.week_number, r]))
+  return { plans: plans.map((p) => byWeek.get(p.week_number) ?? p), breakRow, raceAtRisk }
+}
+
+/** "Razveljavi": put the weeks back as they were before the break was reported. */
+export async function undoHealthBreak(profile, plans, breakRow) {
+  const restored = []
+  for (const w of breakRow.original_weeks || []) {
+    if (w?.plan_json) restored.push(await savePlan(profile.id, w.week_number, w.plan_json))
+  }
+  await markBreakUndone(breakRow.id)
+  const byWeek = new Map(restored.map((r) => [r.week_number, r]))
+  return plans.map((p) => byWeek.get(p.week_number) ?? p)
 }

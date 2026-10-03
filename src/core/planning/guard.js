@@ -11,6 +11,9 @@ const HARD = new Set(['tempo', 'interval', 'repetition'])
 
 /** True when this week must not be rewritten by the AI at all. */
 export function isAdaptable(week) {
+  // A week changed for an injury or illness (core/health-break.js) keeps its
+  // rest and gradual return: an AI rewrite could put the old load back.
+  if (week?.health_break) return false
   // Walk-run and minute-based weeks follow a ladder; a kilometre rewrite
   // from the AI would break both the unit and the progression.
   return !(week?.days || []).some((d) => d.time_based)

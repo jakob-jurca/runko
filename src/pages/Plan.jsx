@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { currentWeekNumber, weekStartISO } from '../core/db'
+import { currentWeekNumber, weekStartISO, getActiveBreak } from '../core/db'
 import { PHASE_INTENT, goalLabel } from '../core/periodization'
 import { getHydratedPlans } from '../core/plan'
 import { FullScreenSpinner } from '../components/Spinner'
+import { HealthBreakButton, HealthBreakNotice } from '../components/HealthBreak'
 import { t } from '../core/strings'
 
 /** One colour per training phase, reused by the curve and the week list. */
@@ -39,9 +40,13 @@ export default function Plan() {
   const [plans, setPlans] = useState([])
   const [loading, setLoading] = useState(true)
   const [openWeek, setOpenWeek] = useState(null)
+  const [healthBreak, setHealthBreak] = useState(null)
 
   useEffect(() => {
     let cancelled = false
+    getActiveBreak(profile.id)
+      .then((b) => !cancelled && setHealthBreak(b))
+      .catch(() => {})
     getHydratedPlans(profile)
       .then((rows) => !cancelled && setPlans(rows))
       .catch((err) => console.error(err))
@@ -132,6 +137,28 @@ export default function Plan() {
             : explain?.verdict === 'unsafe' ? explain.adopted_goal_text : goalLabel(profile)}
         </p>
       </header>
+
+      {/* Injury or illness: rest now, then a gradual return, changed by code. */}
+      {healthBreak ? (
+        <HealthBreakNotice
+          breakRow={healthBreak}
+          plans={plans}
+          onUndone={(restored) => {
+            setPlans(restored)
+            setHealthBreak(null)
+          }}
+        />
+      ) : (
+        <div className="mt-4">
+          <HealthBreakButton
+            plans={plans}
+            onChanged={(changed, row) => {
+              setPlans(changed)
+              setHealthBreak(row)
+            }}
+          />
+        </div>
+      )}
 
       {/* The coach's opening note — including an honest word when the target
           time is out of reach for this block. */}

@@ -8,6 +8,7 @@ import {
   deleteChatMessages,
   getPlans,
   getWorkouts,
+  getActiveBreak,
   currentWeekNumber,
 } from '../core/db'
 import { askCoach, extractMemories, friendlyAiMessage } from '../core/ai'
@@ -57,7 +58,7 @@ export default function Chat() {
   const openedRef = useRef(false)
 
   // Everything the coach needs, refreshed when the page loads.
-  const [ctx, setCtx] = useState({ plans: [], currentWeek: null, workouts: [], memories: [] })
+  const [ctx, setCtx] = useState({ plans: [], currentWeek: null, workouts: [], memories: [], healthBreak: null })
 
   useEffect(() => {
     let cancelled = false
@@ -66,13 +67,14 @@ export default function Chat() {
       getPlans(profile.id),
       getWorkouts(profile.id, { limit: 10 }), // the coach sees the last 10 runs
       getMemories(profile.id).catch(() => []), // memory is optional, never fatal
+      getActiveBreak(profile.id).catch(() => null), // a reported injury or illness
     ])
-      .then(([msgs, plans, workouts, memories]) => {
+      .then(([msgs, plans, workouts, memories, healthBreak]) => {
         if (cancelled) return
         setMessages(msgs)
         // A full page back means there is probably more behind it.
         setHasMore(msgs.length >= PAGE_SIZE)
-        setCtx({ plans, currentWeek: currentWeekNumber(plans), workouts, memories })
+        setCtx({ plans, currentWeek: currentWeekNumber(plans), workouts, memories, healthBreak })
       })
       .catch((err) => setError(friendlyError(err)))
       .finally(() => !cancelled && setLoading(false))
@@ -179,6 +181,7 @@ export default function Chat() {
         plans: ctx.plans,
         currentWeek: ctx.currentWeek,
         workouts: ctx.workouts,
+        healthBreak: ctx.healthBreak,
         history: history.map(({ role, content }) => ({ role, content })),
       })
       const saved = await addChatMessage(profile.id, 'assistant', reply.trim())

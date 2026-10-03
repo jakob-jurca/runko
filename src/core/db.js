@@ -7,7 +7,7 @@ import { t } from './strings'
 // Imported for use INSIDE this file. The re-export at the bottom is a
 // convenience for callers and does NOT bind these names locally — assuming
 // it did is what left currentWeekNumber calling an undefined startOfWeekISO.
-import { currentWeekNumber } from './dates.js'
+import { currentWeekNumber, todayISO as todayLocalISO } from './dates.js'
 
 // ---------- users (profile) ----------
 
@@ -182,6 +182,40 @@ export async function savePlan(userId, weekNumber, planJson) {
     .single()
   if (error) throw error
   return data
+}
+
+// ---------- training_breaks ("Poškodba / bolezen") ----------
+
+/**
+ * The break still in effect (resting or returning) on `today`, or null.
+ * A database without migration_v9 reads as "no break".
+ */
+export async function getActiveBreak(userId, today = todayLocalISO()) {
+  const { data, error } = await supabase
+    .from('training_breaks')
+    .select('*')
+    .eq('user_id', userId)
+    .is('undone_at', null)
+    .gte('return_until', today)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (error) {
+    if (MISSING_TABLE.has(error.code)) return null
+    throw error
+  }
+  return data
+}
+
+export async function saveTrainingBreak(row) {
+  const { data, error } = await supabase.from('training_breaks').insert(row).select().single()
+  if (error) throw error
+  return data
+}
+
+export async function markBreakUndone(id) {
+  const { error } = await supabase.from('training_breaks').update({ undone_at: new Date().toISOString() }).eq('id', id)
+  if (error) throw error
 }
 
 // ---------- workouts ----------

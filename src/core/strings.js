@@ -1030,6 +1030,36 @@ export const t = {
   },
 
   // -------------------------------------------------------------------------
+  // "Poškodba / bolezen" (core/health-break.js)
+  // -------------------------------------------------------------------------
+  healthBreak: {
+    button: 'Poškodba / bolezen',
+    title: 'Poškodba ali bolezen',
+    intro: 'Načrt se takoj prilagodi: najprej počitek, nato postopna vrnitev z lahkotnimi teki.',
+    whatLabel: 'Kaj se je zgodilo?',
+    kinds: { injury: 'Poškodba', illness: 'Bolezen', other: 'Drugo' },
+    daysLabel: 'Koliko dni ne boš treniral(a)?',
+    daysUnit: (n) => slPlural(n, ['dan', 'dneva', 'dnevi', 'dni']),
+    fewer: 'Manj dni',
+    more: 'Več dni',
+    strongPain: 'Bolečina je močna',
+    confirm: 'Prilagodi načrt',
+    saving: 'Prilagajam …',
+    close: 'V redu',
+    done: (restUntil, returnUntil) =>
+      `Načrt je prilagojen: počitek do ${restUntil}, nato postopna vrnitev z lahkotnimi teki do ${returnUntil}.`,
+    activeTitle: { injury: 'Okrevanje po poškodbi', illness: 'Okrevanje po bolezni', other: 'Premor' },
+    resting: (date) => `Počitek do ${date}. Potem začneš z lahkotnimi teki.`,
+    returning: (date) => `Postopna vrnitev do ${date}: samo lahkotni teki, ki se počasi daljšajo.`,
+    doctor:
+      'Ker gre za daljši premor ali močno bolečino, se pred ponovnim tekom posvetuj z zdravnikom. Načrt bo počakal nate.',
+    doctorInjury:
+      'Ker gre za daljši premor ali močno bolečino, se pred ponovnim tekom posvetuj z zdravnikom ali fizioterapevtom. Načrt bo počakal nate.',
+    raceAtRisk: 'Tekma je v obdobju počitka ali vrnitve. Ali jo teči, se pogovori s trenerjem v klepetu.',
+    undo: 'Razveljavi',
+  },
+
+  // -------------------------------------------------------------------------
   // Paid plans: Start / Pro, Stripe
   // -------------------------------------------------------------------------
   billing: {

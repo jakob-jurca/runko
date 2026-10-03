@@ -144,6 +144,13 @@ and for plan builds); the app only shows what `fetchAccess()` returns.
   (hidden), trial 1 plan. Onboarding (rebuild), Dashboard and Settings say when the next build is possible.
   The old client-side PLAN_LIMIT_ENABLED switch is gone. Known gap: training_plans rows are still written by
   the client, so someone bypassing the app could save a plan without the AI text; the AI cost is protected.
+- Stage 5 ("Poškodba / bolezen"): src/core/health-break.js (pure, no AI): rest for the reported days, then
+  easy-only running from 50-60 % (33 % after 4+ weeks off, as planning/returning.js) back to the full plan over
+  3-28 days; quality sessions become easy, walk-run days keep their ladder, never more than the original day or
+  week. Changed weeks carry plan_json.health_break and guard.isAdaptable keeps the AI adaptation off them.
+  training_breaks table (migration_v9) stores the report and the original weeks ("Razveljavi"). Button +
+  dialog + notice: components/HealthBreak.jsx on Dashboard and Plan. Over 14 days or strong pain: a calm
+  doctor note. The coach gets an INJURY / ILLNESS block (coach-prompt.js healthBreakContext).
 
 ### Comped accounts (Pro without paying)
 In the Supabase SQL Editor, once per person (after migration_v9):

@@ -124,3 +124,33 @@ create table if not exists public.stripe_events (
 );
 
 alter table public.stripe_events enable row level security;
+
+-- ---------------------------------------------------------------
+-- 6. training_breaks — "Poškodba / bolezen"
+-- ---------------------------------------------------------------
+--
+-- What the runner reported, and the plan weeks as they were before the change
+-- (so "Razveljavi" can put them back). The coach reads the active one. The
+-- runner owns these rows like their runs: read, write and delete their own.
+create table if not exists public.training_breaks (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.users (id) on delete cascade,
+  kind text not null check (kind in ('injury', 'illness', 'other')),
+  days int not null check (days between 1 and 60),
+  strong_pain boolean not null default false,
+  start_date date not null,
+  rest_until date not null,
+  return_until date not null,
+  original_weeks jsonb not null default '[]'::jsonb,
+  undone_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+alter table public.training_breaks enable row level security;
+
+drop policy if exists "own training breaks" on public.training_breaks;
+create policy "own training breaks" on public.training_breaks
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+create index if not exists training_breaks_user_idx
+  on public.training_breaks (user_id, created_at desc);
