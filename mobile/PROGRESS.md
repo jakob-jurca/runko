@@ -96,5 +96,18 @@ Unsafe goals (app/onboarding.jsx):
 - Plan tab: for `explain.against_advice` show `t.plan.againstAdvice` and the first safer option
   (`t.plan.saferOption`) instead of "Tvoj prvotni cilj / Načrt je zgrajen za".
 
+## To catch up (web changes of 2026-10-03: paid plans, Start / Pro)
+Nothing in mobile/ was edited. Until these land, mobile still reads the RETIRED rule (old no-card
+trial on the profile row) through deprecated exports kept in src/core/subscription.js
+(`hasPremium`, `isTrialActive`, `hasActiveSubscription`, `trialDaysLeft`, `startCheckout`, `PLANS`).
+The server enforces the new rules either way, so mobile cannot over-spend; it can only show the
+wrong screens.
+
+- Access: load `fetchAccess()` (src/core/subscription.js) next to the profile in
+  context/AuthContext.jsx, keyed on the user id, with "Poskusi znova" on failure (web: `access`,
+  `accessError`, `refreshAccess`). Gate every screen with `canUseApp(access)`; tier `none` shows
+  the paywall only. Replace every `hasPremium(profile)` / `isTrialActive(profile)` /
+  `trialDaysLeft(profile)` with the access versions (`canUseApp`, `isTrial`, `trialDaysLeft(access)`).
+
 ## Blocked / questions
 - None blocking. Open item: in-app account deletion (see Phase 5) must be built before store submission.

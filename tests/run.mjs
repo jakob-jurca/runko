@@ -21,6 +21,7 @@ const SUITES = [
   './coach-prompt.test.mjs',
   './coach-scope.test.mjs',
   './ai-limits.test.mjs',
+  './entitlements.test.mjs',
   './auth.test.mjs',
   './chat-format.test.mjs',
   './dates.test.mjs',

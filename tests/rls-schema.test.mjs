@@ -80,8 +80,11 @@ const ownershipColumn = (table) => {
   if (end === -1) return false
   return /\buser_id\b/.test(code.slice(start, end))
 }
+// Written and read only by the Edge Functions (service role). RLS on, NO
+// policy: a client must not see, forge or delete what is counted against it.
+const SERVER_ONLY = ['ai_usage', 'plan_builds', 'stripe_events']
 for (const table of unique) {
-  if (table === 'ai_usage') continue // deliberately policy-free; asserted below
+  if (SERVER_ONLY.includes(table)) continue // deliberately policy-free; asserted below
   if (table === 'users' || ownershipColumn(table)) {
     check(`${table}: has at least one policy`, withPolicy.has(table))
   }
@@ -95,6 +98,19 @@ for (const table of unique) {
 check('ai_usage: table exists', unique.includes('ai_usage'))
 check('ai_usage: row level security is enabled', rlsEnabled.has('ai_usage'))
 check('ai_usage: has NO policy, so no client can reach it', !withPolicy.has('ai_usage'))
+for (const table of SERVER_ONLY.filter((t) => unique.includes(t) && t !== 'ai_usage')) {
+  check(`${table}: row level security is enabled`, rlsEnabled.has(table))
+  check(`${table}: has NO policy, so no client can reach it`, !withPolicy.has(table))
+}
+
+// --- subscriptions: the runner may read their own, never write it -----------
+// Writing it would be granting yourself Pro.
+if (unique.includes('subscriptions')) {
+  const subPolicies = policies.filter((p) => p.table === 'subscriptions')
+  check('subscriptions: has a read policy', subPolicies.length > 0)
+  check('subscriptions: every policy is read-only (for select)', subPolicies.every((p) => /for\s+select/i.test(p.body)))
+  check('subscriptions: client writes revoked', /revoke\s+insert,\s*update,\s*delete\s+on\s+public\.subscriptions\s+from\s+anon,\s*authenticated/i.test(code))
+}
 
 // --- the service-role key must never appear outside the function ------------
 const clientFiles = []

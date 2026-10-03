@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { isTrialActive, trialDaysLeft, hasActiveSubscription, startCheckout } from '../core/subscription'
+import { isTrial, trialDaysLeft, canUseApp, startCheckout } from '../core/subscription'
 import { getMemories, deleteMemory } from '../core/memory'
 import { goalLabel } from '../core/periodization'
 import { maxHeartRate } from '../core/heart-rate'
@@ -13,7 +13,7 @@ import { supabase } from '../core/supabase'
 import { changePassword, MIN_PASSWORD_LENGTH } from '../core/auth-flows'
 
 export default function Settings() {
-  const { session, profile, signOut, refreshProfile } = useAuth()
+  const { session, profile, access, signOut, refreshProfile } = useAuth()
   const navigate = useNavigate()
   const [notice, setNotice] = useState('')
 
@@ -131,16 +131,16 @@ export default function Settings() {
         <h2 className="mb-4 text-base font-semibold text-zinc-100">
           {t.settings.subscription}
         </h2>
-        {hasActiveSubscription(profile) ? (
+        {canUseApp(access) && !isTrial(access) ? (
           <p className="text-sm">
             <span className="font-semibold text-primary-light">{t.subscription.planName}</span> · {t.settings.premiumActive}
           </p>
-        ) : isTrialActive(profile) ? (
+        ) : isTrial(access) ? (
           <>
             <div className="flex items-center justify-between">
               <div>
                 <p className="font-semibold">{t.settings.trial}</p>
-                <p className="text-sm text-zinc-400">{t.settings.trialDaysLeft(trialDaysLeft(profile))}</p>
+                <p className="text-sm text-zinc-400">{t.settings.trialDaysLeft(trialDaysLeft(access))}</p>
               </div>
               <span className="rounded-md bg-primary-faint px-2 py-1 font-mono text-[11px] font-semibold text-primary-light">
                 TRIAL

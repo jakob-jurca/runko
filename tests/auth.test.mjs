@@ -362,7 +362,7 @@ console.log('\nAuth — log out and session expiry:')
   check('startup only clears a session the server has rejected', /if \(error && isDeadSessionError\(error\)\)/.test(ctx))
   check('an ended session is announced on the login screen', /setSessionEnded\(true\)/.test(ctx) && fs.readFileSync('src/pages/Auth.jsx', 'utf8').includes('t.auth.sessionEnded'))
   check('the profile is reloaded per USER, not per token refresh', /\[userId, profileAttempt\]/.test(ctx))
-  check('a failed profile read is not treated as "no profile"', /profileError/.test(ctx) && /if \(profileError\) return <ProfileLoadError \/>/.test(fs.readFileSync('src/App.jsx', 'utf8')))
+  check('a failed profile read is not treated as "no profile"', /profileError/.test(ctx) && /if \(profileError( \|\| accessError)?\) return <ProfileLoadError \/>/.test(fs.readFileSync('src/App.jsx', 'utf8')))
   const web = ['src/context/AuthContext.jsx', 'src/pages/Auth.jsx', 'src/pages/ResetPassword.jsx', 'src/pages/Settings.jsx', 'src/core/auth-flows.js']
     .map((f) => fs.readFileSync(f, 'utf8')).join('\n')
   check('no sign-out in the web app uses the every-device default', !/auth\.signOut\(\s*\)/.test(web))

@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { addWorkout, getPlans, getWorkouts, currentWeekNumber, todayISO } from '../core/db'
 import { coachReaction } from '../core/ai'
 import { maybeAdaptPlan } from '../core/plan'
-import { hasPremium } from '../core/subscription'
+import { canUseApp } from '../core/subscription'
 import Spinner from '../components/Spinner'
 import { Check, WarningCircle } from '@phosphor-icons/react'
 import { t } from '../core/strings'
@@ -21,7 +21,7 @@ const EFFORTS = t.log.efforts
  *     (missed = distance 0, or effort >= 4).
  */
 export default function Log() {
-  const { profile } = useAuth()
+  const { profile, access } = useAuth()
   const [params] = useSearchParams()
 
   // Opened from a workout card, these arrive already filled in.
@@ -75,7 +75,7 @@ export default function Log() {
         ? t.log.fallbackMissed
         : t.log.fallbackReaction
       let adapted = null
-      const premium = hasPremium(profile)
+      const premium = canUseApp(access)
       if (premium) {
         const [reactionRes, adaptedRes] = await Promise.allSettled([
           coachReaction(profile, plan, { distance: workout.distance, duration: workout.duration, effort: workout.effort, notes }),

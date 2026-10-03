@@ -152,12 +152,11 @@ for (const { file, body } of text) {
 }
 
 // --- 5. the real gating must still be present -------------------------------
+// Access comes from the server (the entitlement Edge Function); if the call
+// to it disappeared from the bundle, nothing would show the paywall.
 const js = text.filter((t) => t.file.endsWith('.js')).map((t) => t.body).join('')
-if (!/trial_end/.test(js)) {
-  note('trial gating missing from the bundle', 'dist/*.js', 'hasPremium may have been tree-shaken')
-}
-if (!/subscription_status/.test(js)) {
-  note('subscription gating missing from the bundle', 'dist/*.js', '')
+if (!/["'`]entitlement["'`]/.test(js)) {
+  note('entitlement lookup missing from the bundle', 'dist/*.js', 'fetchAccess may have been tree-shaken')
 }
 
 // --- 6. the AI must be proxied, not called directly -------------------------

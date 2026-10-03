@@ -10,7 +10,7 @@ import {
 } from '../core/db'
 import { askCoach, extractMemories, friendlyAiMessage } from '../core/ai'
 import { getMemories, saveExtractedMemories } from '../core/memory'
-import { hasPremium } from '../core/subscription'
+import { canUseApp } from '../core/subscription'
 import Paywall from '../components/Paywall'
 import { FullScreenSpinner } from '../components/Spinner'
 import { PaperPlaneRight, Trash } from '@phosphor-icons/react'
@@ -39,7 +39,7 @@ const PAGE_SIZE = 50
  * error — memory is an enhancement, not a feature the chat depends on.
  */
 export default function Chat() {
-  const { profile } = useAuth()
+  const { profile, access } = useAuth()
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [thinking, setThinking] = useState(false)
@@ -59,7 +59,7 @@ export default function Chat() {
   // Everything the coach needs, refreshed when the page loads.
   const [ctx, setCtx] = useState({ plans: [], currentWeek: null, workouts: [], memories: [] })
 
-  const premium = hasPremium(profile)
+  const premium = canUseApp(access)
 
   useEffect(() => {
     if (!premium) {

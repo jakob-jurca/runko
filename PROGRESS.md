@@ -116,6 +116,27 @@ call and Vite kept only the APP's preload list, so a guest got no landing CSS an
 server hides this. The imports are now separate loader functions (see comment in main.jsx). Verified on `vite preview`:
 guest loads only landing chunks + landing CSS, /auth loads only app chunks, no horizontal overflow at 375/768/1440.
 
+## Paid plans (Start / Pro, Stripe)
+Source of truth for the rules: supabase/functions/_shared/entitlements.js (plain JS, imported by the Edge
+Functions under Deno and by the app and tests under Node/Vite). Tiers none / trial / start / pro; `comped`
+reads as pro. The server decides (ai-proxy on every AI call, `entitlement` function for the app's display
+and for plan builds); the app only shows what `fetchAccess()` returns.
+
+- Stage 1 (entitlements): migration_v9.sql (subscriptions, plan_builds, ai_usage.billable, no more
+  trial_end default), _shared/{entitlements.js, access.ts, http.ts}, functions/entitlement, ai-proxy reads
+  the shared rule, refuses unknown `kind`s and applies daily per-kind ceilings from Ljubljana midnight.
+  Old no-card trials (users.trial_end in the future) keep access to that date, then the paywall.
+
+### Comped accounts (Pro without paying)
+In the Supabase SQL Editor, once per person (after migration_v9):
+```sql
+insert into public.subscriptions (user_id, comped)
+select id, true from auth.users where email = 'name@example.com'
+on conflict (user_id) do update set comped = true;
+```
+To end it: `update public.subscriptions set comped = false where user_id = (select id from auth.users where email = 'name@example.com');`
+The person sees Pro the next time the app loads.
+
 ## Mobile app (mobile/)
 Expo app built in six phases; the committed log is mobile/PROGRESS.md (kept separate because this file carries uncommitted landing-page notes). Shared-core changes: src/core/knowledge-files.js (new), env.js `AUTH_OPTIONS`, supabase.js spreads it, strings.js `reminders`.
 

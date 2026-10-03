@@ -17,8 +17,10 @@ the only part of the path the user does not control:
 | Guard | What it stops |
 |---|---|
 | Supabase JWT required | anonymous use of the account's AI budget |
-| Live trial or active subscription | a free user spending against the account |
+| Entitlement (`_shared/entitlements.js`: trial, Start, Pro, comped) | a runner without access spending against the account |
 | 30 calls per user per rolling hour | one signed-up user running up the bill |
+| Daily ceilings per `kind`, from midnight Europe/Ljubljana (chat: Start 10, Pro and trial 50) | the plan's message allowance, and a chat sent under another kind's name |
+| `kind` must be one of `chat, memory, reaction, motd, adapt, plan, review` | an unmetered kind |
 | Model allow-list | using the proxy as a free general-purpose LLM endpoint |
 | Caps on messages and payload size | expensive single requests |
 | Reply length capped per kind of call (`limits.js`): prose at a chat reply's 1024 tokens, JSON by kind (memory 400, week rewrite 2048, plan 6000) | a manipulated prompt producing long off-topic output |
@@ -27,9 +29,9 @@ the only part of the path the user does not control:
 The entitlement check is what makes the paywall real. `hasPremium()` in the
 app decides what a runner is *shown*; this decides what they can *spend*.
 Without it, any signed-in free user could skip the UI and post here directly.
-The rule is duplicated from `src/core/subscription.js` on purpose — a Deno
-function cannot import the app's bundle, and a rule the client supplies is not
-a rule — so a change to the trial model has to be made in both places.
+The rule is `../_shared/entitlements.js`, the same plain-JS file the app
+imports to show it; the rows it reads (`users.trial_end`, `subscriptions`) are
+ones the caller cannot write.
 
 Both the entitlement and rate-limit checks **fail closed**: if the lookup
 errors, the request is refused rather than forwarded. A proxy that forgets its
@@ -37,7 +39,7 @@ limit under load is a proxy with no limit.
 
 ## Prerequisites
 
-`supabase/migration_v5.sql` must have been run — it creates the `ai_usage`
+`supabase/migration_v5.sql` and `migration_v9.sql` must have been run — it creates the `ai_usage`
 table the rate limiter counts. `migration_v6.sql` should be run too: it makes
 `users.trial_end` and `users.subscription_status` read-only to clients, so the
 entitlement this function reads is not one the caller can write. That table has RLS **enabled with no policies**,
@@ -104,7 +106,10 @@ for a runner to read and can be shown verbatim:
 | Status | `code` | Meaning |
 |---|---|---|
 | 401 | `unauthenticated` | no token, or the session expired |
-| 402 | `not_premium` | trial over and no active subscription |
+| 402 | `not_premium` | no access (tier `none`) |
+| 400 | `bad_kind` | `kind` missing or unknown |
+| 429 | `chat_limit` | the day's coach messages are used up (resets at midnight Ljubljana) |
+| 429 | `daily_limit` | another kind's daily ceiling |
 | 400 | `model_not_allowed`, `bad_messages`, `bad_request` | failed validation |
 | 413 | `payload_too_large` | prompt over 60 000 characters |
 | 429 | `rate_limited` | 30/hour reached |

@@ -15,7 +15,7 @@ import { motivationalMessage } from '../core/ai'
 import { adaptCurrentWeekIfNeeded, getHydratedPlans } from '../core/plan'
 import { PHASE_INTENT } from '../core/periodization'
 import { phaseStyle } from './Plan'
-import { hasPremium, trialDaysLeft, isTrialActive } from '../core/subscription'
+import { canUseApp, trialDaysLeft, isTrial } from '../core/subscription'
 import ProgressRing from '../components/ProgressRing'
 import WorkoutCard from '../components/WorkoutCard'
 import { GoalProgressCard, BlockEndCard } from '../components/GoalProgress'
@@ -51,7 +51,7 @@ function shortDate(iso) {
 }
 
 export default function Dashboard() {
-  const { profile } = useAuth()
+  const { profile, access } = useAuth()
   const navigate = useNavigate()
   const [plans, setPlans] = useState([])
   const [workouts, setWorkouts] = useState([])
@@ -63,7 +63,7 @@ export default function Dashboard() {
   const [logError, setLogError] = useState('')
 
   // Drives both the daily message and how the free tier is labelled below.
-  const premium = hasPremium(profile)
+  const premium = canUseApp(access)
 
   const currentWeek = useMemo(() => currentWeekNumber(plans), [plans])
   const lastWeek = plans.length ? plans[plans.length - 1].week_number : 1
@@ -165,7 +165,7 @@ export default function Dashboard() {
       return
     }
     const fallback = FALLBACK_QUOTES[new Date().getDate() % FALLBACK_QUOTES.length]
-    if (!hasPremium(profile) || !currentPlan) {
+    if (!premium || !currentPlan) {
       setMessage(fallback)
       return
     }
@@ -232,9 +232,9 @@ export default function Dashboard() {
           <h1 className="mt-0.5 truncate text-[1.75rem] font-bold leading-tight tracking-tight">
             {profile.name?.split(' ')[0] || t.dashboard.runnerFallback}
           </h1>
-          {isTrialActive(profile) ? (
+          {isTrial(access) ? (
             <p className="mt-1 text-xs font-medium text-primary-light">
-              {t.dashboard.trialLeft(trialDaysLeft(profile))}
+              {t.dashboard.trialLeft(trialDaysLeft(access))}
             </p>
           ) : (
             // The trial countdown's slot, once it has run out. Without this the

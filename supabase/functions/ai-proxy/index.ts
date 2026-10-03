@@ -7,11 +7,12 @@
  *
  * What this function does, in order:
  *   1. Requires a valid Supabase auth JWT — signed-out callers get 401.
- *   2. Checks the caller is on a live trial or an active subscription, so the
- *      paywall is enforced where the money is spent rather than only in the
- *      UI — free callers get 402.
- *   3. Counts the caller's AI calls in the last hour and refuses past the
- *      limit, with a message the UI can show verbatim.
+ *   2. Checks the caller's entitlement (_shared/entitlements.js: trial, Start,
+ *      Pro or comped), so the paywall is enforced where the money is spent
+ *      rather than only in the UI — callers without access get 402.
+ *   3. Counts the caller's AI calls in the last hour and today (midnight
+ *      Europe/Ljubljana), and refuses past the limits, with a message the UI
+ *      can show verbatim. Coach chat: Start 10 a day, Pro and trial 50.
  *   4. Validates the request (allow-listed model, capped payload, and a reply
  *      length capped per kind of call — see limits.js) so an authenticated
  *      user cannot turn the proxy into a free general-purpose LLM endpoint.
@@ -24,6 +25,9 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 // @ts-ignore — plain JS, shared with the app's test suite.
 import { cappedMaxTokens } from './limits.js'
+// @ts-ignore — plain JS, shared with the app and its tests.
+import { AI_KINDS, dailyLimit, startOfLocalDay } from '../_shared/entitlements.js'
+import { loadAccess } from '../_shared/access.ts'
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
 
@@ -61,8 +65,14 @@ const json = (body: unknown, status = 200) =>
   })
 
 /** Errors the client may show a user. Never leaks internals. */
-const fail = (status: number, message: string, code: string) =>
-  json({ error: { message, code } }, status)
+const fail = (status: number, message: string, code: string, extra: Record<string, unknown> = {}) =>
+  json({ error: { message, code, ...extra } }, status)
+
+/** The coach's day is over. Start runners hear that Pro has more room. */
+function chatLimitMessage(tier: string, limit: number) {
+  const base = `Danes sva se pogovorila že ${limit}-krat, kolikor jih paket omogoča. Jutri spet, od polnoči naprej.`
+  return tier === 'start' ? `${base} S paketom Pro imaš 50 sporočil na dan.` : base
+}
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
@@ -92,40 +102,45 @@ Deno.serve(async (req: Request) => {
 
   // --- 2. entitlement -----------------------------------------------------
   // The paywall in the UI decides what a runner is SHOWN. This decides what
-  // they can SPEND. Without it, any signed-in free user can skip the app
-  // entirely and post here directly — which is the one thing the paywall
-  // exists to prevent, since every AI call costs real money.
+  // they can SPEND. Without it, any signed-in user without access could skip
+  // the app entirely and post here directly — which is the one thing the
+  // paywall exists to prevent, since every AI call costs real money.
   //
-  // This mirrors hasPremium() in src/core/subscription.js. The duplication is
-  // deliberate: a Deno function cannot import the app's bundle, and a rule
-  // the client could supply is not a rule. If the trial model changes, both
-  // sides change. The service-role client reads the row directly, so the
-  // columns are not ones the caller can forge (migration_v6.sql also revokes
-  // write access to them).
-  const { data: profile, error: profileErr } = await admin
-    .from('users')
-    .select('trial_end, subscription_status')
-    .eq('id', user.id)
-    .maybeSingle()
-
-  if (profileErr) {
-    console.error('ai-proxy: entitlement lookup failed', profileErr.message)
+  // The rule is _shared/entitlements.js, the same file the app reads, and
+  // the rows it reads are ones the caller cannot write (users.trial_end is
+  // read-only since migration_v6, subscriptions has no client write access).
+  let ent
+  try {
+    ;({ ent } = await loadAccess(admin, user.id))
+  } catch (err) {
+    console.error('ai-proxy: entitlement lookup failed', (err as Error).message)
     // Fail CLOSED, as with the rate limit: if we cannot establish that the
     // caller has paid, we do not spend on their behalf.
     return fail(503, 'Storitev je trenutno preobremenjena. Poskusi čez nekaj minut.', 'entitlement_check_failed')
   }
 
-  const trialActive = profile?.trial_end ? new Date(profile.trial_end) > new Date() : false
-  const subscribed = profile?.subscription_status === 'active'
-  if (!trialActive && !subscribed) {
+  if (ent.tier === 'none') {
     return fail(
       402,
-      'Tvoj brezplačni preizkus se je iztekel. AI trener je del paketa Premium.',
+      'Tvoj dostop se je iztekel. Za trenerja izberi paket Start ali Pro.',
       'not_premium'
     )
   }
 
-  // --- 3. rate limit ------------------------------------------------------
+  // The request body is read here, before the limits, because the limit
+  // that applies depends on what kind of call it is.
+  let body: Record<string, unknown>
+  try {
+    body = await req.json()
+  } catch {
+    return fail(400, 'Neveljavna zahteva.', 'bad_request')
+  }
+  const kind = String(body.kind ?? '')
+  // `kind` is written by the client, so it may only pick among kinds that
+  // each have their own ceiling; an unknown one is refused.
+  if (!AI_KINDS.includes(kind)) return fail(400, 'Neveljavna zahteva.', 'bad_kind')
+
+  // --- 3. rate limits -----------------------------------------------------
   const since = new Date(Date.now() - RATE_WINDOW_MS).toISOString()
   const { count, error: countErr } = await admin
     .from('ai_usage')
@@ -147,14 +162,30 @@ Deno.serve(async (req: Request) => {
     )
   }
 
-  // --- 4. validate the request --------------------------------------------
-  let body: Record<string, unknown>
-  try {
-    body = await req.json()
-  } catch {
-    return fail(400, 'Neveljavna zahteva.', 'bad_request')
+  // Today's calls of this kind, since midnight in Ljubljana. Only billable
+  // ones: a call the provider refused (and the app retried on another
+  // model) is not a message the runner sent twice.
+  const perDay = dailyLimit(kind, ent.tier)
+  if (Number.isFinite(perDay)) {
+    const { count: today, error: todayErr } = await admin
+      .from('ai_usage')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .eq('kind', kind)
+      .eq('billable', true)
+      .gte('created_at', startOfLocalDay().toISOString())
+    if (todayErr) {
+      console.error('ai-proxy: daily-limit lookup failed', todayErr.message)
+      return fail(503, 'Storitev je trenutno preobremenjena. Poskusi čez nekaj minut.', 'rate_check_failed')
+    }
+    if ((today ?? 0) >= perDay) {
+      return kind === 'chat' || kind === 'memory'
+        ? fail(429, chatLimitMessage(ent.tier, perDay), 'chat_limit', { limit: perDay })
+        : fail(429, 'Za danes je trener naredil dovolj. Jutri spet.', 'daily_limit')
+    }
   }
 
+  // --- 4. validate the request --------------------------------------------
   const model = String(body.model ?? '')
   if (!ALLOWED_MODELS.has(model)) {
     return fail(400, 'Neveljavna zahteva.', 'model_not_allowed')
@@ -184,7 +215,7 @@ Deno.serve(async (req: Request) => {
   const jsonMode = (body.response_format as Record<string, unknown>)?.type === 'json_object'
   // Prose is capped at a chat reply's length whatever the request asks for,
   // so a coach prompt that was talked off topic cannot produce pages of it.
-  const maxTokens = cappedMaxTokens(body.max_tokens, { kind: String(body.kind ?? ''), json: jsonMode })
+  const maxTokens = cappedMaxTokens(body.max_tokens, { kind, json: jsonMode })
   const temperature = Math.min(Math.max(Number(body.temperature) || 0, 0), 2)
 
   const upstreamBody: Record<string, unknown> = {
@@ -198,9 +229,11 @@ Deno.serve(async (req: Request) => {
   // --- 5. record the call, then forward -----------------------------------
   // Recorded BEFORE the call so a failure upstream still counts against the
   // limit; otherwise an error loop is free.
-  const { error: usageErr } = await admin
+  const { data: usage, error: usageErr } = await admin
     .from('ai_usage')
-    .insert({ user_id: user.id, kind: String(body.kind ?? '').slice(0, 32) || null })
+    .insert({ user_id: user.id, kind })
+    .select('id')
+    .single()
   if (usageErr) {
     console.error('ai-proxy: could not record usage', usageErr.message)
     return fail(503, 'Storitev je trenutno preobremenjena. Poskusi čez nekaj minut.', 'usage_write_failed')
@@ -222,6 +255,12 @@ Deno.serve(async (req: Request) => {
   }
 
   const text = await upstream.text()
+
+  // Refused upstream: the hourly limit still counts it, the daily one does not.
+  if (!upstream.ok) {
+    const { error: markErr } = await admin.from('ai_usage').update({ billable: false }).eq('id', usage.id)
+    if (markErr) console.error('ai-proxy: could not mark a failed call', markErr.message)
+  }
 
   // Pass the upstream status through so the client's existing handling
   // (404 → next model, 429 → wait, 413 → smaller budget) keeps working, but

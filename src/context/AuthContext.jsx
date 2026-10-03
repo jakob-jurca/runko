@@ -3,9 +3,11 @@ import { supabase } from '../core/supabase'
 import { getProfile } from '../core/db'
 import { parseAuthUrl, failedLinkTarget, recoveryClaimHolds } from '../core/auth-url'
 import { isDeadSessionError, signOutHere } from '../core/auth-flows'
+import { fetchAccess } from '../core/subscription'
 
 /**
- * AuthContext — holds the Supabase session and the Runko profile row.
+ * AuthContext — holds the Supabase session, the Runko profile row and the
+ * runner's access (core/subscription.js fetchAccess: tier, limits).
  * profile === null while logged in means onboarding hasn't been completed
  * (and `profileError` means we could not find out: see below).
  *
@@ -166,6 +168,10 @@ export function AuthProvider({ children }) {
   // setup back into onboarding.
   const [profileError, setProfileError] = useState(false)
   const [profileAttempt, setProfileAttempt] = useState(0)
+  // What the server says this runner may use, with whose it is (as for the
+  // profile). Read from the entitlement function, never computed here.
+  const [accessState, setAccessState] = useState({ userId: null, access: null })
+  const [accessError, setAccessError] = useState(false)
   // The session ended without the runner asking: expired, revoked, or signed
   // out in another tab. The login screen says so instead of just appearing.
   const [sessionEnded, setSessionEnded] = useState(false)
@@ -270,10 +276,32 @@ export function AuthProvider({ children }) {
     }
   }, [userId, profileAttempt])
 
+  // Load the access alongside the profile, on the same key.
+  useEffect(() => {
+    let cancelled = false
+    setAccessError(false)
+    if (!userId) return
+    setAccessState({ userId: null, access: null })
+    fetchAccess()
+      .then((a) => !cancelled && setAccessState({ userId, access: a }))
+      .catch((err) => {
+        console.error('Failed to load access:', err.message)
+        if (!cancelled) setAccessError(true)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [userId, profileAttempt])
+
   const profileKnown = userId !== null && loaded.userId === userId
   const profile = profileKnown ? loaded.profile : null
-  // Waiting on the session, or on the profile of whoever is signed in.
-  const loading = booting || (userId !== null && !profileKnown && !profileError)
+  const accessKnown = userId !== null && accessState.userId === userId
+  const access = accessKnown ? accessState.access : null
+  // Waiting on the session, or on the profile and access of whoever is signed in.
+  const loading =
+    booting ||
+    (userId !== null && !profileKnown && !profileError) ||
+    (userId !== null && !accessKnown && !accessError)
 
   const refreshProfile = useCallback(async () => {
     if (!userId) return null
@@ -282,7 +310,18 @@ export function AuthProvider({ children }) {
     return p
   }, [userId])
 
-  /** Try the profile read again (the button on the "could not load" screen). */
+  /**
+   * Re-read the access, e.g. after a chat message (the count moved) or a
+   * return from Stripe Checkout. Keeps the old value on screen meanwhile.
+   */
+  const refreshAccess = useCallback(async () => {
+    if (!userId) return null
+    const a = await fetchAccess()
+    setAccessState({ userId, access: a })
+    return a
+  }, [userId])
+
+  /** Try the profile and access reads again (the button on the "could not load" screen). */
   const retryProfile = useCallback(() => setProfileAttempt((n) => n + 1), [])
 
   /** Called once the new password is saved, so the app stops diverting. */
@@ -337,8 +376,11 @@ export function AuthProvider({ children }) {
         loading,
         recovery,
         profileError,
+        access,
+        accessError,
         sessionEnded,
         retryProfile,
+        refreshAccess,
         clearRecovery,
         cancelRecovery,
         refreshProfile,

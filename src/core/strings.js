@@ -80,7 +80,7 @@ export const t = {
     confirmResend: 'Pošlji potrditveno sporočilo znova',
     confirmResent: 'Potrditveno sporočilo je na poti. Preveri nabiralnik, tudi vsiljeno pošto.',
     sessionEnded: 'Tvoja seja se je končala. Prijavi se znova.',
-    profileLoadFailed: 'Tvojega profila ni bilo mogoče naložiti. Preveri povezavo in poskusi znova.',
+    profileLoadFailed: 'Tvojih podatkov ni bilo mogoče naložiti. Preveri povezavo in poskusi znova.',
     retry: 'Poskusi znova',
     // Every Supabase auth error is shown as one of these (core/auth-flows.js).
     errors: {

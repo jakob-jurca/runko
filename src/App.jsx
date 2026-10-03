@@ -41,13 +41,14 @@ function ProfileLoadError() {
 
 /** Requires a session AND a completed onboarding profile. */
 function Protected({ children }) {
-  const { session, profile, loading, recovery, profileError } = useAuth()
+  const { session, profile, loading, recovery, profileError, accessError } = useAuth()
   if (loading) return <FullScreenSpinner />
   // A recovery session is a real session, so this guard would otherwise wave
   // the user straight through without them ever setting a new password.
   if (recovery) return <Navigate to="/reset-password" replace />
   if (!session) return <Navigate to="/auth" replace />
-  if (profileError) return <ProfileLoadError />
+  // Not knowing what the runner may use is no reason to show the paywall.
+  if (profileError || accessError) return <ProfileLoadError />
   if (!profile) return <Navigate to="/onboarding" replace />
   return (
     <div className="min-h-[100dvh] pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:pb-0 md:pl-60">
@@ -89,13 +90,13 @@ function Home() {
  * home, so a stray /onboarding URL can't wipe their setup.
  */
 function OnboardingGate({ children }) {
-  const { session, profile, loading, recovery, profileError } = useAuth()
+  const { session, profile, loading, recovery, profileError, accessError } = useAuth()
   const [params] = useSearchParams()
   if (loading) return <FullScreenSpinner />
   if (recovery) return <Navigate to="/reset-password" replace />
   if (!session) return <Navigate to="/auth" replace />
   // Not knowing whether a profile exists is no reason to start one over.
-  if (profileError) return <ProfileLoadError />
+  if (profileError || accessError) return <ProfileLoadError />
   if (profile && params.get('rebuild') !== '1') return <Navigate to="/" replace />
   return children
 }

@@ -23,7 +23,7 @@
  * implemented and users.last_plan_created_at is still written on every build;
  * see PLAN_LIMIT_ENABLED below to switch it back on without a migration.
  */
-import { describePlanSkeleton, mergeDescriptions, adaptWeeklyPlan } from './ai'
+import { describePlanSkeleton, adaptWeeklyPlan } from './ai'
 import { runPlanningPipeline } from './planning/index.js'
 import { withNotices } from './planning/explain.js'
 import { enforceWeekRules, isAdaptable } from './planning/guard.js'
@@ -47,7 +47,6 @@ import {
   HEALTH_FIELDS,
 } from './db'
 import { getMemories } from './memory'
-import { hasPremium } from './subscription'
 import { IS_DEV } from './env'
 
 const DEBUG = IS_DEV
@@ -385,11 +384,10 @@ export async function createInitialPlan(profile, intake = null, answers = {}) {
   // built-in ones. A free user's plan is still fully calculated for them —
   // only the prose is generic — and silently serving stock text as the
   // coach's own made the free tier look like a failed premium one.
-  const aiDescribed = hasPremium(profile)
-  const described = aiDescribed
-    ? await describePlanSkeleton(skeleton, { profile, memories, language: 'sl' })
-    : mergeDescriptions(skeleton, {})
-  if (!aiDescribed && DEBUG) console.log('[plan] no premium — calculated plan with built-in descriptions.')
+  // Access is the server's call: the proxy refuses a runner without one, and
+  // the plan then keeps the built-in wording rather than failing.
+  const described = await describePlanSkeleton(skeleton, { profile, memories, language: 'sl' })
+  const aiDescribed = described.described !== false
 
   // --- 3. Persist -----------------------------------------------------------
   // Clear the old plan before writing the new one. Upserting alone would
@@ -476,12 +474,12 @@ const isHabitGoal = (plans) => plans?.[0]?.plan_json?.goal_plan?.main === 'navad
  * Immediate adaptation hook — called after every workout log.
  * The coach "notices" a missed workout (distance 0) or a very hard one
  * (effort >= 4) and rewrites NEXT week's plan (keeping its original intent
- * as the base). Premium only.
+ * as the base). The proxy refuses it for a runner without access.
  *
  * @returns {Promise<object|null>} the new plan row, or null if no adaptation ran
  */
 export async function maybeAdaptPlan(profile, plans, workout, recentWorkouts) {
-  if (!hasPremium(profile) || !plans?.length) return null
+  if (!plans?.length) return null
 
   const missed = Number(workout.distance) === 0
   const hard = Number(workout.effort) >= 4
@@ -514,12 +512,13 @@ export async function maybeAdaptPlan(profile, plans, workout, recentWorkouts) {
 /**
  * Weekly rollover adaptation — called when the dashboard loads.
  * When a new week has started and its plan hasn't been adapted yet, rewrite
- * it based on what the runner actually logged last week. Premium only.
+ * it based on what the runner actually logged last week. The proxy refuses
+ * it for a runner without access.
  *
  * @returns {Promise<object|null>} the updated plan row, or null if nothing changed
  */
 export async function adaptCurrentWeekIfNeeded(profile, plans, recentWorkouts) {
-  if (!hasPremium(profile) || !plans?.length) return null
+  if (!plans?.length) return null
   // The weekly rewrite eases a week after missed sessions; a habit goal has no such thing.
   if (isHabitGoal(plans)) return null
 
