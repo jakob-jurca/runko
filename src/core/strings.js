@@ -1060,6 +1060,20 @@ export const t = {
   },
 
   // -------------------------------------------------------------------------
+  // Weekly progress review (Pro and trial)
+  // -------------------------------------------------------------------------
+  review: {
+    title: 'Tedenski pregled',
+    stats: (done, planned, doneKm, plannedKm) =>
+      `Teki: ${done} od ${planned} · ${String(doneKm).replace('.', ',')} od ${String(plannedKm).replace('.', ',')} km`,
+    writing: 'Trener pripravlja pregled preteklega tedna …',
+    focus: 'Fokus za ta teden:',
+    teaser:
+      'Vsak teden: koliko si naredil(a) glede na načrt, kaj je šlo dobro in en konkreten fokus za nov teden. Na voljo s paketom Pro.',
+    upgrade: 'Paket zamenjaš v Nastavitvah',
+  },
+
+  // -------------------------------------------------------------------------
   // Paid plans: Start / Pro, Stripe
   // -------------------------------------------------------------------------
   billing: {

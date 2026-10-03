@@ -27,6 +27,7 @@ export const JSON_MAX_OUTPUT_TOKENS = {
   memory: 400,
   adapt: 2048,
   plan: 6000,
+  review: 700,
 }
 
 /** A JSON call that does not say what it is. */

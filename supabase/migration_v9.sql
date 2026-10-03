@@ -154,3 +154,28 @@ create policy "own training breaks" on public.training_breaks
 
 create index if not exists training_breaks_user_idx
   on public.training_breaks (user_id, created_at desc);
+
+-- ---------------------------------------------------------------
+-- 7. weekly_reviews — the weekly progress review (Pro and trial)
+-- ---------------------------------------------------------------
+--
+-- One row per runner per reviewed week (the Monday of that week, Ljubljana).
+-- The ai-proxy claims the row BEFORE the AI call and fills it after, so a
+-- week is never generated twice, whatever the app does. The runner can read
+-- their own; only the proxy (service role) writes.
+create table if not exists public.weekly_reviews (
+  user_id uuid not null references auth.users (id) on delete cascade,
+  week_start date not null,
+  status text not null default 'pending' check (status in ('pending', 'ready')),
+  content jsonb,
+  created_at timestamptz not null default now(),
+  primary key (user_id, week_start)
+);
+
+alter table public.weekly_reviews enable row level security;
+
+drop policy if exists "own weekly reviews read" on public.weekly_reviews;
+create policy "own weekly reviews read" on public.weekly_reviews
+  for select using (auth.uid() = user_id);
+
+revoke insert, update, delete on public.weekly_reviews from anon, authenticated;

@@ -127,6 +127,8 @@ wrong screens.
   kind, days, strong pain, doctor note) calling `reportHealthBreak` / `undoHealthBreak` from
   src/core/plan.js, and the active-break card from `getActiveBreak`. Pass `healthBreak` to `askCoach`
   in the chat tab, as web Chat.jsx does. Strings `t.healthBreak`.
+- Weekly review: a card on the home tab like web components/WeeklyReview.jsx (`loadWeeklyReview` from
+  src/core/plan.js with `previousLocalWeekKey()`; locked teaser when `!access.review`). Strings `t.review`.
 - Settings: "Naročnina" section as on the web (src/pages/Settings.jsx `Subscription`, strings
   `t.billing`).
 

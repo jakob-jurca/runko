@@ -24,4 +24,6 @@ export const OUTPUT_TOKENS = {
   /** The words for a whole plan as JSON; the stricter retry asks for a little more. */
   plan: 5000,
   plan_retry: 6000,
+  /** The weekly progress review as JSON: a few short lines. */
+  review: 700,
 }

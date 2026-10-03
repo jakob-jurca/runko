@@ -19,6 +19,7 @@ import { phaseStyle } from './Plan'
 import { trialDaysLeft, isTrial, planBuildNote } from '../core/subscription'
 import ProgressRing from '../components/ProgressRing'
 import { HealthBreakButton, HealthBreakNotice } from '../components/HealthBreak'
+import WeeklyReview from '../components/WeeklyReview'
 import WorkoutCard from '../components/WorkoutCard'
 import { GoalProgressCard, BlockEndCard } from '../components/GoalProgress'
 import { goalProgress, repeatParams } from '../core/goal-progress'
@@ -351,6 +352,9 @@ export default function Dashboard() {
           </div>
         </section>
       )}
+
+      {/* Last week, reviewed (Pro and trial; Start sees what it would be). */}
+      <WeeklyReview access={access} profile={profile} plans={plans} workouts={workouts} healthBreak={healthBreak} />
 
       {progress && <GoalProgressCard progress={progress} />}
 

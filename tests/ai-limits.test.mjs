@@ -24,7 +24,7 @@ for (const bad of [undefined, null, 'abc', 0, -5, NaN]) {
 }
 
 console.log('\nThe app never asks for more than the proxy allows:')
-const JSON_KINDS = { memory: 'memory', adapt: 'adapt', plan: 'plan', plan_retry: 'plan' }
+const JSON_KINDS = { memory: 'memory', adapt: 'adapt', plan: 'plan', plan_retry: 'plan', review: 'review' }
 for (const [name, tokens] of Object.entries(OUTPUT_TOKENS)) {
   const json = name in JSON_KINDS
   const cap = outputTokenCap({ kind: JSON_KINDS[name] ?? name, json })

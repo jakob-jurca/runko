@@ -27,7 +27,7 @@ check('chatLimitMessage for trial has no upsell', !/Pro/.test(chatLimitMessage('
 const proxy = fs.readFileSync('supabase/functions/ai-proxy/index.ts', 'utf8')
 check('the proxy counts only billable calls of this kind since Ljubljana midnight',
   /\.eq\('kind', kind\)\s*\.eq\('billable', true\)\s*\.gte\('created_at', startOfLocalDay\(\)\.toISOString\(\)\)/.test(proxy))
-check('a call refused upstream is marked not billable', /if \(!upstream\.ok\)[\s\S]{0,200}billable: false/.test(proxy))
+check('a call refused upstream is marked not billable', /if \(!upstream\.ok\) \{\s*await notBillable\(\)/.test(proxy) && /const notBillable = [\s\S]{0,160}billable: false/.test(proxy))
 const ai = fs.readFileSync('src/core/ai.js', 'utf8')
 check('off-topic chat never reaches the proxy, so it never counts', /classifyCoachMessage\(lastUser\) === 'out'[\s\S]{0,120}return offTopicReply/.test(ai))
 check('the app treats chat_limit as final and shows the proxy message', /FINAL_CODES = new Set\(\[[^\]]*'chat_limit'/.test(ai))

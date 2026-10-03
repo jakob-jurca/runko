@@ -26,7 +26,9 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 // @ts-ignore — plain JS, shared with the app's test suite.
 import { cappedMaxTokens } from './limits.js'
 // @ts-ignore — plain JS, shared with the app and its tests.
-import { AI_KINDS, dailyLimit, dailyLimitRefusal, planBuildUsable, startOfLocalDay } from '../_shared/entitlements.js'
+import {
+  AI_KINDS, dailyLimit, dailyLimitRefusal, planBuildUsable, reviewAllowed, startOfLocalDay, previousLocalWeekKey,
+} from '../_shared/entitlements.js'
 import { loadAccess } from '../_shared/access.ts'
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions'
@@ -248,6 +250,33 @@ Deno.serve(async (req: Request) => {
     if (!bumped?.length) return refused()
   }
 
+  // --- 4c. the weekly review: one per runner per week ---------------------
+  // Claimed BEFORE the call: the row's primary key (runner, week) means a
+  // second request for the same week, from any tab or device, is refused
+  // instead of paid for. The week is the server's (Ljubljana), not the app's.
+  let reviewWeek: string | null = null
+  if (kind === 'review') {
+    if (!reviewAllowed(ent.tier)) {
+      return fail(403, 'Tedenski pregled napredka je del paketa Pro.', 'review_locked')
+    }
+    if (!jsonMode) return fail(400, 'Neveljavna zahteva.', 'bad_request')
+    reviewWeek = previousLocalWeekKey()
+    const { error: claimErr } = await admin
+      .from('weekly_reviews')
+      .insert({ user_id: user.id, week_start: reviewWeek, status: 'pending' })
+    if (claimErr) {
+      if (claimErr.code === '23505') return fail(409, 'Pregled tega tedna je že pripravljen.', 'review_exists')
+      console.error('ai-proxy: could not claim the weekly review', claimErr.message)
+      return fail(503, 'Storitev je trenutno preobremenjena. Poskusi čez nekaj minut.', 'review_claim_failed')
+    }
+  }
+  // Nothing was generated (the call failed before or at the provider): let
+  // the app try again later. A review that WAS generated is never redone.
+  const releaseReview = async () => {
+    if (!reviewWeek) return
+    await admin.from('weekly_reviews').delete().eq('user_id', user.id).eq('week_start', reviewWeek).eq('status', 'pending')
+  }
+
   // --- 5. record the call, then forward -----------------------------------
   // Recorded BEFORE the call so a failure upstream still counts against the
   // limit; otherwise an error loop is free.
@@ -258,7 +287,12 @@ Deno.serve(async (req: Request) => {
     .single()
   if (usageErr) {
     console.error('ai-proxy: could not record usage', usageErr.message)
+    await releaseReview()
     return fail(503, 'Storitev je trenutno preobremenjena. Poskusi čez nekaj minut.', 'usage_write_failed')
+  }
+  const notBillable = async () => {
+    const { error: markErr } = await admin.from('ai_usage').update({ billable: false }).eq('id', usage.id)
+    if (markErr) console.error('ai-proxy: could not mark a failed call', markErr.message)
   }
 
   let upstream: Response
@@ -273,6 +307,8 @@ Deno.serve(async (req: Request) => {
     })
   } catch (err) {
     console.error('ai-proxy: upstream fetch failed', err)
+    await notBillable()
+    await releaseReview()
     return fail(502, 'Trenerja trenutno ni bilo mogoče doseči.', 'upstream_unreachable')
   }
 
@@ -280,8 +316,22 @@ Deno.serve(async (req: Request) => {
 
   // Refused upstream: the hourly limit still counts it, the daily one does not.
   if (!upstream.ok) {
-    const { error: markErr } = await admin.from('ai_usage').update({ billable: false }).eq('id', usage.id)
-    if (markErr) console.error('ai-proxy: could not mark a failed call', markErr.message)
+    await notBillable()
+    await releaseReview()
+  } else if (reviewWeek) {
+    // Stored here, by the server, so the app never needs to ask twice.
+    let content: unknown = null
+    try {
+      content = JSON.parse(JSON.parse(text)?.choices?.[0]?.message?.content ?? 'null')
+    } catch {
+      content = null
+    }
+    const { error: saveErr } = await admin
+      .from('weekly_reviews')
+      .update({ status: 'ready', content: content ?? {} })
+      .eq('user_id', user.id)
+      .eq('week_start', reviewWeek)
+    if (saveErr) console.error('ai-proxy: could not store the weekly review', saveErr.message)
   }
 
   // Pass the upstream status through so the client's existing handling

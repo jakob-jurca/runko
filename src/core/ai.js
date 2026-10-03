@@ -66,7 +66,10 @@ const FRIENDLY_QUOTA = t.errors.aiQuota
 const FRIENDLY_GENERIC = t.errors.aiGeneric
 
 /** Proxy refusals no retry can change; their message is shown as-is. */
-const FINAL_CODES = new Set(['rate_limited', 'not_premium', 'chat_limit', 'daily_limit', 'plan_build_required', 'bad_kind'])
+const FINAL_CODES = new Set([
+  'rate_limited', 'not_premium', 'chat_limit', 'daily_limit', 'plan_build_required', 'bad_kind',
+  'review_exists', 'review_locked',
+])
 
 /** Human-readable message for any error thrown from this module. */
 export function friendlyAiMessage(err) {
@@ -578,6 +581,29 @@ React in 1-2 short sentences as my coach — acknowledge the run and give one fo
  * AI INTEGRATION POINT — Dashboard motivational message.
  * Cached per-day in sessionStorage by the caller to avoid burning quota.
  */
+/**
+ * AI INTEGRATION POINT — the weekly progress review (Pro and trial).
+ * One call a week: the proxy claims the week before calling and stores the
+ * result itself (weekly_reviews), so the return value is a convenience.
+ *
+ * @param {string} prompt - core/weekly-review.js reviewPrompt()
+ * @returns {Promise<object|null>} the parsed review, or null when not JSON
+ */
+export async function writeWeeklyReview(prompt) {
+  const text = await callAi({
+    system: COACH_PERSONA + IN_SLOVENIAN,
+    messages: [{ role: 'user', content: prompt }],
+    json: true,
+    maxTokens: OUTPUT_TOKENS.review,
+    kind: 'review',
+  })
+  try {
+    return JSON.parse(text)
+  } catch {
+    return null
+  }
+}
+
 export async function motivationalMessage(profile, plan, workouts) {
   return callAi({
     system: COACH_PERSONA + IN_SLOVENIAN,

@@ -22,7 +22,7 @@
  * How often a plan may be built depends on the runner's plan (Start, Pro,
  * trial) and is decided by the server: see reservePlanBuild below.
  */
-import { describePlanSkeleton, adaptWeeklyPlan } from './ai'
+import { describePlanSkeleton, adaptWeeklyPlan, writeWeeklyReview } from './ai'
 import { runPlanningPipeline } from './planning/index.js'
 import { withNotices } from './planning/explain.js'
 import { enforceWeekRules, isAdaptable } from './planning/guard.js'
@@ -40,6 +40,7 @@ import {
   weekStartISO,
   saveTrainingBreak,
   markBreakUndone,
+  getWeeklyReview,
   deletePlans,
   startOfWeekISO,
   currentWeekNumber,
@@ -50,6 +51,7 @@ import {
 } from './db'
 import { getMemories } from './memory'
 import { applyHealthBreak, validateBreak } from './health-break.js'
+import { loadReview } from './weekly-review.js'
 import { callFunction } from './subscription'
 import { IS_DEV } from './env'
 
@@ -568,4 +570,20 @@ export async function undoHealthBreak(profile, plans, breakRow) {
   await markBreakUndone(breakRow.id)
   const byWeek = new Map(restored.map((r) => [r.week_number, r]))
   return plans.map((p) => byWeek.get(p.week_number) ?? p)
+}
+
+// ---------------------------------------------------------------------------
+// Weekly progress review (Pro and trial) — core/weekly-review.js
+// ---------------------------------------------------------------------------
+
+/**
+ * Last week's review, read or (once) written. See core/weekly-review.js
+ * loadReview; this binds it to the database and the AI.
+ */
+export function loadWeeklyReview(input) {
+  return loadReview({
+    ...input,
+    getStored: (userId, weekStart) => getWeeklyReview(userId, weekStart),
+    write: (prompt) => writeWeeklyReview(prompt),
+  })
 }

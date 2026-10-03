@@ -151,6 +151,11 @@ and for plan builds); the app only shows what `fetchAccess()` returns.
   training_breaks table (migration_v9) stores the report and the original weeks ("Razveljavi"). Button +
   dialog + notice: components/HealthBreak.jsx on Dashboard and Plan. Over 14 days or strong pain: a calm
   doctor note. The coach gets an INJURY / ILLNESS block (coach-prompt.js healthBreakContext).
+- Stage 6 (weekly review, Pro and trial): generated lazily on the first Dashboard load of a new week (no cron).
+  The numbers (runs and km planned vs done, missed sessions) are counted by core/weekly-review.js; one AI call
+  (kind `review`, JSON, 700 tokens) writes a short summary, 1-2 highlights and one focus. The ai-proxy claims
+  weekly_reviews (runner, week) BEFORE calling, stores the result itself, refuses a second one (409), and
+  releases the claim only if nothing was generated. Start sees a locked teaser. components/WeeklyReview.jsx.
 
 ### Comped accounts (Pro without paying)
 In the Supabase SQL Editor, once per person (after migration_v9):

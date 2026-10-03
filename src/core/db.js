@@ -218,6 +218,23 @@ export async function markBreakUndone(id) {
   if (error) throw error
 }
 
+// ---------- weekly_reviews (written only by the ai-proxy) ----------
+
+/** The stored review of the week starting `weekStart`, or null. */
+export async function getWeeklyReview(userId, weekStart) {
+  const { data, error } = await supabase
+    .from('weekly_reviews')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('week_start', weekStart)
+    .maybeSingle()
+  if (error) {
+    if (MISSING_TABLE.has(error.code)) return null
+    throw error
+  }
+  return data
+}
+
 // ---------- workouts ----------
 
 export async function getWorkouts(userId, { since, limit = 50 } = {}) {
