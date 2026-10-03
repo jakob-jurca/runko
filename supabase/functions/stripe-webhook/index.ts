@@ -25,6 +25,11 @@ const reply = (status: number, body: unknown) =>
 Deno.serve(async (req: Request) => {
   if (req.method !== 'POST') return reply(405, { error: 'method not allowed' })
 
+  // Payments switched off: nothing to do, and no secret is needed. 503 (not
+  // 200) so that, should Stripe ever call while off, it retries later
+  // instead of the event being lost.
+  if (Deno.env.get('PAYMENTS_ENABLED') !== 'true') return reply(503, { error: 'payments disabled' })
+
   const secret = Deno.env.get('STRIPE_WEBHOOK_SECRET')
   const stripeKey = Deno.env.get('STRIPE_SECRET_KEY')
   const supabaseUrl = Deno.env.get('SUPABASE_URL')

@@ -28,7 +28,8 @@ Deno.serve(async (req: Request) => {
   const auth = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '')
   if (!cronSecret || auth !== cronSecret) return reply(401, { error: 'unauthorized' })
 
-  const enabled = Deno.env.get('TRIAL_REMINDER_ENABLED') === 'true'
+  // Also off while payments are: without Stripe there is no card trial to remind about.
+  const enabled = Deno.env.get('TRIAL_REMINDER_ENABLED') === 'true' && Deno.env.get('PAYMENTS_ENABLED') === 'true'
   const resendKey = Deno.env.get('RESEND_API_KEY')
   const from = Deno.env.get('EMAIL_FROM')
   if (!enabled || !resendKey || !from) return reply(200, { skipped: 'disabled' })

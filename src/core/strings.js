@@ -1103,6 +1103,13 @@ export const t = {
       planLimitTitle: 'Nov načrt še ni na voljo',
       planLimitBack: 'Nazaj',
     },
+    // While payments are off (PAYMENTS_ENABLED): shown instead of the paywall.
+    comingSoon: {
+      titleEnded: 'Tvoj brezplačni mesec se je iztekel',
+      title: 'Plačljiva paketa prihajata kmalu',
+      body: 'Paketa Start in Pro bosta na voljo kmalu. Do takrat se nič ne zaračuna in ti ni treba narediti ničesar.',
+      data: 'Tvoji podatki so shranjeni: načrt, treningi in pogovori s trenerjem. Ko bo naročnina na voljo, je vse spet tukaj.',
+    },
     paywall: {
       titleNew: 'Izberi svoj paket',
       titleEnded: 'Tvoj dostop se je iztekel',

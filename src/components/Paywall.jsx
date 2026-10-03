@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Check, LockKey, Minus } from '@phosphor-icons/react'
+import { Check, Hourglass, LockKey, Minus } from '@phosphor-icons/react'
 import { useAuth } from '../context/AuthContext'
 import { startCheckout, openPortal } from '../core/subscription'
-import { PLANS, FEATURES, displayPrice, TRIAL_LINE } from '../core/pricing'
+import { PLANS, FEATURES, displayPrice, trialCopy } from '../core/pricing'
 import { t } from '../core/strings'
 
 /**
@@ -27,6 +27,11 @@ export default function Paywall() {
   const [error, setError] = useState('')
 
   const a = access || {}
+
+  // Payments switched off (PAYMENTS_ENABLED): no plans to buy yet, so no
+  // Checkout buttons. A calm word that paid plans are coming, data kept.
+  if (!a.paymentsEnabled) return <ComingSoon ended={a.tier === 'none'} onSignOut={signOut} />
+
   const fixPayment = a.paymentFailed && a.hasCustomer
   // Someone who had access before (old trial, a cancelled plan): their data waits for them.
   const returning = Boolean(profile) || Boolean(a.status)
@@ -136,7 +141,7 @@ export default function Paywall() {
           </div>
 
           <p className="mt-5 max-w-[65ch] text-sm leading-relaxed text-zinc-300">
-            {a.trialAvailable ? TRIAL_LINE : P.noTrialLine}
+            {a.trialAvailable ? trialCopy(true).line : P.noTrialLine}
           </p>
           <p className="mt-2 text-xs text-zinc-500">{P.promoHint}</p>
         </>
@@ -145,6 +150,27 @@ export default function Paywall() {
       {error && <p className="mt-4 text-sm text-rose-300" role="alert">{error}</p>}
 
       <button onClick={signOut} className="mt-10 self-start text-xs text-zinc-500 underline underline-offset-4 hover:text-zinc-300">
+        {t.settings.signOut}
+      </button>
+    </main>
+  )
+}
+
+/**
+ * While payments are off: the trial has ended (or someone opened /paket),
+ * paid plans are not on sale yet. Nothing to click but sign out.
+ */
+function ComingSoon({ ended, onSignOut }) {
+  const C = t.billing.comingSoon
+  return (
+    <main className="mx-auto flex min-h-[100dvh] max-w-md flex-col justify-center px-4 py-10 animate-fade-up sm:px-6">
+      <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary-faint text-primary">
+        <Hourglass size={24} />
+      </div>
+      <h1 className="text-[1.75rem] font-bold leading-tight tracking-tight">{ended ? C.titleEnded : C.title}</h1>
+      <p className="mt-3 leading-relaxed text-zinc-400">{C.body}</p>
+      {ended && <p className="mt-3 leading-relaxed text-zinc-400">{C.data}</p>}
+      <button onClick={onSignOut} className="mt-10 self-start text-xs text-zinc-500 underline underline-offset-4 hover:text-zinc-300">
         {t.settings.signOut}
       </button>
     </main>

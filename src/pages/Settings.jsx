@@ -119,7 +119,8 @@ export default function Settings() {
       </section>
 
       {/* Naročnina: what the server says, and the Stripe portal for the rest */}
-      <Subscription access={access} />
+      {/* Hidden while payments are off: there is nothing to subscribe to or manage yet. */}
+      {access?.paymentsEnabled && <Subscription access={access} />}
 
       {/* Account: the password is changed here, with the current one. The
           email address is shown in the profile above and cannot be changed

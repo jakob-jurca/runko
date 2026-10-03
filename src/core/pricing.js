@@ -62,5 +62,67 @@ export function displayPrice(tier, interval) {
 
 export const FOUNDING_NOTE = 'Ustanovni člani: -25 % prvo leto, omejeno na prvih 50'
 
-export const TRIAL_LINE =
-  'Preizkus traja 14 dni. Ob koncu se kartica samodejno bremeni za izbrani paket. Prekličeš lahko kadarkoli prej.'
+/**
+ * Are payments on? The server decides for the app (access.paymentsEnabled,
+ * from the PAYMENTS_ENABLED Supabase secret). The landing page has no server
+ * call, so it reads the same switch at build time: VITE_PAYMENTS_ENABLED on
+ * Vercel. Both flip together (PROGRESS.md, Before launch). Vite replaces
+ * import.meta.env at build time; under Node (tests) it is undefined: off.
+ */
+export const PAYMENTS_LIVE = import.meta.env?.VITE_PAYMENTS_ENABLED === 'true'
+
+/**
+ * Every word about the free trial, in one place, for both states:
+ *   live  14 days, card at the start, charged automatically, cancel any time
+ *   off   1 month, no card, nothing is charged, paid plans are coming
+ * Used by the landing page, index.html (vite.config.js) and the app.
+ */
+export function trialCopy(live = PAYMENTS_LIVE) {
+  if (live) {
+    return {
+      short: '14 dni brezplačno',
+      cta: 'Začni 14 dni brezplačno',
+      trustText: 'Preizkusi celoten načrt in trenerja, preden se odločiš.',
+      intro: 'Prvih 14 dni je brezplačnih, z vsem, kar zna Pro. Potem izbereš paket, ki ti ustreza.',
+      line: 'Preizkus traja 14 dni. Ob koncu se kartica samodejno bremeni za izbrani paket. Prekličeš lahko kadarkoli prej.',
+      facts: [
+        { key: 'trial', title: '14 dni brezplačno', text: 'Vse funkcije paketa Pro, tudi tedenski pregled.' },
+        { key: 'card', title: 'Kartica ob začetku', text: 'Ob koncu preizkusa se samodejno zaračuna izbrani paket.' },
+        { key: 'cancel', title: 'Prekličeš kadarkoli', text: 'Pred koncem preizkusa ne plačaš ničesar.' },
+      ],
+      finalCta: 'Nastavitev traja nekaj minut. Prvih 14 dni je brezplačnih.',
+      faqAfter: {
+        q: 'Kaj se zgodi po 14 dneh?',
+        a: 'Ob koncu preizkusa se samodejno zaračuna izbrani paket. Če ga prej prekličeš, ne plačaš ničesar.',
+      },
+      faqCancel: {
+        q: 'Kako prekličem naročnino?',
+        a: 'Kadarkoli v Nastavitvah pod Naročnina, z enim klikom. Dostop ostane do konca plačanega obdobja.',
+      },
+      ogDescription: 'Tekaški načrt, ki se prilagaja tebi. Od 5 km do maratona, 14 dni brezplačno.',
+    }
+  }
+  return {
+    short: '1 mesec brezplačno, brez kartice',
+    cta: 'Začni 1 mesec brezplačno',
+    trustText: 'Brez kartice. Preizkusi celoten načrt in trenerja, preden se odločiš.',
+    intro: 'Prvi mesec je brezplačen in brez kartice, z vsem, kar zna Pro. Plačljiva paketa Start in Pro prihajata kmalu.',
+    line: 'Prvi mesec je brezplačen in brez kartice. Ko se izteče, se nič ne zaračuna.',
+    facts: [
+      { key: 'trial', title: '1 mesec brezplačno', text: 'Vse funkcije paketa Pro, tudi tedenski pregled.' },
+      { key: 'card', title: 'Brez kartice', text: 'Za preizkus ne potrebuješ plačilne kartice.' },
+      { key: 'cancel', title: 'Nič se ne zaračuna', text: 'Ko se preizkus izteče, ne plačaš ničesar. Plačljiva paketa prihajata kmalu.' },
+    ],
+    finalCta: 'Nastavitev traja nekaj minut. Prvi mesec je brezplačen, brez kartice.',
+    faqAfter: {
+      q: 'Kaj se zgodi po brezplačnem mesecu?',
+      a: 'Nič se ne zaračuna. Plačljiva paketa Start in Pro prihajata kmalu. Ko bosta na voljo, se sam odločiš, ali nadaljuješ.',
+    },
+    // No subscription exists yet, so there is nothing to cancel.
+    faqCancel: null,
+    ogDescription: 'Tekaški načrt, ki se prilagaja tebi. Od 5 km do maratona, 1 mesec brezplačno, brez kartice.',
+  }
+}
+
+/** @deprecated read trialCopy(true).line; kept for the paywall while payments are live. */
+export const TRIAL_LINE = trialCopy(true).line

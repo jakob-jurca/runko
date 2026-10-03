@@ -186,6 +186,26 @@ and for plan builds); the app only shows what `fetchAccess()` returns.
   Pro wide and recommended, founding note, "Začni 14 dni brezplačno", three trial facts). Side by side from
   1024 px, stacked with Pro first below. Checked in headless Chrome at 375 (no horizontal overflow), 768, 1440.
 
+### Payments switch (no Stripe yet)
+`PAYMENTS_ENABLED` (Supabase secret, off unless "true") is read by the Edge Functions; the app gets it as
+`access.paymentsEnabled`. The landing page is static, so it reads the same switch at build time as
+`VITE_PAYMENTS_ENABLED` (Vercel env). All trial wording: `trialCopy()` in src/core/pricing.js (landing, the
+share description in index.html via vite.config.js, the paywall).
+While OFF: new signups keep the 1-month no-card trial (users.trial_end default; a signup still in onboarding
+counts from the signup time); trial = Pro features and limits, plans rebuilt like Pro; a finished trial shows
+"Plačljiva paketa prihajata kmalu" instead of the paywall (no Checkout or portal buttons anywhere); Settings
+has no Naročnina; landing says "1 mesec brezplačno, brez kartice" and drops the cancel FAQ; billing answers
+503 payments_disabled and stripe-webhook 503 without needing any secret; the trial reminder stays off.
+Creator, comped, limits, the injury button and the weekly review work normally.
+While ON: everything as built in Stages 1-9.
+
+### Deploy now (no Stripe, no v10)
+1. migration_v9.sql: done (the live RLS audit passes on its tables). set_creator.sql if not run yet.
+2. Do NOT set PAYMENTS_ENABLED (or set it to false). Do not set VITE_PAYMENTS_ENABLED on Vercel.
+3. Deploy ALL functions: ai-proxy, entitlement, billing, stripe-webhook (--no-verify-jwt), trial-reminder
+   (--no-verify-jwt), then push to main (Vercel builds the app) right after.
+4. Do NOT run migration_v10_cutover.sql.
+
 ### Migration order (production, old app still live)
 1. `supabase/migration_v9.sql` any time: it only adds tables, columns and indexes; the live app and every
    current user are unaffected (tests/entitlements.test.mjs checks it never touches public.users).
@@ -222,6 +242,15 @@ Expo app built in six phases; the committed log is mobile/PROGRESS.md (kept sepa
 - [ ] Slovenian reset-password email template with the "Nadaljuj" flow: the link is `{{ .SiteURL }}/reset-password?token_hash={{ .TokenHash }}&type=recovery` (AUTH_CHECKLIST.md §0). Mobile must support token_hash links first (mobile/PROGRESS.md, "To catch up").
 - [ ] Raise the minimum password length to 8, in the app (`MIN_PASSWORD_LENGTH` in src/core/auth-flows.js, mobile screens) and in Supabase (Authentication → Sign In / Providers → Email → Minimum password length). Existing shorter passwords still log in; the new minimum applies to new and changed passwords.
 - [ ] Update Site URL and Redirect URLs to the new domain (Authentication → URL Configuration): `https://<domain>`, `https://<domain>/**`; keep `runko://reset-password`.
+- [ ] Payments on, in this order:
+  1. Create the Stripe account (test mode first).
+  2. `node scripts/stripe-setup.mjs` with the sk_test_ key (STRIPE_CHECKLIST.md step 3).
+  3. Supabase secrets: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET (STRIPE_CHECKLIST.md step 4).
+  4. Flip the switch: `npx supabase@latest secrets set PAYMENTS_ENABLED=true` AND Vercel env
+     `VITE_PAYMENTS_ENABLED=true`, then redeploy Vercel (the landing wording flips back to "14 dni
+     brezplačno" from trialCopy() on that build; nothing to edit by hand).
+  5. Run `supabase/migration_v10_cutover.sql` right after (new signups stop getting the no-card month).
+  6. Manual tests: STRIPE_CHECKLIST.md step 5. Live keys later + `STRIPE_ALLOW_LIVE=true`.
 - [ ] Turn on the "trial ends in 2 days" email (after Resend and the domain):
   1. `npx supabase@latest functions deploy trial-reminder --no-verify-jwt`
   2. `npx supabase@latest secrets set TRIAL_REMINDER_ENABLED=true RESEND_API_KEY=re_... EMAIL_FROM="Runko <pozdrav@<domain>>" APP_URL=https://<domain> CRON_SECRET=<long random string>`

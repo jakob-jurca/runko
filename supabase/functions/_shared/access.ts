@@ -12,16 +12,37 @@ import { entitlementOf } from './entitlements.js'
 // deno-lint-ignore no-explicit-any
 type Client = any
 
-/** The subscriptions row and the entitlement it gives. Throws on a read error (callers fail closed). */
-export async function loadAccess(admin: Client, userId: string, now = new Date()) {
+/**
+ * PAYMENTS_ENABLED (Supabase secret), off unless exactly "true". While off:
+ * no Stripe calls, every signup gets the 1-month no-card trial, and the app
+ * shows "paid plans are coming" where the paywall would be.
+ */
+export const paymentsEnabled = () => Deno.env.get('PAYMENTS_ENABLED') === 'true'
+
+/**
+ * The subscriptions row and the entitlement it gives. Throws on a read error
+ * (callers fail closed).
+ * @param user - the auth user ({ id, created_at })
+ */
+export async function loadAccess(admin: Client, user: { id: string; created_at?: string }, now = new Date()) {
   const [userRes, subRes] = await Promise.all([
-    admin.from('users').select('trial_end').eq('id', userId).maybeSingle(),
-    admin.from('subscriptions').select('*').eq('user_id', userId).maybeSingle(),
+    admin.from('users').select('trial_end').eq('id', user.id).maybeSingle(),
+    admin.from('subscriptions').select('*').eq('user_id', user.id).maybeSingle(),
   ])
   if (userRes.error) throw new Error(`users: ${userRes.error.message}`)
   if (subRes.error) throw new Error(`subscriptions: ${subRes.error.message}`)
   const sub = subRes.data ?? null
-  return { sub, ent: entitlementOf({ trialEnd: userRes.data?.trial_end ?? null, sub }, now) }
+  const ent = entitlementOf(
+    {
+      trialEnd: userRes.data?.trial_end ?? null,
+      sub,
+      paymentsEnabled: paymentsEnabled(),
+      profileExists: Boolean(userRes.data),
+      signedUpAt: user.created_at ?? null,
+    },
+    now
+  )
+  return { sub, ent }
 }
 
 /** The signed-in user behind the request's bearer token, or null. */

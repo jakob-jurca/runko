@@ -14,13 +14,16 @@
  * separated origins Checkout may return to; the request's own Origin is used
  * when it is one of them.
  *
+ * Does nothing (503 payments_disabled) until the secret PAYMENTS_ENABLED is
+ * "true", so it can be deployed before Stripe exists.
+ *
  * Deploy: npx supabase@latest functions deploy billing
  */
 
 // @ts-ignore — resolved by Deno at deploy time.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { cors, json, fail, BUSY, UNAVAILABLE } from '../_shared/http.ts'
-import { loadAccess, userFromRequest } from '../_shared/access.ts'
+import { loadAccess, userFromRequest, paymentsEnabled } from '../_shared/access.ts'
 import { subscriptionStore } from '../_shared/subscriptions-store.ts'
 // @ts-ignore — plain JS, shared with the tests.
 import { stripeRequest, lookupKeyFor, TRIAL_DAYS, applyCheckoutSync } from '../_shared/stripe.js'
@@ -40,6 +43,12 @@ function returnOrigin(req: Request) {
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
   if (req.method !== 'POST') return fail(405, 'Method not allowed.', 'method_not_allowed')
+
+  // Payments switched off (PAYMENTS_ENABLED): answer calmly, touch nothing,
+  // need no Stripe secret. The app shows no payment buttons in this state.
+  if (!paymentsEnabled()) {
+    return fail(503, 'Plačljiva paketa bosta na voljo kmalu.', 'payments_disabled')
+  }
 
   const stripeKey = Deno.env.get('STRIPE_SECRET_KEY')
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
@@ -65,7 +74,7 @@ Deno.serve(async (req: Request) => {
 
   let access
   try {
-    access = await loadAccess(admin, user.id)
+    access = await loadAccess(admin, user)
   } catch (err) {
     console.error('billing: lookup failed', (err as Error).message)
     return fail(503, BUSY, 'entitlement_check_failed')

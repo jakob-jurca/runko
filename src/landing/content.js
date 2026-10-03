@@ -9,9 +9,17 @@
  *   - Prices and the plan features come from src/core/pricing.js, shared with
  *     the app's paywall, so the page sells exactly what the app does.
  *
+ * Every word about the free trial comes from trialCopy() in
+ * src/core/pricing.js, so it flips with the payments switch.
+ *
  * `mock` at the bottom holds the realistic data shown inside the phone and
  * the bento tiles (workouts, paces, chat). It is example data, not a claim.
  */
+
+import { trialCopy } from '../core/pricing.js'
+
+/** Trial wording for the current payments state (pricing.js). */
+const TRIAL = trialCopy()
 
 /** Shared button labels and destinations. Used in nav, hero, pricing and the final CTA. */
 export const cta = {
@@ -79,7 +87,7 @@ export const trust = {
   items: [
     { key: 'science', value: 'Temelji na športni znanosti', text: 'Načrti sledijo preverjenim načelom treninga, AI trener pa združuje znanje priznanih strokovnjakov.' },
     { key: 'range', value: 'Od prvega kilometra do maratona', text: 'Za začetnike, rekreativce in tekmovalce.' },
-    { key: 'trial', value: '14 dni brezplačno', text: 'Preizkusi celoten načrt in trenerja, preden se odločiš.' },
+    { key: 'trial', value: TRIAL.short, text: TRIAL.trustText },
   ],
 }
 
@@ -251,7 +259,7 @@ export const comparison = {
 export const pricing = {
   id: 'cene',
   title: 'Preprosto. Brez presenečenj.',
-  intro: 'Prvih 14 dni je brezplačnih, z vsem, kar zna Pro. Potem izbereš paket, ki ti ustreza.',
+  intro: TRIAL.intro,
   toggleLabel: 'Način plačila',
   yearly: 'Letno',
   monthly: 'Mesečno',
@@ -262,12 +270,8 @@ export const pricing = {
   featuredBadge: 'Priporočeno',
   notIncluded: 'Ni vključeno',
   // The pricing CTA names the trial; it is the same signup destination as cta.signup.
-  trialCta: 'Začni 14 dni brezplačno',
-  facts: [
-    { key: 'trial', title: '14 dni brezplačno', text: 'Vse funkcije paketa Pro, tudi tedenski pregled.' },
-    { key: 'card', title: 'Kartica ob začetku', text: 'Ob koncu preizkusa se samodejno zaračuna izbrani paket.' },
-    { key: 'cancel', title: 'Prekličeš kadarkoli', text: 'Pred koncem preizkusa ne plačaš ničesar.' },
-  ],
+  trialCta: TRIAL.cta,
+  facts: TRIAL.facts,
   // Prices, savings, the plans and their features: src/core/pricing.js.
 }
 
@@ -303,14 +307,9 @@ export const faq = {
       q: 'Kaj, če se ne pripravljam na tekmo?',
       a: 'Runko je še vedno prava izbira, saj pripravi plan tudi za rekreacijo, zdravje in boljšo kondicijo.',
     },
-    {
-      q: 'Kaj se zgodi po 14 dneh?',
-      a: 'Ob koncu preizkusa se samodejno zaračuna izbrani paket. Če ga prej prekličeš, ne plačaš ničesar.',
-    },
-    {
-      q: 'Kako prekličem naročnino?',
-      a: 'Kadarkoli v Nastavitvah pod Naročnina, z enim klikom. Dostop ostane do konca plačanega obdobja.',
-    },
+    TRIAL.faqAfter,
+    // Only while payments are on: before that there is nothing to cancel.
+    ...(TRIAL.faqCancel ? [TRIAL.faqCancel] : []),
     {
       q: 'So moji podatki varni?',
       a: 'Da. Zbiramo le podatke, ki jih načrt res potrebuje, zdravstveni profil je neobvezen, z vsemi podatki pa ravnamo v skladu z GDPR.',
@@ -328,7 +327,7 @@ export const faq = {
 export const finalCta = {
   marquee: ['Tvoj cilj', 'Tvoj tempo', 'Tvoja tekma'],
   title: 'Naslednji tek je lahko prvi v pravem načrtu.',
-  text: 'Nastavitev traja nekaj minut. Prvih 14 dni je brezplačnih.',
+  text: TRIAL.finalCta,
 }
 
 // ---------------------------------------------------------------------------

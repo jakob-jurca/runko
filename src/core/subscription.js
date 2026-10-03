@@ -58,7 +58,7 @@ export async function callFunction(name, body = {}) {
  */
 const DEV_FALLBACK = IS_DEV
   ? {
-      tier: 'pro', comped: true, source: 'dev', status: null, chosenTier: null, interval: null,
+      tier: 'pro', comped: true, source: 'dev', paymentsEnabled: false, status: null, chosenTier: null, interval: null,
       trialEndsAt: null, renewsAt: null, cancelAtPeriodEnd: false, paymentFailed: false,
       trialAvailable: true, hasCustomer: false,
       chat: { used: 0, limit: 50, resetsAt: null },

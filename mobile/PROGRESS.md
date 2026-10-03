@@ -129,6 +129,9 @@ wrong screens.
   in the chat tab, as web Chat.jsx does. Strings `t.healthBreak`.
 - Weekly review: a card on the home tab like web components/WeeklyReview.jsx (`loadWeeklyReview` from
   src/core/plan.js with `previousLocalWeekKey()`; locked teaser when `!access.review`). Strings `t.review`.
+- Payments switch: `access.paymentsEnabled`. While false, show `t.billing.comingSoon` instead of the
+  paywall, hide Naročnina and every upgrade hint (web: Paywall.jsx ComingSoon, Settings.jsx, Chat.jsx,
+  WeeklyReview.jsx). Trial wording: `trialCopy(access.paymentsEnabled)` from src/core/pricing.js.
 - Settings: "Naročnina" section as on the web (src/pages/Settings.jsx `Subscription`, strings
   `t.billing`).
 

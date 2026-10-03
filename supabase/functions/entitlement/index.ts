@@ -44,7 +44,7 @@ Deno.serve(async (req: Request) => {
   const now = new Date()
   let access
   try {
-    access = await loadAccess(admin, user.id, now)
+    access = await loadAccess(admin, user, now)
   } catch (err) {
     console.error('entitlement: lookup failed', (err as Error).message)
     return fail(503, BUSY, 'entitlement_check_failed')

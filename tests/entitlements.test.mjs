@@ -103,7 +103,7 @@ check('card trial: still one plan', !planBuildStatus({ tier: 'trial', source: 's
 
 console.log('\nThe server uses it:')
 const proxy = fs.readFileSync('supabase/functions/ai-proxy/index.ts', 'utf8')
-check('ai-proxy reads access through _shared/access.ts', proxy.includes("from '../_shared/access.ts'") && /loadAccess\(admin, user\.id\)/.test(proxy))
+check('ai-proxy reads access through _shared/access.ts', proxy.includes("from '../_shared/access.ts'") && /loadAccess\(admin, user\)/.test(proxy))
 check('ai-proxy refuses tier none with 402', /ent\.tier === 'none'[\s\S]{0,80}402/.test(proxy))
 check('ai-proxy refuses an unknown kind', /AI_KINDS\.includes\(kind\)/.test(proxy))
 check('ai-proxy counts today from Ljubljana midnight', /startOfLocalDay\(\)/.test(proxy))

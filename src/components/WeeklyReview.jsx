@@ -37,6 +37,8 @@ export default function WeeklyReview({ access, profile, plans, workouts, healthB
   if (!plans.length) return null
 
   if (!allowed) {
+    // No upgrade to point to while payments are off.
+    if (!access?.paymentsEnabled) return null
     return (
       <section className="mt-3 rounded-card bg-surface/60 p-5 ring-1 ring-inset ring-surface-line animate-fade-up">
         <p className="flex items-center gap-2 text-sm font-semibold text-zinc-200">

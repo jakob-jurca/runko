@@ -293,7 +293,7 @@ export default function Chat() {
       {left !== null && left <= 3 && (
         <p className="border-t border-surface-line px-4 pt-3 text-xs leading-relaxed text-zinc-400 sm:px-6" role="status">
           {limitReached ? t.billing.limits.chatDone : t.billing.limits.chatLeft(left)}
-          {limitReached && access?.tier === 'start' && (
+          {limitReached && access?.tier === 'start' && access?.paymentsEnabled && (
             <>
               {' '}
               <Link to="/settings" className="text-primary-light underline underline-offset-4">

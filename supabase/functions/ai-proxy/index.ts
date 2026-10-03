@@ -107,7 +107,7 @@ Deno.serve(async (req: Request) => {
   // read-only since migration_v6, subscriptions has no client write access).
   let ent
   try {
-    ;({ ent } = await loadAccess(admin, user.id))
+    ;({ ent } = await loadAccess(admin, user))
   } catch (err) {
     console.error('ai-proxy: entitlement lookup failed', (err as Error).message)
     // Fail CLOSED, as with the rate limit: if we cannot establish that the
@@ -118,7 +118,9 @@ Deno.serve(async (req: Request) => {
   if (ent.tier === 'none') {
     return fail(
       402,
-      'Tvoj dostop se je iztekel. Za trenerja izberi paket Start ali Pro.',
+      ent.paymentsEnabled
+        ? 'Tvoj dostop se je iztekel. Za trenerja izberi paket Start ali Pro.'
+        : 'Tvoj brezplačni preizkus se je iztekel. Plačljiva paketa prihajata kmalu.',
       'not_premium'
     )
   }

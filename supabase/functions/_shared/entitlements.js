@@ -61,6 +61,9 @@ export const PLAN_BUILDS = {
  */
 export const TRIAL_GRACE_MS = 24 * 60 * 60 * 1000
 
+/** The no-card trial: users.trial_end default, now() + 1 month. */
+export const LEGACY_TRIAL_MONTHS = 1
+
 /** Stripe subscription statuses that mean "the last payment did not go through". */
 const PAYMENT_PROBLEM = new Set(['past_due', 'unpaid', 'incomplete'])
 
@@ -75,15 +78,25 @@ const PAYMENT_PROBLEM = new Set(['past_due', 'unpaid', 'incomplete'])
  * @param {string|null} [input.trialEnd] - users.trial_end: the OLD no-card
  *   trial. Set only on accounts created before migration_v9.
  * @param {object|null} [input.sub] - the runner's public.subscriptions row
+ * @param {boolean} [input.paymentsEnabled] - the PAYMENTS_ENABLED switch. While
+ *   it is off, every signup gets the 1-month no-card trial (the users.trial_end
+ *   default stays in place until migration_v10_cutover.sql).
+ * @param {boolean} [input.profileExists] - is there a users row yet? It is
+ *   created when onboarding finishes, and with it the trial_end.
+ * @param {string|null} [input.signedUpAt] - auth user created_at
  * @param {Date} [now]
  * @returns {{tier: string, comped: boolean, source: string|null, status: string|null,
  *   chosenTier: string|null, interval: string|null, trialEndsAt: string|null,
  *   renewsAt: string|null, cancelAtPeriodEnd: boolean, paymentFailed: boolean,
  *   trialAvailable: boolean, hasCustomer: boolean}}
  */
-export function entitlementOf({ trialEnd = null, sub = null } = {}, now = new Date()) {
+export function entitlementOf(
+  { trialEnd = null, sub = null, paymentsEnabled = true, profileExists = true, signedUpAt = null } = {},
+  now = new Date()
+) {
   const status = sub?.status ?? null
   const base = {
+    paymentsEnabled: Boolean(paymentsEnabled),
     tier: 'none',
     comped: false,
     source: null,
@@ -113,9 +126,18 @@ export function entitlementOf({ trialEnd = null, sub = null } = {}, now = new Da
     }
   }
 
-  // The retired 1-month trial: honoured to its end, then the paywall.
-  if (trialEnd && new Date(trialEnd).getTime() > now.getTime()) {
-    return { ...base, tier: 'trial', source: 'legacy_trial', trialEndsAt: trialEnd }
+  // While payments are off, a new signup has no users row (and so no
+  // trial_end) until onboarding finishes. Their month counts from signup, so
+  // they can reach onboarding at all.
+  let noCardEnd = trialEnd
+  if (!noCardEnd && !paymentsEnabled && !profileExists && signedUpAt) {
+    noCardEnd = addMonths(new Date(signedUpAt), LEGACY_TRIAL_MONTHS).toISOString()
+  }
+
+  // The 1-month no-card trial: honoured to its end, then the paywall (or,
+  // while payments are off, the "paid plans are coming" screen).
+  if (noCardEnd && new Date(noCardEnd).getTime() > now.getTime()) {
+    return { ...base, tier: 'trial', source: 'legacy_trial', trialEndsAt: noCardEnd }
   }
 
   return { ...base, paymentFailed: PAYMENT_PROBLEM.has(status) }

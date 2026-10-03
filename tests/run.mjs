@@ -24,6 +24,7 @@ const SUITES = [
   './entitlements.test.mjs',
   './stripe.test.mjs',
   './pricing.test.mjs',
+  './payments-switch.test.mjs',
   './usage-limits.test.mjs',
   './health-break.test.mjs',
   './weekly-review.test.mjs',
