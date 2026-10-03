@@ -1,0 +1,51 @@
+{
+  "id": "evt_1TestSubCreated",
+  "object": "event",
+  "api_version": "2024-06-20",
+  "created": 1790000004,
+  "livemode": false,
+  "type": "customer.subscription.created",
+  "data": {
+    "object": {
+      "id": "sub_1TestRunkoSub001",
+      "object": "subscription",
+      "customer": "cus_TestRunko001",
+      "status": "trialing",
+      "cancel_at_period_end": false,
+      "cancel_at": null,
+      "trial_start": 1790000000,
+      "trial_end": 1791209600,
+      "current_period_start": 1790000000,
+      "current_period_end": 1791209600,
+      "metadata": {
+        "user_id": "5b1c1a0e-8f7a-4c6e-9a51-0d6f3c2b7e11"
+      },
+      "items": {
+        "object": "list",
+        "data": [
+          {
+            "id": "si_Test001",
+            "object": "subscription_item",
+            "price": {
+              "id": "price_1Testrunko_start_monthly",
+              "object": "price",
+              "lookup_key": "runko_start_monthly",
+              "currency": "eur",
+              "unit_amount": 799,
+              "recurring": {
+                "interval": "month",
+                "interval_count": 1
+              },
+              "product": "runko_start",
+              "metadata": {
+                "tier": "start"
+              }
+            },
+            "current_period_end": 1791209600
+          }
+        ]
+      },
+      "livemode": false
+    }
+  }
+}

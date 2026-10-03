@@ -110,3 +110,17 @@ create index if not exists ai_usage_user_kind_time_idx
 -- The daily limits look back to midnight; keep two days, not one.
 -- (Replaces the 1-day housekeeping line from migration_v5.)
 delete from public.ai_usage where created_at < now() - interval '2 days';
+
+-- ---------------------------------------------------------------
+-- 5. stripe_events — webhook idempotency
+-- ---------------------------------------------------------------
+--
+-- Stripe may deliver an event more than once. The webhook inserts the event
+-- id first and skips one it has seen. Service role only, no policies.
+create table if not exists public.stripe_events (
+  id text primary key,
+  type text not null,
+  received_at timestamptz not null default now()
+);
+
+alter table public.stripe_events enable row level security;

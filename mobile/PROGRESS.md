@@ -108,6 +108,13 @@ wrong screens.
   `accessError`, `refreshAccess`). Gate every screen with `canUseApp(access)`; tier `none` shows
   the paywall only. Replace every `hasPremium(profile)` / `isTrialActive(profile)` /
   `trialDaysLeft(profile)` with the access versions (`canUseApp`, `isTrial`, `trialDaysLeft(access)`).
+- Payments: `startCheckout(tier, interval)` and `openPortal()` now return `{ ok, url }` (Stripe
+  pages); open the URL with expo-web-browser. Mobile's paywall still calls `startCheckout()` with no
+  arguments, which now answers "Neveljavna zahteva.". Checkout returns to the WEB app
+  (`/?checkout=success`); for mobile, either add a `runko://` return URL to the billing function
+  (APP_ORIGINS) or decide on in-app purchases first (store rules for digital subscriptions).
+- Settings: "Naročnina" section as on the web (src/pages/Settings.jsx `Subscription`, strings
+  `t.billing`).
 
 ## Blocked / questions
 - None blocking. Open item: in-app account deletion (see Phase 5) must be built before store submission.

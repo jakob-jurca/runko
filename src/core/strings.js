@@ -1018,6 +1018,26 @@ export const t = {
   },
 
   // -------------------------------------------------------------------------
+  // Paid plans: Start / Pro, Stripe
+  // -------------------------------------------------------------------------
+  billing: {
+    tiers: { trial: 'Preizkus', start: 'Start', pro: 'Pro', none: 'Brez paketa' },
+    intervals: { month: 'mesečno', year: 'letno' },
+    sectionTitle: 'Naročnina',
+    comped: 'Paket Pro, brezplačen dostop (testni račun).',
+    trialUntil: (date, next) =>
+      next ? `Brezplačni preizkus do ${date}. Nato se začne paket ${next}.` : `Brezplačni preizkus do ${date}.`,
+    renews: (date) => `Naslednje plačilo ${date}.`,
+    endsOn: (date) => `Naročnina je preklicana. Dostop ostane do ${date}.`,
+    paymentFailed: 'Zadnje plačilo ni uspelo. Posodobi kartico, da obdržiš dostop.',
+    manage: 'Upravljaj naročnino',
+    manageHint: 'Zamenjava paketa, preklic, kartica in računi.',
+    choosePlan: 'Izberi paket',
+    opening: 'Odpiram …',
+    confirming: 'Potrjujem naročnino …',
+  },
+
+  // -------------------------------------------------------------------------
   // Errors and system messages
   // -------------------------------------------------------------------------
   errors: {

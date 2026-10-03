@@ -98,6 +98,53 @@ export function formatDateSl(iso) {
 }
 
 // ---------------------------------------------------------------------------
+// Stripe: Checkout, the Customer Portal, and the return from Checkout
+// ---------------------------------------------------------------------------
+
+/**
+ * A Stripe Checkout page for this plan: 14-day trial when the account has
+ * not had one, card required, founding-member code accepted.
+ * @param {'start'|'pro'} tier
+ * @param {'month'|'year'} interval
+ * @returns {Promise<{ok: true, url: string} | {ok: false, message: string, code?: string}>}
+ */
+export async function startCheckout(tier, interval) {
+  try {
+    const { url } = await callFunction('billing', { action: 'checkout', tier, interval })
+    return { ok: true, url }
+  } catch (err) {
+    return { ok: false, message: err.message, code: err.code }
+  }
+}
+
+/** The Stripe Customer Portal: change plan, cancel, card, invoices. */
+export async function openPortal() {
+  try {
+    const { url } = await callFunction('billing', { action: 'portal' })
+    return { ok: true, url }
+  } catch (err) {
+    return { ok: false, message: err.message, code: err.code }
+  }
+}
+
+const wait = (ms) => new Promise((r) => setTimeout(r, ms))
+
+/**
+ * Back from Checkout: ask the server to read the finished session (so access
+ * starts even before Stripe's webhook arrives), then the access. Retries for
+ * a few seconds while it still reads "none".
+ */
+export async function finishCheckout(sessionId) {
+  if (sessionId) await callFunction('billing', { action: 'sync', sessionId }).catch(() => null)
+  let access = await fetchAccess()
+  for (let i = 0; i < 5 && !canUseApp(access); i++) {
+    await wait(2000)
+    access = await fetchAccess()
+  }
+  return access
+}
+
+// ---------------------------------------------------------------------------
 // Kept for mobile/, which still calls these with the profile row. They read
 // the retired no-card trial only; mobile moves to fetchAccess() later (see
 // mobile/PROGRESS.md, "To catch up"). The web app does not use them.
@@ -116,11 +163,6 @@ export function hasActiveSubscription(profile) {
 /** @deprecated use canUseApp(access) */
 export function hasPremium(profile) {
   return isTrialActive(profile) || hasActiveSubscription(profile)
-}
-
-/** @deprecated web uses startCheckout from Stage 2; kept so mobile still imports. */
-export async function startCheckout() {
-  return { ok: false, reason: 'coming_soon', message: t.subscription.checkoutComingSoon }
 }
 
 /** @deprecated the retired single "Premium" plan; kept so mobile still imports. */

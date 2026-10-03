@@ -1,0 +1,24 @@
+{
+  "id": "evt_1TestCheckout",
+  "object": "event",
+  "api_version": "2024-06-20",
+  "created": 1790000005,
+  "livemode": false,
+  "type": "checkout.session.completed",
+  "data": {
+    "object": {
+      "id": "cs_test_a1Runko",
+      "object": "checkout.session",
+      "mode": "subscription",
+      "status": "complete",
+      "payment_status": "no_payment_required",
+      "client_reference_id": "5b1c1a0e-8f7a-4c6e-9a51-0d6f3c2b7e11",
+      "customer": "cus_TestRunko001",
+      "subscription": "sub_1TestRunkoSub001",
+      "metadata": {
+        "user_id": "5b1c1a0e-8f7a-4c6e-9a51-0d6f3c2b7e11"
+      },
+      "livemode": false
+    }
+  }
+}

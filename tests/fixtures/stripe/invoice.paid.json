@@ -1,0 +1,19 @@
+{
+  "id": "evt_1TestInvoicePaid",
+  "object": "event",
+  "api_version": "2024-06-20",
+  "created": 1791296000,
+  "livemode": false,
+  "type": "invoice.paid",
+  "data": {
+    "object": {
+      "id": "in_1TestPaid",
+      "object": "invoice",
+      "customer": "cus_TestRunko001",
+      "subscription": "sub_1TestRunkoSub001",
+      "amount_paid": 799,
+      "currency": "eur",
+      "livemode": false
+    }
+  }
+}

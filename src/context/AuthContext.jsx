@@ -3,7 +3,7 @@ import { supabase } from '../core/supabase'
 import { getProfile } from '../core/db'
 import { parseAuthUrl, failedLinkTarget, recoveryClaimHolds } from '../core/auth-url'
 import { isDeadSessionError, signOutHere } from '../core/auth-flows'
-import { fetchAccess } from '../core/subscription'
+import { fetchAccess, finishCheckout } from '../core/subscription'
 
 /**
  * AuthContext — holds the Supabase session, the Runko profile row and the
@@ -104,6 +104,32 @@ function writeRecoveryFlag(on) {
     else localStorage.removeItem(RECOVERY_KEY)
   } catch {
     /* private mode — the in-memory flag still covers the common path */
+  }
+}
+
+/**
+ * Back from Stripe Checkout (?checkout=success&session_id=cs_...): the
+ * session id, or null when this is an ordinary load.
+ */
+function checkoutReturn() {
+  try {
+    const params = new URLSearchParams(window.location.search)
+    return params.get('checkout') === 'success' ? params.get('session_id') || '' : null
+  } catch {
+    return null
+  }
+}
+
+/** Drop the Checkout parameters, so a reload does not finish it twice. */
+function cleanCheckoutUrl() {
+  try {
+    const url = new URL(window.location.href)
+    if (!url.searchParams.has('checkout')) return
+    url.searchParams.delete('checkout')
+    url.searchParams.delete('session_id')
+    window.history.replaceState(null, '', url.pathname + url.search + url.hash)
+  } catch {
+    /* no history API: the parameters only cause one extra sync */
   }
 }
 
@@ -282,7 +308,11 @@ export function AuthProvider({ children }) {
     setAccessError(false)
     if (!userId) return
     setAccessState({ userId: null, access: null })
-    fetchAccess()
+    // Straight back from Checkout, the webhook may not have arrived yet:
+    // finishCheckout asks the server to read the session, then waits a moment.
+    const sessionId = checkoutReturn()
+    const load = sessionId === null ? fetchAccess() : finishCheckout(sessionId).finally(cleanCheckoutUrl)
+    load
       .then((a) => !cancelled && setAccessState({ userId, access: a }))
       .catch((err) => {
         console.error('Failed to load access:', err.message)

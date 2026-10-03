@@ -126,6 +126,11 @@ and for plan builds); the app only shows what `fetchAccess()` returns.
   trial_end default), _shared/{entitlements.js, access.ts, http.ts}, functions/entitlement, ai-proxy reads
   the shared rule, refuses unknown `kind`s and applies daily per-kind ceilings from Ljubljana midnight.
   Old no-card trials (users.trial_end in the future) keep access to that date, then the paywall.
+- Stage 2 (Stripe, test mode only): _shared/stripe.js (REST without the SDK, signature check with WebCrypto,
+  idempotent and order-safe event handling), functions billing (checkout / portal / sync after Checkout) and
+  stripe-webhook (deploy with --no-verify-jwt), stripe_events table, scripts/stripe-setup.mjs (products,
+  4 prices by lookup key, founding coupon + code USTANOVNI, portal settings, webhook endpoint), Settings →
+  Naročnina opens the portal. Setup steps and manual tests: STRIPE_CHECKLIST.md.
 
 ### Comped accounts (Pro without paying)
 In the Supabase SQL Editor, once per person (after migration_v9):

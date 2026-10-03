@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { isTrial, trialDaysLeft, canUseApp, startCheckout } from '../core/subscription'
+import { openPortal, formatDateSl } from '../core/subscription'
 import { getMemories, deleteMemory } from '../core/memory'
 import { goalLabel } from '../core/periodization'
 import { maxHeartRate } from '../core/heart-rate'
@@ -15,7 +15,6 @@ import { changePassword, MIN_PASSWORD_LENGTH } from '../core/auth-flows'
 export default function Settings() {
   const { session, profile, access, signOut, refreshProfile } = useAuth()
   const navigate = useNavigate()
-  const [notice, setNotice] = useState('')
 
   // What the coach remembers about this runner.
   const [memories, setMemories] = useState([])
@@ -40,14 +39,6 @@ export default function Settings() {
       setMemories(previous) // put it back
       setMemoryError(friendlyError(err))
     }
-  }
-
-  // startCheckout lives in core and cannot touch the DOM, so it returns a
-  // result and the page renders it.
-  const handleCheckout = async () => {
-    const result = await startCheckout()
-    setNotice(result.message)
-    setTimeout(() => setNotice(''), 5000)
   }
 
   return (
@@ -126,41 +117,8 @@ export default function Settings() {
         </button>
       </section>
 
-      {/* Subscription */}
-      <section className="card mt-4 animate-fade-up" style={{ animationDelay: '100ms' }}>
-        <h2 className="mb-4 text-base font-semibold text-zinc-100">
-          {t.settings.subscription}
-        </h2>
-        {canUseApp(access) && !isTrial(access) ? (
-          <p className="text-sm">
-            <span className="font-semibold text-primary-light">{t.subscription.planName}</span> · {t.settings.premiumActive}
-          </p>
-        ) : isTrial(access) ? (
-          <>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-semibold">{t.settings.trial}</p>
-                <p className="text-sm text-zinc-400">{t.settings.trialDaysLeft(trialDaysLeft(access))}</p>
-              </div>
-              <span className="rounded-md bg-primary-faint px-2 py-1 font-mono text-[11px] font-semibold text-primary-light">
-                TRIAL
-              </span>
-            </div>
-            <button onClick={handleCheckout} className="btn-ghost mt-4 w-full text-sm">
-              {t.settings.subscribeEarly}
-            </button>
-          </>
-        ) : (
-          <>
-            <p className="text-sm text-zinc-400">
-              {t.settings.trialEnded}
-            </p>
-            <button onClick={handleCheckout} className="btn-primary mt-4 w-full">
-              {t.settings.upgrade}
-            </button>
-          </>
-        )}
-      </section>
+      {/* Naročnina: what the server says, and the Stripe portal for the rest */}
+      <Subscription access={access} />
 
       {/* Account: the password is changed here, with the current one. The
           email address is shown in the profile above and cannot be changed
@@ -177,6 +135,73 @@ export default function Settings() {
 
       <p className="mt-8 text-center font-mono text-xs text-zinc-600">{t.settings.version}</p>
     </main>
+  )
+}
+
+/**
+ * "Naročnina": the plan as the server sees it, and one button to the Stripe
+ * Customer Portal (change plan, cancel, card, invoices). Runners without a
+ * Stripe customer yet (old trial, comped) choose a plan instead.
+ */
+function Subscription({ access }) {
+  const B = t.billing
+  const navigate = useNavigate()
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const a = access || {}
+
+  const manage = async () => {
+    setBusy(true)
+    setError('')
+    const result = await openPortal()
+    if (result.ok) {
+      window.location.assign(result.url)
+      return
+    }
+    setBusy(false)
+    setError(result.message)
+  }
+
+  const plan = a.comped ? B.tiers.pro : a.chosenTier ? B.tiers[a.chosenTier] : B.tiers[a.tier]
+  const line = a.comped
+    ? B.comped
+    : a.paymentFailed
+      ? B.paymentFailed
+      : a.tier === 'trial'
+        ? B.trialUntil(formatDateSl(a.trialEndsAt), a.chosenTier ? B.tiers[a.chosenTier] : null)
+        : a.cancelAtPeriodEnd && a.renewsAt
+          ? B.endsOn(formatDateSl(a.renewsAt))
+          : a.renewsAt
+            ? B.renews(formatDateSl(a.renewsAt))
+            : null
+
+  return (
+    <section className="card mt-4 animate-fade-up" style={{ animationDelay: '100ms' }}>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h2 className="text-base font-semibold text-zinc-100">{B.sectionTitle}</h2>
+        {plan && (
+          <span className="rounded-md bg-primary-faint px-2 py-1 text-[11px] font-semibold text-primary-light">
+            {plan}{a.interval && !a.comped ? ` · ${B.intervals[a.interval]}` : ''}
+          </span>
+        )}
+      </div>
+      {line && <p className={`text-sm ${a.paymentFailed ? 'text-amber-200' : 'text-zinc-400'}`}>{line}</p>}
+      {a.hasCustomer ? (
+        <>
+          <button onClick={manage} disabled={busy} className="btn-ghost mt-4 w-full text-sm">
+            {busy ? B.opening : B.manage}
+          </button>
+          <p className="mt-2 text-xs text-zinc-500">{B.manageHint}</p>
+        </>
+      ) : (
+        !a.comped && (
+          <button onClick={() => navigate('/paket')} className="btn-primary mt-4 w-full text-sm">
+            {B.choosePlan}
+          </button>
+        )
+      )}
+      {error && <p className="mt-3 text-sm text-rose-300" role="alert">{error}</p>}
+    </section>
   )
 }
 
