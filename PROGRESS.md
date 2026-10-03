@@ -161,6 +161,9 @@ and for plan builds); the app only shows what `fetchAccess()` returns.
   trust strip, pricing band, final call and og:description; FAQ "Kaj se zgodi po 14 dneh?" and "Kako prekličem
   naročnino?". The comparison table's "€ X" placeholders became "Od 5,00 € / mesec" (Runko) and "Po dogovoru"
   (personal coach). Not checked in a browser (extension not connected): look at #cene at 375 px and 1440 px.
+- Stage 8 (trial reminder, DISABLED): functions/trial-reminder + _shared/trial-reminder.js. Daily run, emails
+  trials ending in 24-48 h once per trial end (subscriptions.trial_reminder_sent_for), Slovenian, via Resend.
+  Does nothing until TRIAL_REMINDER_ENABLED=true; see Before launch.
 
 ### Comped accounts (Pro without paying)
 In the Supabase SQL Editor, once per person (after migration_v9):
@@ -181,4 +184,11 @@ Expo app built in six phases; the committed log is mobile/PROGRESS.md (kept sepa
 - [ ] Slovenian reset-password email template with the "Nadaljuj" flow: the link is `{{ .SiteURL }}/reset-password?token_hash={{ .TokenHash }}&type=recovery` (AUTH_CHECKLIST.md §0). Mobile must support token_hash links first (mobile/PROGRESS.md, "To catch up").
 - [ ] Raise the minimum password length to 8, in the app (`MIN_PASSWORD_LENGTH` in src/core/auth-flows.js, mobile screens) and in Supabase (Authentication → Sign In / Providers → Email → Minimum password length). Existing shorter passwords still log in; the new minimum applies to new and changed passwords.
 - [ ] Update Site URL and Redirect URLs to the new domain (Authentication → URL Configuration): `https://<domain>`, `https://<domain>/**`; keep `runko://reset-password`.
+- [ ] Turn on the "trial ends in 2 days" email (after Resend and the domain):
+  1. `npx supabase@latest functions deploy trial-reminder --no-verify-jwt`
+  2. `npx supabase@latest secrets set TRIAL_REMINDER_ENABLED=true RESEND_API_KEY=re_... EMAIL_FROM="Runko <pozdrav@<domain>>" APP_URL=https://<domain> CRON_SECRET=<long random string>`
+  3. SQL Editor (Database → Extensions: enable pg_cron and pg_net first):
+     `select cron.schedule('trial-reminder', '0 8 * * *', $$ select net.http_post(url := 'https://<project-ref>.supabase.co/functions/v1/trial-reminder', headers := jsonb_build_object('Authorization', 'Bearer <CRON_SECRET>')) $$);`
+  4. Test with a Stripe test subscription whose trial ends in ~40 hours.
+- [ ] Stripe live mode: repeat STRIPE_CHECKLIST.md with live keys, then set `STRIPE_ALLOW_LIVE=true`. Decide on Stripe Tax (prices are VAT-inclusive, Tax is not configured).
 - [ ] Privacy policy and terms of use, including plans built against advice ("Vseeno naredi plan": the runner confirms the risk once; the plan keeps every safety cap, but Runko does not consider the goal safe in the time available).
