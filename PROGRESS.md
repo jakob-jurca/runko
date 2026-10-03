@@ -131,6 +131,11 @@ and for plan builds); the app only shows what `fetchAccess()` returns.
   stripe-webhook (deploy with --no-verify-jwt), stripe_events table, scripts/stripe-setup.mjs (products,
   4 prices by lookup key, founding coupon + code USTANOVNI, portal settings, webhook endpoint), Settings →
   Naročnina opens the portal. Setup steps and manual tests: STRIPE_CHECKLIST.md.
+- Stage 3 (no free tier): tier none = components/Paywall.jsx and nothing else, before onboarding too (App.jsx
+  Protected + OnboardingGate); /paket shows the same picker to anyone who wants to subscribe early. Prices and
+  the feature matrix live in src/core/pricing.js (shared with the landing page; tests/pricing.test.mjs checks
+  them against Stripe's prices and the server's limits). Removed: the free tier's static quote, the "Premium"
+  hints in Dashboard / Log / Plan, the Chat paywall. Nothing is deleted when access ends.
 
 ### Comped accounts (Pro without paying)
 In the Supabase SQL Editor, once per person (after migration_v9):

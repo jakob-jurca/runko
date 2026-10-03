@@ -23,6 +23,7 @@ const SUITES = [
   './ai-limits.test.mjs',
   './entitlements.test.mjs',
   './stripe.test.mjs',
+  './pricing.test.mjs',
   './auth.test.mjs',
   './chat-format.test.mjs',
   './dates.test.mjs',

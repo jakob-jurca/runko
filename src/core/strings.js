@@ -1035,6 +1035,28 @@ export const t = {
     choosePlan: 'Izberi paket',
     opening: 'Odpiram …',
     confirming: 'Potrjujem naročnino …',
+    paywall: {
+      titleNew: 'Izberi svoj paket',
+      titleEnded: 'Tvoj dostop se je iztekel',
+      titlePayment: 'Plačilo ni uspelo',
+      titleChoose: 'Izberi paket',
+      bodyNew:
+        'Najprej 14 dni brezplačno, z vsemi funkcijami paketa Pro. Potem nadaljuješ s paketom, ki ga izbereš zdaj.',
+      bodyEnded: 'Tvoji podatki so shranjeni: načrt, treningi in pogovori. Ko izbereš paket, je vse spet tukaj.',
+      bodyPayment:
+        'Zadnjega plačila ni bilo mogoče izvesti, zato je dostop zaprt. Posodobi kartico in vse bo spet tukaj, tudi tvoji podatki.',
+      updatePayment: 'Posodobi plačilo',
+      checkoutCancelled: 'Plačilo ni bilo zaključeno. Paket lahko izbereš znova.',
+      intervalLabel: 'Način plačila',
+      yearly: 'Letno',
+      monthly: 'Mesečno',
+      billedYearly: (amount) => `Plačilo ${amount}`,
+      billedMonthly: 'Plačilo vsak mesec',
+      startTrial: 'Začni 14 dni brezplačno',
+      choose: (name) => `Izberi ${name}`,
+      noTrialLine: 'Brezplačni preizkus je že bil izkoriščen, zato se plačilo izvede takoj. Prekličeš lahko kadarkoli.',
+      promoHint: 'Imaš kodo ustanovnega člana? Vpišeš jo v naslednjem koraku, pri plačilu.',
+    },
   },
 
   // -------------------------------------------------------------------------

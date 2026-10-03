@@ -10,8 +10,6 @@ import {
 } from '../core/db'
 import { askCoach, extractMemories, friendlyAiMessage } from '../core/ai'
 import { getMemories, saveExtractedMemories } from '../core/memory'
-import { canUseApp } from '../core/subscription'
-import Paywall from '../components/Paywall'
 import { FullScreenSpinner } from '../components/Spinner'
 import { PaperPlaneRight, Trash } from '@phosphor-icons/react'
 import { t } from '../core/strings'
@@ -23,7 +21,7 @@ const SUGGESTIONS = t.chat.suggestions
 const PAGE_SIZE = 50
 
 /**
- * AI Coach Chat (premium feature).
+ * AI Coach Chat.
  *
  * ONE ongoing conversation — the coach is supposed to know the whole history,
  * so nothing here starts a new thread. What is bounded is rendering: the view
@@ -39,7 +37,7 @@ const PAGE_SIZE = 50
  * error — memory is an enhancement, not a feature the chat depends on.
  */
 export default function Chat() {
-  const { profile, access } = useAuth()
+  const { profile } = useAuth()
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [thinking, setThinking] = useState(false)
@@ -59,13 +57,7 @@ export default function Chat() {
   // Everything the coach needs, refreshed when the page loads.
   const [ctx, setCtx] = useState({ plans: [], currentWeek: null, workouts: [], memories: [] })
 
-  const premium = canUseApp(access)
-
   useEffect(() => {
-    if (!premium) {
-      setLoading(false)
-      return
-    }
     let cancelled = false
     Promise.all([
       getChatMessages(profile.id, { limit: PAGE_SIZE }),
@@ -85,7 +77,7 @@ export default function Chat() {
     return () => {
       cancelled = true
     }
-  }, [profile, premium])
+  }, [profile])
 
   /**
    * Opening jump: set scrollTop directly, before the browser paints, so the
@@ -107,7 +99,6 @@ export default function Chat() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, thinking])
 
-  if (!premium) return <Paywall feature={t.paywall.featureChat} />
   if (loading) return <FullScreenSpinner />
 
   /** Prepend the previous page, keeping the reading position steady. */

@@ -4,7 +4,6 @@ import { useAuth } from '../context/AuthContext'
 import { addWorkout, getPlans, getWorkouts, currentWeekNumber, todayISO } from '../core/db'
 import { coachReaction } from '../core/ai'
 import { maybeAdaptPlan } from '../core/plan'
-import { canUseApp } from '../core/subscription'
 import Spinner from '../components/Spinner'
 import { Check, WarningCircle } from '@phosphor-icons/react'
 import { t } from '../core/strings'
@@ -16,12 +15,12 @@ const EFFORTS = t.log.efforts
 /**
  * Manual workout logging. Quick-log from the dashboard pre-fills distance and
  * duration via query params. After saving:
- *  1. the coach reacts (AI, premium) and
+ *  1. the coach reacts (AI) and
  *  2. the plan engine checks whether next week needs adapting
  *     (missed = distance 0, or effort >= 4).
  */
 export default function Log() {
-  const { profile, access } = useAuth()
+  const { profile } = useAuth()
   const [params] = useSearchParams()
 
   // Opened from a workout card, these arrive already filled in.
@@ -75,19 +74,15 @@ export default function Log() {
         ? t.log.fallbackMissed
         : t.log.fallbackReaction
       let adapted = null
-      const premium = canUseApp(access)
-      if (premium) {
-        const [reactionRes, adaptedRes] = await Promise.allSettled([
-          coachReaction(profile, plan, { distance: workout.distance, duration: workout.duration, effort: workout.effort, notes }),
-          maybeAdaptPlan(profile, plans, workout, recent),
-        ])
-        if (reactionRes.status === 'fulfilled') reaction = reactionRes.value.trim()
-        if (adaptedRes.status === 'fulfilled') adapted = adaptedRes.value
-      }
-      // `premium` travels with the result so the confirmation screen can say
-      // why the coach is quiet, instead of showing a canned line under his
-      // name as though he had replied.
-      setDone({ reaction, adapted: Boolean(adapted), premium })
+      const [reactionRes, adaptedRes] = await Promise.allSettled([
+        coachReaction(profile, plan, { distance: workout.distance, duration: workout.duration, effort: workout.effort, notes }),
+        maybeAdaptPlan(profile, plans, workout, recent),
+      ])
+      if (reactionRes.status === 'fulfilled') reaction = reactionRes.value.trim()
+      if (adaptedRes.status === 'fulfilled') adapted = adaptedRes.value
+      // A canned line is not shown under the coach's name as though he had replied.
+      const fromCoach = reactionRes.status === 'fulfilled'
+      setDone({ reaction, adapted: Boolean(adapted), fromCoach })
     } catch (err) {
       setError(friendlyError(err))
     } finally {
@@ -104,16 +99,8 @@ export default function Log() {
         <h1 className="text-2xl font-bold tracking-tight">{t.log.doneTitle}</h1>
 
         <div className="card mt-6">
-          {done.premium && <p className="text-xs font-semibold text-primary-light">{t.chat.title}</p>}
-          <p className={`text-[15px] leading-relaxed text-zinc-100 ${done.premium ? 'mt-1.5' : ''}`}>{done.reaction}</p>
-          {!done.premium && (
-            <p className="mt-3 text-xs leading-relaxed text-zinc-500">
-              {t.paywall.logLocked}{' '}
-              <Link to="/chat" className="text-primary-light underline underline-offset-4">
-                {t.paywall.ended}
-              </Link>
-            </p>
-          )}
+          {done.fromCoach && <p className="text-xs font-semibold text-primary-light">{t.chat.title}</p>}
+          <p className={`text-[15px] leading-relaxed text-zinc-100 ${done.fromCoach ? 'mt-1.5' : ''}`}>{done.reaction}</p>
         </div>
 
         {done.adapted && <p className="mt-4 text-sm text-primary-light">{t.log.adapted}</p>}

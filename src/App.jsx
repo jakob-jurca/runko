@@ -12,6 +12,8 @@ import Chat from './pages/Chat'
 import Log from './pages/Log'
 import Settings from './pages/Settings'
 import NavBar from './components/NavBar'
+import Paywall from './components/Paywall'
+import { canUseApp } from './core/subscription'
 import { FullScreenSpinner } from './components/Spinner'
 
 // Only reached when the app booted for a guest on "/" (a stale saved session,
@@ -41,7 +43,7 @@ function ProfileLoadError() {
 
 /** Requires a session AND a completed onboarding profile. */
 function Protected({ children }) {
-  const { session, profile, loading, recovery, profileError, accessError } = useAuth()
+  const { session, profile, loading, recovery, profileError, accessError, access } = useAuth()
   if (loading) return <FullScreenSpinner />
   // A recovery session is a real session, so this guard would otherwise wave
   // the user straight through without them ever setting a new password.
@@ -49,6 +51,8 @@ function Protected({ children }) {
   if (!session) return <Navigate to="/auth" replace />
   // Not knowing what the runner may use is no reason to show the paywall.
   if (profileError || accessError) return <ProfileLoadError />
+  // No access: the paywall and nothing else. Their data stays where it is.
+  if (!canUseApp(access)) return <Paywall />
   if (!profile) return <Navigate to="/onboarding" replace />
   return (
     <div className="min-h-[100dvh] pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:pb-0 md:pl-60">
@@ -90,13 +94,15 @@ function Home() {
  * home, so a stray /onboarding URL can't wipe their setup.
  */
 function OnboardingGate({ children }) {
-  const { session, profile, loading, recovery, profileError, accessError } = useAuth()
+  const { session, profile, loading, recovery, profileError, accessError, access } = useAuth()
   const [params] = useSearchParams()
   if (loading) return <FullScreenSpinner />
   if (recovery) return <Navigate to="/reset-password" replace />
   if (!session) return <Navigate to="/auth" replace />
   // Not knowing whether a profile exists is no reason to start one over.
   if (profileError || accessError) return <ProfileLoadError />
+  // A new account pays (or starts the trial) before onboarding.
+  if (!canUseApp(access)) return <Paywall />
   if (profile && params.get('rebuild') !== '1') return <Navigate to="/" replace />
   return children
 }
@@ -114,6 +120,19 @@ function AuthGate() {
   // in): a login form here would only invite signing in twice.
   if (session) return <Navigate to="/" replace />
   return <Auth />
+}
+
+/**
+ * /paket — choose a plan before access ends (old trial, a tester): the same
+ * screen as the paywall, reached from Settings → Naročnina.
+ */
+function PlanPicker() {
+  const { session, loading, recovery, accessError } = useAuth()
+  if (loading) return <FullScreenSpinner />
+  if (recovery) return <Navigate to="/reset-password" replace />
+  if (!session) return <Navigate to="/auth" replace />
+  if (accessError) return <ProfileLoadError />
+  return <Paywall />
 }
 
 function ConfigBanner() {
@@ -142,6 +161,7 @@ export default function App() {
             }
           />
           <Route path="/" element={<Home />} />
+          <Route path="/paket" element={<PlanPicker />} />
           <Route
             path="/plan"
             element={

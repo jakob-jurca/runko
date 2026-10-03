@@ -15,7 +15,7 @@ import { motivationalMessage } from '../core/ai'
 import { adaptCurrentWeekIfNeeded, getHydratedPlans } from '../core/plan'
 import { PHASE_INTENT } from '../core/periodization'
 import { phaseStyle } from './Plan'
-import { canUseApp, trialDaysLeft, isTrial } from '../core/subscription'
+import { trialDaysLeft, isTrial } from '../core/subscription'
 import ProgressRing from '../components/ProgressRing'
 import WorkoutCard from '../components/WorkoutCard'
 import { GoalProgressCard, BlockEndCard } from '../components/GoalProgress'
@@ -61,9 +61,6 @@ export default function Dashboard() {
   const [adaptedNote, setAdaptedNote] = useState(false)
   const [quickLoggingDay, setQuickLoggingDay] = useState(null)
   const [logError, setLogError] = useState('')
-
-  // Drives both the daily message and how the free tier is labelled below.
-  const premium = canUseApp(access)
 
   const currentWeek = useMemo(() => currentWeekNumber(plans), [plans])
   const lastWeek = plans.length ? plans[plans.length - 1].week_number : 1
@@ -152,8 +149,8 @@ export default function Dashboard() {
 
   // AI INTEGRATION POINT — daily motivational message.
   // Cached in sessionStorage per day so we call the AI at most once a day
-  // per session; static quotes cover free users, API failures and runners
-  // who skipped onboarding and have no plan to talk about yet.
+  // per session; static quotes cover API failures and runners who skipped
+  // onboarding and have no plan to talk about yet.
   useEffect(() => {
     if (loading) return
     // Keyed by runner: the tab's storage outlives a sign-out, and the next
@@ -165,7 +162,7 @@ export default function Dashboard() {
       return
     }
     const fallback = FALLBACK_QUOTES[new Date().getDate() % FALLBACK_QUOTES.length]
-    if (!premium || !currentPlan) {
+    if (!currentPlan) {
       setMessage(fallback)
       return
     }
@@ -232,18 +229,10 @@ export default function Dashboard() {
           <h1 className="mt-0.5 truncate text-[1.75rem] font-bold leading-tight tracking-tight">
             {profile.name?.split(' ')[0] || t.dashboard.runnerFallback}
           </h1>
-          {isTrial(access) ? (
+          {isTrial(access) && (
             <p className="mt-1 text-xs font-medium text-primary-light">
               {t.dashboard.trialLeft(trialDaysLeft(access))}
             </p>
-          ) : (
-            // The trial countdown's slot, once it has run out. Without this the
-            // free tier is indistinguishable from a broken premium one.
-            !premium && (
-              <Link to="/chat" className="mt-1 inline-block text-xs font-medium text-zinc-500 underline underline-offset-4">
-                {t.paywall.ended}
-              </Link>
-            )
           )}
         </div>
         <img src="/runko.svg" alt="Runko" className="mt-1 h-9 w-9 shrink-0 md:hidden" />
@@ -253,16 +242,10 @@ export default function Dashboard() {
       <section className="card mt-5 flex items-center gap-5 animate-fade-up" style={{ animationDelay: '60ms' }}>
         <ProgressRing percent={percent} size={92} stroke={8} />
         <div className="min-w-0 flex-1">
-          {/* A free user gets a static quote here. Labelling it "Coach Runko
-              says" would pass it off as the AI coach and make the tier look
-              broken rather than free, so the kicker tells the truth. */}
-          <p className="text-xs font-semibold text-primary-light">
-            {premium ? t.dashboard.coachSays : t.paywall.thoughtOfDay}
-          </p>
+          <p className="text-xs font-semibold text-primary-light">{t.dashboard.coachSays}</p>
           <p className="mt-1 text-[15px] leading-relaxed text-zinc-100">
             {message || <span className="animate-pulse-dot text-zinc-500">{t.common.thinking}</span>}
           </p>
-          {!premium && <p className="mt-2 text-xs text-zinc-500">{t.paywall.dashboardLocked}</p>}
         </div>
       </section>
 

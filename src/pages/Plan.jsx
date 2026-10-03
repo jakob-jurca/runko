@@ -92,10 +92,6 @@ export default function Plan() {
   const unit = timeBased ? t.common.min : t.common.km
   // Paces and VDOT mean nothing to someone still learning to run.
   const hasWalkRun = plans.some((row) => row.plan_json?.unit === 'time')
-  // Explicitly false only on plans built without premium. Plans saved before
-  // this flag existed leave it undefined, so they show no notice.
-  const genericWording = plans[0]?.plan_json?.ai_described === false
-
   if (loading) return <FullScreenSpinner />
 
   if (!weeks.length) {
@@ -136,17 +132,6 @@ export default function Plan() {
             : explain?.verdict === 'unsafe' ? explain.adopted_goal_text : goalLabel(profile)}
         </p>
       </header>
-
-      {/* The maths is the same on every tier; only the prose is generic. Say
-          so, rather than letting a stock description read as the coach's. */}
-      {genericWording && (
-        <p className="mt-4 rounded-xl bg-zinc-950/60 p-3 text-xs leading-relaxed text-zinc-400 animate-fade-up">
-          {t.paywall.planLocked}{' '}
-          <Link to="/chat" className="text-primary underline">
-            {t.paywall.ended}
-          </Link>
-        </p>
-      )}
 
       {/* The coach's opening note — including an honest word when the target
           time is out of reach for this block. */}

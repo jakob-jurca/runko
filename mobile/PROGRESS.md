@@ -113,6 +113,11 @@ wrong screens.
   arguments, which now answers "Neveljavna zahteva.". Checkout returns to the WEB app
   (`/?checkout=success`); for mobile, either add a `runko://` return URL to the billing function
   (APP_ORIGINS) or decide on in-app purchases first (store rules for digital subscriptions).
+- Paywall: replace components/Paywall.jsx with the web one's content (src/components/Paywall.jsx:
+  Start / Pro from src/core/pricing.js, yearly preselected, `t.billing.paywall`), shown for tier
+  `none` before onboarding and on every tab. Remove the free tier: the static "Misel dneva" quote,
+  `t.paywall.dashboardLocked` / `logLocked` / `planLocked` hints, the chat paywall. Old `t.paywall`
+  strings can go once mobile no longer uses them.
 - Settings: "Naročnina" section as on the web (src/pages/Settings.jsx `Subscription`, strings
   `t.billing`).
 
